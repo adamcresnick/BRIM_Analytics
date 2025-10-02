@@ -352,7 +352,7 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'date_of_birth',
-                'instruction': 'If document_type is FHIR_BUNDLE: Find the Patient resource and extract the birthDate field in YYYY-MM-DD format. If not a FHIR_BUNDLE, look for "Date of Birth", "DOB", or birth date mentioned in clinical text. Always return in YYYY-MM-DD format. If not found, return "Not documented".',
+                'instruction': 'Extract the patient\'s date of birth in YYYY-MM-DD format. Priority order: 1) If document_type is FHIR_BUNDLE: Find Patient.birthDate (exact date). 2) If clinical text contains age (e.g., "19 yo", "35 year old"): Calculate approximate birth year by subtracting age from document date year, return YYYY-01-01. 3) If neither available: return "Not documented". Examples: Patient.birthDate="2005-03-15" → "2005-03-15". "19 yo female" in 2024 → "2005-01-01" (approximate). No age or DOB → "Not documented".',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
             },
@@ -367,7 +367,7 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'diagnosis_date',
-                'instruction': 'Find the date when the primary brain tumor was first diagnosed. If document_type is FHIR_BUNDLE: Check Condition.recordedDate or Condition.onsetDateTime. If narrative: Look for phrases like "diagnosed on", "diagnosis date", "initial diagnosis", or dates near diagnostic statements. Return in YYYY-MM-DD format. If only month/year available, use first day of month (YYYY-MM-01). If not found, return "Not documented".',
+                'instruction': 'Find the date when the primary brain tumor was first diagnosed. Priority order: 1) If document_type is FHIR_BUNDLE: Check Condition resources for onsetDateTime or recordedDate fields (search for Condition with resourceType="Condition"). 2) If narrative: Look for phrases like "diagnosed on", "diagnosis date", "initial diagnosis", or dates near diagnostic statements. 3) Fallback: Use earliest surgery date or clinical note mention. Return in YYYY-MM-DD format. If only month/year available, use first day of month (YYYY-MM-01). If not found, return "unknown".',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
             },
@@ -390,15 +390,22 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'surgery_type',
-                'instruction': 'Classify the type of neurosurgical procedure. Options: BIOPSY (tissue sampling only), SUBTOTAL_RESECTION (partial tumor removal), GROSS_TOTAL_RESECTION (complete visible tumor removal), PARTIAL_RESECTION (incomplete removal), DEBULKING (cytoreductive surgery), VP_SHUNT (ventriculoperitoneal shunt placement), OTHER (other procedures). If FHIR_BUNDLE: Check Procedure.code.coding.display. If OPERATIVE_NOTE: Analyze procedure description and extent of resection statements. Return one classification per surgery.',
+                'instruction': 'Classify neurosurgical procedures only. EXCLUDE non-surgical procedures like anesthesia, administrative orders, or nursing procedures. INCLUDE: Craniotomy, craniectomy, tumor resection, debulking, excision, biopsy, shunt placement - any procedure with "SURGERY", "RESECTION", "CRANIOTOMY" in name. EXCLUDE: Anesthesia procedures (ANES...), surgical case requests/orders (administrative), pre/post-op care orders, nursing procedures. Options: BIOPSY (tissue sampling only), RESECTION (tumor removal), DEBULKING (cytoreductive surgery), SHUNT (shunt placement), OTHER (other surgical procedures). If excluded, do NOT create an entry. Return one classification per actual surgery.',
                 'variable_type': 'text',
                 'scope': 'many_per_note',
-                'option_definitions': '{"BIOPSY": "Biopsy procedure", "SUBTOTAL_RESECTION": "Subtotal resection", "GROSS_TOTAL_RESECTION": "Gross total resection", "PARTIAL_RESECTION": "Partial resection", "DEBULKING": "Debulking procedure", "VP_SHUNT": "Ventriculoperitoneal shunt", "OTHER": "Other surgical procedure"}',
+                'option_definitions': '{"BIOPSY": "Biopsy procedure", "RESECTION": "Tumor resection", "DEBULKING": "Debulking procedure", "SHUNT": "Shunt placement", "OTHER": "Other surgical procedure"}',
             },
             
             {
                 'variable_name': 'extent_of_resection',
-                'instruction': 'For tumor resection surgeries (not biopsies or shunts), extract the extent of tumor removal. Look for explicit statements like "gross total resection" (GTR), "near-total resection", "subtotal resection" (STR), "partial resection", or percentages like "95% resection", "80% removed". Check surgeon\'s impression section and postoperative imaging descriptions. Return the specific extent described. If only surgery type without extent specified, return "not specified". Scope is many_per_note for multiple surgeries.',
+                'instruction': 'Determine extent of surgical tumor removal from explicit statements AND indirect evidence. EXPLICIT: "gross total resection" (GTR), "complete resection", "near total resection" (NTR), "95% resection", "subtotal resection" (STR), "partial resection", "biopsy". INDIRECT: "surgical cavity" / "resection bed" / "postoperative changes" → resection occurred (check context for extent). "residual tumor" / "incomplete resection" → subtotal. "enhancing cystic structures...gross total resection" → GTR. Return: gross total resection | near total resection | subtotal resection | biopsy only | not specified. Only use "not specified" if no direct OR indirect evidence exists. Scope is many_per_note for multiple surgeries.',
+                'variable_type': 'text',
+                'scope': 'many_per_note',
+            },
+            
+            {
+                'variable_name': 'surgery_location',
+                'instruction': 'Extract anatomical location of brain surgery. Common locations: posterior fossa, cerebellum, frontal lobe, parietal lobe, temporal lobe, occipital lobe, midbrain, thalamus, brainstem, ventricles, corpus callosum. Look in: 1) Operative reports (procedure site descriptions). 2) Radiology reports describing "surgical changes" / "craniotomy site" / "resection cavity" (e.g., "left parietal craniotomy", "posterior fossa surgical changes"). 3) FHIR Procedure.bodySite if available. Return specific anatomical location per surgery. If multiple locations mentioned for one surgery (e.g., tumor crossing midline), list primary location. Scope is many_per_note to capture each surgery\'s location separately.',
                 'variable_type': 'text',
                 'scope': 'many_per_note',
             },
@@ -413,7 +420,7 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'radiation_therapy',
-                'instruction': 'Determine if patient received radiation therapy. Look for: "radiation therapy", "radiotherapy", "RT", "XRT", "external beam radiation", "IMRT" (intensity-modulated), "proton therapy", "stereotactic radiosurgery", "gamma knife", "CyberKnife", or mentions of radiation oncology consultations. Return "yes" if any radiation treatment mentioned, "no" if explicitly stated patient did not receive radiation, "unknown" if not addressed. This is one_per_patient scope - determine overall radiation status across all documents.',
+                'instruction': 'Determine if patient received radiation therapy for brain tumor. Search both FHIR Procedure resources AND clinical note text. Look for: "radiation therapy", "radiotherapy", "RT", "XRT", "external beam radiation", "IMRT", "proton therapy", "stereotactic radiosurgery", "gamma knife", "CyberKnife", "radiation oncology", dose mentions like "Gy" (Gray units), "fractions". Return "true" if ANY radiation treatment mentioned. Return "false" if explicitly stated patient did NOT receive radiation (e.g., "no prior radiation", "radiation not indicated"). Return "false" as default if not mentioned (assume not done if not documented). This is one_per_patient scope - determine overall radiation status.',
                 'variable_type': 'boolean',
                 'scope': 'one_per_patient',
             },
@@ -421,15 +428,15 @@ class BRIMCSVGenerator:
             # Molecular/Genetic
             {
                 'variable_name': 'idh_mutation',
-                'instruction': 'Extract IDH (isocitrate dehydrogenase) mutation status. Look for IDH1 or IDH2 testing results. Return "positive" if mutation detected, "negative" or "wildtype" if no mutation found, "unknown" if not tested or results not reported. Check molecular pathology sections, genetic testing results, or comprehensive genomic profiling reports. Common phrases: "IDH1 R132H mutation", "IDH-mutant", "IDH-wildtype", "IDH negative".',
+                'instruction': 'Extract IDH (isocitrate dehydrogenase) mutation status from molecular testing. Search in: 1) FHIR Observation resources with codes related to IDH testing. 2) Pathology report text (look for "pathology", "molecular", "genetic" sections). 3) Clinical notes mentioning "IDH" or "molecular testing". Patterns indicating WILDTYPE: "IDH wildtype", "IDH wild-type", "IDH WT", "IDH: negative", "no IDH mutation". Patterns indicating MUTANT: "IDH mutant", "IDH mutation", "IDH1 R132H", "IDH2", "IDH positive". Patterns indicating UNKNOWN: "IDH testing not performed", "IDH pending", "molecular testing incomplete". Return: wildtype | mutant | unknown. This is critical molecular marker - search thoroughly in all text.',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
-                'option_definitions': '{"positive": "IDH mutation positive", "negative": "IDH mutation negative", "wildtype": "IDH wildtype", "unknown": "Unknown or not tested"}',
+                'option_definitions': '{"wildtype": "IDH wildtype (no mutation)", "mutant": "IDH mutation positive", "unknown": "Unknown or not tested"}',
             },
             
             {
                 'variable_name': 'mgmt_methylation',
-                'instruction': 'Extract MGMT promoter methylation status. MGMT methylation is a prognostic biomarker in glioblastoma. Return "methylated" if promoter methylation detected, "unmethylated" if not detected, "unknown" if not tested. Look in molecular pathology reports, genetic testing results, or biomarker analysis sections. Common phrases: "MGMT promoter methylated", "MGMT methylation positive", "unmethylated MGMT", "MGMT methylation status: positive/negative".',
+                'instruction': 'Extract MGMT promoter methylation status from molecular testing. MGMT methylation is a prognostic biomarker in glioblastoma. Search in: 1) FHIR Observation resources with MGMT-related codes. 2) Pathology report text (molecular/genetic sections). 3) Clinical notes mentioning "MGMT". Patterns indicating METHYLATED: "MGMT promoter methylated", "MGMT methylation positive", "MGMT: methylated", "methylated MGMT promoter". Patterns indicating UNMETHYLATED: "MGMT unmethylated", "MGMT promoter unmethylated", "MGMT methylation negative", "MGMT: unmethylated". Patterns indicating UNKNOWN: "MGMT not tested", "MGMT pending", "MGMT unavailable". Return: methylated | unmethylated | unknown.',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
                 'option_definitions': '{"methylated": "MGMT methylated", "unmethylated": "MGMT unmethylated", "unknown": "Unknown or not tested"}',
@@ -493,18 +500,18 @@ class BRIMCSVGenerator:
             
             {
                 'decision_name': 'total_surgeries',
-                'instruction': 'Count total number of unique surgical procedures',
+                'instruction': 'Count total unique surgical procedures across patient entire treatment history (longitudinal data). METHOD: 1) Count distinct surgery_date values where surgery_type != OTHER. 2) ALSO count surgeries mentioned in narrative without structured dates - look for: "prior craniotomy", "previous resection", "status post surgery", "surgical changes from prior [location] surgery". 3) Use surgery_location to identify separate surgeries: different anatomical sites (posterior fossa, parietal, frontal) indicate separate procedures even if dates unknown. 4) Same date + same location = 1 surgery (even if multiple procedure codes). Same date + different locations = count each location separately. EXAMPLES: surgery_date=2021-03-10 (posterior fossa) + radiology mentions "prior left parietal craniotomy" + "right frontal shunt" = 3 surgeries total. surgery_date=2021-03-10 (2 procedures same site) = 1 surgery. No dates but text describes 2 different surgical sites = 2 surgeries. Return count as number string.',
                 'decision_type': 'text',
-                'prompt_template': 'Count the total number of unique surgery_date values across all documents. Return the count as a text number (e.g., "1", "2", "3"). If no surgeries found, return "0".',
-                'variables': '["surgery_date"]',
+                'prompt_template': '',
+                'variables': '["surgery_date", "surgery_type", "surgery_location"]',
                 'default_value_for_empty_response': '0'
             },
             
             {
                 'decision_name': 'best_resection',
-                'instruction': 'Determine the most extensive resection achieved',
+                'instruction': 'Determine MOST EXTENSIVE tumor resection achieved across ALL surgeries in patient history (longitudinal analysis). ALWAYS prioritize extent_of_resection over surgery_type (radiological confirmation is more accurate than procedure coding). Priority order (most to least extensive): 1. "gross total resection" (GTR), 2. "near total resection" (NTR), 3. "subtotal resection" (STR), 4. RESECTION, 5. DEBULKING, 6. BIOPSY. Search ALL extent_of_resection AND surgery_type entries. Return BEST outcome ever achieved, not just most recent. KEY RULE: If radiology states "gross total resection" but procedure coded as "DEBULKING", return "gross total resection" (trust imaging over coding). EXAMPLES: extent=["not specified", "gross total resection", "not specified"], type=[DEBULKING, OTHER] → "gross total resection". extent=["subtotal resection"], type=[RESECTION, BIOPSY] → "subtotal resection". extent=["not specified"], type=[DEBULKING, RESECTION] → "RESECTION".',
                 'decision_type': 'text',
-                'prompt_template': 'From all surgeries (excluding biopsies and shunts), determine which had the best/most extensive resection. Prioritize: gross_total > near_total > subtotal > partial > debulking.',
+                'prompt_template': '',
                 'variables': '["surgery_type", "extent_of_resection"]',
             },
             
