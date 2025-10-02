@@ -156,7 +156,7 @@ class ClinicalTimelineBuilder:
             100 as priority_weight
         FROM {self.athena.database}.condition c
         LEFT JOIN {self.athena.database}.condition_code_coding ccc ON c.id = ccc.condition_id
-        WHERE c.subject_reference = 'Patient/{patient_fhir_id}'
+        WHERE c.subject_reference = '{patient_fhir_id}'
             AND (
                 ccc.code_coding_code LIKE 'C71%'
                 OR LOWER(c.code_text) LIKE '%glioma%'
@@ -178,7 +178,7 @@ class ClinicalTimelineBuilder:
             95 as priority_weight
         FROM {self.athena.database}.procedure p
         LEFT JOIN {self.athena.database}.procedure_code_coding pcc ON p.id = pcc.procedure_id
-        WHERE p.subject_reference = 'Patient/{patient_fhir_id}'
+        WHERE p.subject_reference = '{patient_fhir_id}'
             AND (
                 pcc.code_coding_code IN ('61510', '61512', '61518', '61500', '61304', '61305')
                 OR LOWER(p.code_text) LIKE '%craniotomy%'
@@ -197,7 +197,7 @@ class ClinicalTimelineBuilder:
             NULL as event_code,
             90 as priority_weight
         FROM {self.athena.database}.medication_request mr
-        WHERE mr.subject_reference = 'Patient/{patient_fhir_id}'
+        WHERE mr.subject_reference = '{patient_fhir_id}'
             AND mr.intent = 'order'
             AND (
                 LOWER(mr.medication_reference_display) LIKE '%temozolomide%'
