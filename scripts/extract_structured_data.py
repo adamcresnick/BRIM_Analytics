@@ -113,22 +113,30 @@ class StructuredDataExtractor:
         return df
     
     def extract_diagnosis_date(self, patient_fhir_id: str) -> Optional[str]:
-        """Extract diagnosis date from condition.onset_date_time"""
+        """Extract diagnosis date from problem_list_diagnoses materialized view
+        
+        Schema reference: data/materialized_view_schema.csv
+        - problem_list_diagnoses.onset_date_time (column 6)
+        - problem_list_diagnoses.diagnosis_name (column 4)
+        - problem_list_diagnoses.patient_id (column 1) - NOTE: uses patient_id not subject_reference
+        - problem_list_diagnoses.icd10_code (column 9)
+        """
         
         query = f"""
         SELECT 
             onset_date_time,
-            code_text,
-            clinical_status,
-            verification_status
-        FROM {self.v2_database}.condition
-        WHERE subject_reference = 'Patient/{patient_fhir_id}'
+            diagnosis_name,
+            icd10_code,
+            clinical_status_text
+        FROM {self.v2_database}.problem_list_diagnoses
+        WHERE patient_id = '{patient_fhir_id}'
             AND (
-                LOWER(code_text) LIKE '%astrocytoma%'
-                OR LOWER(code_text) LIKE '%glioma%'
-                OR LOWER(code_text) LIKE '%brain%'
+                LOWER(diagnosis_name) LIKE '%astrocytoma%'
+                OR LOWER(diagnosis_name) LIKE '%glioma%'
+                OR LOWER(diagnosis_name) LIKE '%brain%'
+                OR LOWER(diagnosis_name) LIKE '%tumor%'
             )
-            AND verification_status = 'confirmed'
+            AND onset_date_time IS NOT NULL
         ORDER BY onset_date_time
         LIMIT 1
         """
@@ -137,14 +145,26 @@ class StructuredDataExtractor:
         
         if not df.empty and df.iloc[0]['onset_date_time']:
             diagnosis_date = df.iloc[0]['onset_date_time']
-            logger.info(f"✅ Found diagnosis date: {diagnosis_date}")
+            diagnosis_name = df.iloc[0]['diagnosis_name']
+            icd10 = df.iloc[0]['icd10_code']
+            logger.info(f"✅ Found diagnosis date: {diagnosis_date} ({diagnosis_name}, ICD-10: {icd10})")
             return diagnosis_date
         
         logger.warning("⚠️  No diagnosis date found")
         return None
     
     def extract_surgeries(self, patient_fhir_id: str) -> List[Dict]:
-        """Extract surgery dates and details from procedure table"""
+        """Extract surgery dates and details from procedure table
+        
+        Schema reference: data/materialized_view_schema.csv
+        Per COMPREHENSIVE_SURGICAL_CAPTURE_GUIDE.md:
+        - procedure.subject_reference does NOT include 'Patient/' prefix
+        - procedure.performed_date_time (column 13)
+        - procedure.code_text (column 6)
+        - procedure.status (column 3)
+        - procedure_code_coding.code_coding_code (CPT codes)
+        - procedure_code_coding.code_coding_display
+        """
         
         query = f"""
         SELECT 
@@ -157,12 +177,19 @@ class StructuredDataExtractor:
         FROM {self.v2_database}.procedure p
         LEFT JOIN {self.v2_database}.procedure_code_coding pcc 
             ON p.id = pcc.procedure_id
-        WHERE p.subject_reference = 'Patient/{patient_fhir_id}'
+        WHERE p.subject_reference = '{patient_fhir_id}'
             AND p.status = 'completed'
+            AND p.performed_date_time IS NOT NULL
             AND (
-                pcc.code_coding_code IN ('61510', '61512', '61518', '61520', '61521', '61526')
+                pcc.code_coding_code IN ('61500', '61501', '61510', '61512', '61514', '61516', 
+                                         '61518', '61519', '61520', '61521', '61524', '61526',
+                                         '62201', '62223', '61304', '61305', '61312', '61313', '61314', '61315')
                 OR LOWER(p.code_text) LIKE '%craniotomy%'
+                OR LOWER(p.code_text) LIKE '%craniectomy%'
                 OR LOWER(p.code_text) LIKE '%resection%'
+                OR LOWER(pcc.code_coding_display) LIKE '%craniec%'
+                OR LOWER(pcc.code_coding_display) LIKE '%cranioto%'
+                OR LOWER(pcc.code_coding_display) LIKE '%resect%'
             )
         ORDER BY p.performed_date_time
         """
@@ -182,56 +209,77 @@ class StructuredDataExtractor:
         return surgeries
     
     def extract_molecular_markers(self, patient_fhir_id: str) -> Dict[str, str]:
-        """Extract molecular markers from observation.value_string"""
+        """Extract molecular markers from molecular_tests + molecular_test_results materialized views
+        
+        Schema reference: data/materialized_view_schema.csv
+        - molecular_tests.patient_id (column 1) - NOTE: uses patient_id not subject_reference
+        - molecular_tests.dgd_id (column 2) - DGD genomics identifier
+        - molecular_tests.lab_test_name (column 3)
+        - molecular_tests.result_datetime (column 6)
+        - molecular_test_results.test_result_narrative (column 4)
+        - molecular_test_results.test_component (column 5)
+        """
         
         query = f"""
         SELECT 
-            code_text,
-            value_string,
-            effective_datetime
-        FROM {self.v2_database}.observation
-        WHERE subject_reference = 'Patient/{patient_fhir_id}'
-            AND code_text = 'Genomics Interpretation'
-            AND value_string IS NOT NULL
-        ORDER BY effective_datetime DESC
+            mt.dgd_id,
+            mt.lab_test_name,
+            mt.result_datetime,
+            mtr.test_result_narrative,
+            mtr.test_component
+        FROM {self.v2_database}.molecular_tests mt
+        LEFT JOIN {self.v2_database}.molecular_test_results mtr 
+            ON mt.test_id = mtr.test_id
+        WHERE mt.patient_id = '{patient_fhir_id}'
+            AND mtr.test_result_narrative IS NOT NULL
+        ORDER BY mt.result_datetime DESC
         """
         
         df = self.query_and_fetch(query, self.v2_database)
         
         markers = {}
         for _, row in df.iterrows():
-            value_string = row['value_string']
+            narrative = row['test_result_narrative']
+            component = row.get('test_component', '')
             
             # Parse common markers
-            if 'BRAF' in value_string.upper():
-                markers['BRAF'] = value_string
-            if 'IDH' in value_string.upper():
-                markers['IDH1'] = value_string
-            if 'MGMT' in value_string.upper():
-                markers['MGMT'] = value_string
-            if 'EGFR' in value_string.upper():
-                markers['EGFR'] = value_string
+            if 'BRAF' in narrative.upper() or 'BRAF' in component.upper():
+                markers['BRAF'] = narrative
+            if 'IDH' in narrative.upper() or 'IDH' in component.upper():
+                markers['IDH1'] = narrative
+            if 'MGMT' in narrative.upper() or 'MGMT' in component.upper():
+                markers['MGMT'] = narrative
+            if 'EGFR' in narrative.upper() or 'EGFR' in component.upper():
+                markers['EGFR'] = narrative
         
         logger.info(f"✅ Found {len(markers)} molecular markers")
         return markers
     
     def extract_treatment_start_dates(self, patient_fhir_id: str) -> List[Dict]:
-        """Extract treatment start dates from medication_request"""
+        """Extract treatment start dates from patient_medications materialized view
+        
+        Schema reference: data/materialized_view_schema.csv
+        - patient_medications.patient_id (column 1) - NOTE: uses patient_id not subject_reference
+        - patient_medications.medication_name (column 2)
+        - patient_medications.rx_norm_codes (column 3) - Already has RxNorm codes aggregated
+        - patient_medications.authored_on (column 4)
+        - patient_medications.status (column 5)
+        """
         
         query = f"""
         SELECT 
-            medication_codeable_concept_text as medication,
+            medication_name as medication,
+            rx_norm_codes,
             authored_on as start_date,
-            status,
-            intent
-        FROM {self.v2_database}.medication_request
-        WHERE subject_reference = 'Patient/{patient_fhir_id}'
+            status
+        FROM {self.v2_database}.patient_medications
+        WHERE patient_id = '{patient_fhir_id}'
             AND status IN ('active', 'completed')
-            AND intent = 'order'
             AND (
-                LOWER(medication_codeable_concept_text) LIKE '%temozolomide%'
-                OR LOWER(medication_codeable_concept_text) LIKE '%radiation%'
-                OR LOWER(medication_codeable_concept_text) LIKE '%bevacizumab%'
+                LOWER(medication_name) LIKE '%temozolomide%'
+                OR LOWER(medication_name) LIKE '%radiation%'
+                OR LOWER(medication_name) LIKE '%bevacizumab%'
+                OR LOWER(medication_name) LIKE '%chemotherapy%'
             )
         ORDER BY authored_on
         """
@@ -242,6 +290,7 @@ class StructuredDataExtractor:
         for _, row in df.iterrows():
             treatments.append({
                 'medication': row['medication'],
+                'rx_norm_codes': row['rx_norm_codes'],
                 'start_date': row['start_date'],
                 'status': row['status']
             })
