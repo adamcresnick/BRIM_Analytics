@@ -1,0 +1,709 @@
+#!/usr/bin/env python3
+"""
+Generate BRIM-compatible CSVs from FHI    def _load_binary_links(self):
+        """Load Binary resource download links from local file (lazy loading).
+        
+        Note: This file is 493 MB with 2.8M entries. Only loaded when actually
+        needed (after we find DocumentReferences).
+        """
+        if self.binary_links is not None:
+            return self.binary_links
+        
+        print(f"\n📥 Loading binary download links from {self.binary_links_local_path}")
+        print(f"   ⚠️  This is a 493 MB file - may take 30-60 seconds to load...")
+        
+        try:
+            import time
+            start = time.time()
+            
+            with open(self.binary_links_local_path, 'r') as f:
+                self.binary_links = json.load(f)
+            
+            elapsed = time.time() - start
+            print(f"✅ Loaded {len(self.binary_links):,} binary download links in {elapsed:.1f} seconds")
+            return self.binary_links
+            
+        except FileNotFoundError:
+            print(f"⚠️  Binary links file not found at {self.binary_links_local_path}")
+            print(f"   Falling back to querying Binary NDJSON files directly...")
+            self.binary_links = {}
+            return {}
+        except Exception as e:
+            print(f"⚠️  Could not load binary links: {e}")
+            self.binary_links = {}
+            return {} Clinical Notes
+
+This script:
+1. Loads the extracted FHIR Bundle
+2. Extracts clinical notes from S3 NDJSON files (DocumentReference + Binary)
+3. Generates 3 BRIM CSVs:
+   - project.csv: FHIR Bundle + Clinical Notes
+   - variables.csv: Extraction rules for LLM
+   - decisions.csv: Aggregation and cross-validation rules
+
+Usage:
+    python scripts/pilot_generate_brim_csvs.py --bundle-path pilot_output/fhir_bundle_e4BwD8ZYDBccepXcJ.Ilo3w3.json
+"""
+
+import os
+import json
+import csv
+import boto3
+import base64
+import argparse
+from datetime import datetime, timezone
+from pathlib import Path
+from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+import hashlib
+
+# Load environment
+load_dotenv()
+
+
+class BRIMCSVGenerator:
+    """Generate BRIM-compatible CSVs from FHIR Bundle and Clinical Notes."""
+    
+    def __init__(self, bundle_path, output_dir='./pilot_output/brim_csvs'):
+        self.bundle_path = bundle_path
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # AWS Configuration
+        self.aws_profile = os.getenv('AWS_PROFILE')
+        self.s3_bucket = os.getenv('S3_NDJSON_BUCKET')
+        self.s3_prefix = os.getenv('S3_NDJSON_PREFIX')
+        self.patient_id = os.getenv('PILOT_PATIENT_ID')  # FHIR ID for queries
+        self.subject_id = os.getenv('PILOT_SUBJECT_ID')  # Subject ID for BRIM (pseudonymized MRN)
+        self.binary_links_path = os.getenv('S3_BINARY_LINKS')
+        
+        # Initialize AWS clients
+        self.session = boto3.Session(profile_name=self.aws_profile)
+        self.s3_client = self.session.client('s3', region_name='us-east-1')
+        
+        # Load FHIR Bundle
+        print(f"📂 Loading FHIR Bundle from {bundle_path}")
+        with open(bundle_path, 'r') as f:
+            self.bundle = json.load(f)
+        print(f"✅ Loaded bundle with {len(self.bundle.get('entry', []))} resources")
+        
+        # Binary resource download links (lazy loaded)
+        self.binary_links = None
+        self.binary_links_local_path = './data/binary_resource_download_links.json'
+        
+        # Storage for clinical notes
+        self.clinical_notes = []
+    
+    def _load_binary_links(self):
+        """Load Binary resource download links from S3.
+        
+        Note: This file is 493 MB, so we defer loading until we know which
+        Binary IDs we actually need (from DocumentReferences).
+        """
+        print(f"� Binary links file configured: {self.binary_links_path}")
+        print(f"   (Will load selectively after finding DocumentReferences)")
+        # Return None to indicate we'll load on-demand
+        return None
+    
+
+    
+    def extract_clinical_notes(self):
+        """Extract clinical notes from S3 using S3 Select on NDJSON files."""
+        print(f"\n📥 Extracting clinical notes from S3...")
+        
+        # Query DocumentReference NDJSON files using S3 Select
+        doc_ref_prefix = f"{self.s3_prefix}DocumentReference/"
+        
+        try:
+            # List NDJSON files in DocumentReference folder
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.s3_bucket,
+                Prefix=doc_ref_prefix
+            )
+            
+            if 'Contents' not in response:
+                print(f"⚠️  No DocumentReference files found at {doc_ref_prefix}")
+                return []
+            
+            files = [obj['Key'] for obj in response['Contents'] if obj['Key'].endswith('.ndjson')]
+            print(f"🔍 Found {len(files)} DocumentReference NDJSON files")
+            
+            # Query each file for patient's documents
+            document_refs = []
+            print(f"   Querying all {len(files)} files for patient documents...")
+            for i, file_key in enumerate(files, 1):
+                if i % 100 == 0 or i == 1:  # Progress update every 100 files
+                    print(f"   Progress: {i}/{len(files)} files queried...")
+                docs = self._query_s3_select(file_key)
+                document_refs.extend(docs)
+                if len(document_refs) > 0 and i % 100 == 0:
+                    print(f"   Found {len(document_refs)} DocumentReferences so far...")
+            
+            print(f"✅ Found {len(document_refs)} DocumentReference resources")
+            
+            # Extract Binary content for each DocumentReference
+            for doc_ref in document_refs:
+                note = self._process_document_reference(doc_ref)
+                if note:
+                    self.clinical_notes.append(note)
+            
+            print(f"✅ Extracted {len(self.clinical_notes)} clinical notes")
+            
+        except Exception as e:
+            print(f"⚠️  Could not extract clinical notes: {e}")
+        
+        return self.clinical_notes
+    
+    def _query_s3_select(self, file_key):
+        """Use S3 Select to query NDJSON file for patient documents."""
+        sql = f"""
+        SELECT *
+        FROM S3Object[*] s
+        WHERE s.subject.reference LIKE '%{self.patient_id}%'
+        """
+        
+        try:
+            response = self.s3_client.select_object_content(
+                Bucket=self.s3_bucket,
+                Key=file_key,
+                ExpressionType='SQL',
+                Expression=sql,
+                InputSerialization={'JSON': {'Type': 'LINES'}},
+                OutputSerialization={'JSON': {'RecordDelimiter': '\n'}}
+            )
+            
+            # Parse streaming response
+            records = []
+            for event in response['Payload']:
+                if 'Records' in event:
+                    payload = event['Records']['Payload'].decode('utf-8')
+                    for line in payload.strip().split('\n'):
+                        if line:
+                            records.append(json.loads(line))
+            
+            return records
+            
+        except Exception as e:
+            print(f"      ⚠️  Query failed: {e}")
+            return []
+    
+    def _process_document_reference(self, doc_ref):
+        """Process DocumentReference to extract note content."""
+        try:
+            doc_id = doc_ref.get('id', 'unknown')
+            doc_date = doc_ref.get('date', '')
+            doc_type = doc_ref.get('type', {}).get('text', 'Unknown')
+            
+            # Get Binary reference from attachment
+            content = doc_ref.get('content', [])
+            if not content:
+                return None
+            
+            attachment = content[0].get('attachment', {})
+            binary_url = attachment.get('url', '')
+            
+            if not binary_url or 'Binary/' not in binary_url:
+                return None
+            
+            # Extract Binary ID
+            binary_id = binary_url.split('Binary/')[-1]
+            
+            # Fetch Binary content from S3
+            text_content = self._fetch_binary_content(binary_id)
+            
+            if not text_content:
+                return None
+            
+            # Sanitize HTML if present
+            text_content = self._sanitize_html(text_content)
+            
+            return {
+                'note_id': doc_id,
+                'note_date': doc_date,
+                'note_type': doc_type,
+                'note_text': text_content
+            }
+            
+        except Exception as e:
+            print(f"      ⚠️  Error processing DocumentReference: {e}")
+            return None
+    
+    def _fetch_binary_content(self, binary_id):
+        """Fetch Binary resource content from S3 using binary download links."""
+        try:
+            # Lazy load binary links on first use
+            binary_links = self._load_binary_links()
+            
+            # Look up the Binary download link
+            s3_url = binary_links.get(binary_id)
+            
+            if not s3_url:
+                # Fallback: Try direct Binary NDJSON query
+                return self._fetch_binary_from_ndjson(binary_id)
+            
+            # Parse S3 URL: s3://bucket/key
+            if not s3_url.startswith('s3://'):
+                return None
+            
+            bucket, key = s3_url.replace('s3://', '').split('/', 1)
+            
+            # Download the Binary resource directly
+            response = self.s3_client.get_object(Bucket=bucket, Key=key)
+            binary_data = response['Body'].read()
+            
+            # Try to decode as JSON first (NDJSON format)
+            try:
+                binary_resource = json.loads(binary_data.decode('utf-8'))
+                # Extract base64 data field
+                data = binary_resource.get('data', '')
+                if data:
+                    return base64.b64decode(data).decode('utf-8', errors='ignore')
+            except json.JSONDecodeError:
+                # If not JSON, try direct decoding
+                try:
+                    return binary_data.decode('utf-8', errors='ignore')
+                except:
+                    return None
+            
+            return None
+            
+        except Exception as e:
+            print(f"      ⚠️  Error fetching Binary {binary_id}: {e}")
+            return None
+    
+    def _fetch_binary_from_ndjson(self, binary_id):
+        """Fallback: Fetch Binary by querying NDJSON files directly."""
+        try:
+            binary_prefix = f"{self.s3_prefix}Binary/"
+            
+            # List first 50 Binary NDJSON files (increased from 10)
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.s3_bucket,
+                Prefix=binary_prefix,
+                MaxKeys=50
+            )
+            
+            if 'Contents' not in response:
+                return None
+            
+            # Query each file for the specific Binary ID
+            for obj in response['Contents']:
+                if obj['Key'].endswith('.ndjson'):
+                    sql = f"SELECT * FROM S3Object[*] s WHERE s.id = '{binary_id}'"
+                    
+                    try:
+                        result = self.s3_client.select_object_content(
+                            Bucket=self.s3_bucket,
+                            Key=obj['Key'],
+                            ExpressionType='SQL',
+                            Expression=sql,
+                            InputSerialization={'JSON': {'Type': 'LINES'}},
+                            OutputSerialization={'JSON': {'RecordDelimiter': '\n'}}
+                        )
+                        
+                        for event in result['Payload']:
+                            if 'Records' in event:
+                                payload = event['Records']['Payload'].decode('utf-8')
+                                if payload.strip():
+                                    binary_resource = json.loads(payload.strip())
+                                    data = binary_resource.get('data', '')
+                                    if data:
+                                        return base64.b64decode(data).decode('utf-8', errors='ignore')
+                    except:
+                        continue
+            
+            return None
+            
+        except Exception as e:
+            return None
+    
+    def _sanitize_html(self, text):
+        """Remove HTML tags and clean up text."""
+        if not text:
+            return ""
+        
+        # Parse HTML
+        soup = BeautifulSoup(text, 'html.parser')
+        
+        # Extract text
+        clean_text = soup.get_text()
+        
+        # Clean up whitespace
+        clean_text = '\n'.join(line.strip() for line in clean_text.split('\n') if line.strip())
+        
+        return clean_text
+    
+    def generate_project_csv(self):
+        """Generate project.csv with FHIR Bundle + Clinical Notes."""
+        print(f"\n📝 Generating project.csv...")
+        
+        project_file = self.output_dir / 'project.csv'
+        
+        rows = []
+        
+        # Row 1: FHIR Bundle as JSON
+        bundle_json = json.dumps(self.bundle, separators=(',', ':'))
+        rows.append({
+            'NOTE_ID': 'FHIR_BUNDLE',
+            'PERSON_ID': self.subject_id,  # Use subject_id (1277724) not patient_id
+            'NOTE_DATETIME': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+            'NOTE_TEXT': bundle_json,
+            'NOTE_TITLE': 'FHIR_BUNDLE'
+        })
+        
+        # Rows 2-N: Clinical Notes
+        for note in self.clinical_notes:
+            rows.append({
+                'NOTE_ID': note['note_id'],
+                'PERSON_ID': self.subject_id,  # Use subject_id (1277724) not patient_id
+                'NOTE_DATETIME': note['note_date'],
+                'NOTE_TEXT': note['note_text'],
+                'NOTE_TITLE': note['note_type']
+            })
+        
+        # Write CSV with proper escaping
+        with open(project_file, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['NOTE_ID', 'PERSON_ID', 'NOTE_DATETIME', 'NOTE_TEXT', 'NOTE_TITLE'], 
+                                    quoting=csv.QUOTE_ALL)
+            writer.writeheader()
+            writer.writerows(rows)
+        
+        print(f"✅ Generated {project_file} with {len(rows)} rows")
+        return project_file
+    
+    def generate_variables_csv(self):
+        """Generate variables.csv with extraction rules."""
+        print(f"\n📋 Generating variables.csv...")
+        
+        variables_file = self.output_dir / 'variables.csv'
+        
+        # Define variables for extraction (11-COLUMN FORMAT per BRIM spec)
+        variables = [
+            # Document Classification (MUST BE FIRST)
+            {
+                'variable_name': 'document_type',
+                'instruction': 'Classify the document type based on NOTE_TITLE and content',
+                'prompt_template': 'Classify this document as one of: FHIR_BUNDLE, OPERATIVE_NOTE, PATHOLOGY, RADIOLOGY, PROGRESS_NOTE, CONSULTATION, DISCHARGE_SUMMARY, OTHER. Return only the classification.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_note',
+                'option_definitions': '{"FHIR_BUNDLE": "Complete FHIR resource bundle", "OPERATIVE_NOTE": "Surgical operative note", "PATHOLOGY": "Pathology report", "RADIOLOGY": "Radiology report", "PROGRESS_NOTE": "Progress note", "CONSULTATION": "Consultation note", "DISCHARGE_SUMMARY": "Discharge summary", "OTHER": "Other document type"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            # Demographics (from FHIR Bundle)
+            {
+                'variable_name': 'patient_gender',
+                'instruction': 'Extract patient gender from FHIR Bundle Patient resource',
+                'prompt_template': 'If document_type is FHIR_BUNDLE: Find the Patient resource and extract the gender field. Return only: male, female, other, or unknown.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_patient',
+                'option_definitions': '{"male": "Male", "female": "Female", "other": "Other or non-binary", "unknown": "Unknown or not specified"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'date_of_birth',
+                'instruction': 'Extract date of birth from FHIR Bundle',
+                'prompt_template': 'If document_type is FHIR_BUNDLE: Find the Patient resource and extract birthDate in YYYY-MM-DD format.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'date',
+                'scope': 'one_per_patient',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            # Diagnosis (from FHIR + Narrative)
+            {
+                'variable_name': 'primary_diagnosis',
+                'instruction': 'Extract primary brain tumor diagnosis',
+                'prompt_template': 'Extract the primary brain tumor diagnosis. Look for terms like glioblastoma, astrocytoma, medulloblastoma, ependymoma, etc. If document_type is FHIR_BUNDLE, check Condition resources with code.coding.display. If narrative document, extract from text.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_patient',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'diagnosis_date',
+                'instruction': 'Extract date of primary diagnosis',
+                'prompt_template': 'Find the date when the primary brain tumor was diagnosed. Format as YYYY-MM-DD. Check Condition.recordedDate in FHIR or look for "diagnosed on" in narrative.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'date',
+                'scope': 'one_per_patient',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'who_grade',
+                'instruction': 'Extract WHO grade from pathology or clinical notes',
+                'prompt_template': 'Extract the WHO grade for the tumor. Look for "WHO grade I", "WHO grade II", "WHO grade III", "WHO grade IV" or "Grade 1-4". Return only: I, II, III, IV, or unknown.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_patient',
+                'option_definitions': '{"I": "WHO Grade I", "II": "WHO Grade II", "III": "WHO Grade III", "IV": "WHO Grade IV", "unknown": "Unknown or not specified"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            # Surgical Events (from FHIR Procedure + Operative Notes)
+            {
+                'variable_name': 'surgery_date',
+                'instruction': 'Extract surgery dates',
+                'prompt_template': 'If document_type is FHIR_BUNDLE: extract Procedure.performedDateTime for surgeries. If OPERATIVE_NOTE: extract surgery date from note header. Return in YYYY-MM-DD format.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'date',
+                'scope': 'many_per_note',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'surgery_type',
+                'instruction': 'Classify each surgery',
+                'prompt_template': 'For each surgery, classify as: BIOPSY, SUBTOTAL_RESECTION, GROSS_TOTAL_RESECTION, PARTIAL_RESECTION, DEBULKING, VP_SHUNT, OTHER. Look at Procedure.code or operative note description.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'many_per_note',
+                'option_definitions': '{"BIOPSY": "Biopsy procedure", "SUBTOTAL_RESECTION": "Subtotal resection", "GROSS_TOTAL_RESECTION": "Gross total resection", "PARTIAL_RESECTION": "Partial resection", "DEBULKING": "Debulking procedure", "VP_SHUNT": "Ventriculoperitoneal shunt", "OTHER": "Other surgical procedure"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'extent_of_resection',
+                'instruction': 'Extract extent of resection from operative notes',
+                'prompt_template': 'For surgeries (not biopsies), extract extent of resection. Look for terms like "gross total", "subtotal", "near total", "partial", "debulking". Return percentage if stated (e.g., "95%") or category.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'many_per_note',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            # Treatments
+            {
+                'variable_name': 'chemotherapy_agent',
+                'instruction': 'Extract chemotherapy agents',
+                'prompt_template': 'Extract chemotherapy drug names. If FHIR_BUNDLE: look in MedicationRequest resources. If narrative: look for drug names like temozolomide, vincristine, carboplatin, etc.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'many_per_note',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'radiation_therapy',
+                'instruction': 'Identify if patient received radiation therapy',
+                'prompt_template': 'Determine if patient received radiation therapy. Look for mentions of "radiation", "radiotherapy", "XRT", "IMRT", "proton therapy". Return yes/no.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'boolean',
+                'scope': 'one_per_patient',
+                'option_definitions': '',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            # Molecular/Genetic
+            {
+                'variable_name': 'idh_mutation',
+                'instruction': 'Extract IDH mutation status',
+                'prompt_template': 'Look for IDH mutation status (IDH1 or IDH2). Return: positive, negative, wildtype, or unknown. Check pathology reports or molecular test results.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_patient',
+                'option_definitions': '{"positive": "IDH mutation positive", "negative": "IDH mutation negative", "wildtype": "IDH wildtype", "unknown": "Unknown or not tested"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'variable_name': 'mgmt_methylation',
+                'instruction': 'Extract MGMT promoter methylation status',
+                'prompt_template': 'Find MGMT promoter methylation status. Return: methylated, unmethylated, or unknown. Look in pathology or molecular reports.',
+                'aggregation_instruction': '',
+                'aggregation_prompt_template': '',
+                'variable_type': 'text',
+                'scope': 'one_per_patient',
+                'option_definitions': '{"methylated": "MGMT promoter methylated", "unmethylated": "MGMT promoter unmethylated", "unknown": "Unknown or not tested"}',
+                'aggregation_option_definitions': '',
+                'only_use_true_value_in_aggregation': '',
+                'default_value_for_empty_response': ''
+            }
+        ]
+        
+        # Write CSV with FULL 11-COLUMN FORMAT
+        with open(variables_file, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = [
+                'variable_name', 'instruction', 'prompt_template', 
+                'aggregation_instruction', 'aggregation_prompt_template', 
+                'variable_type', 'scope', 'option_definitions', 
+                'aggregation_option_definitions', 'only_use_true_value_in_aggregation', 
+                'default_value_for_empty_response'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_ALL)
+            writer.writeheader()
+            writer.writerows(variables)
+        
+        print(f"✅ Generated {variables_file} with {len(variables)} variables")
+        return variables_file
+    
+    def generate_decisions_csv(self):
+        """Generate decisions.csv with aggregation rules."""
+        print(f"\n🎯 Generating decisions.csv...")
+        
+        decisions_file = self.output_dir / 'decisions.csv'
+        
+        # Define dependent variables for cross-validation and aggregation (7-COLUMN FORMAT)
+        decisions = [
+            {
+                'decision_name': 'confirmed_diagnosis',
+                'instruction': 'Cross-validate primary diagnosis from FHIR and narrative sources',
+                'decision_type': 'text',
+                'prompt_template': 'Compare primary_diagnosis values from FHIR_BUNDLE and narrative documents. If they match, return that diagnosis. If different, return both separated by " OR ". Prioritize pathology reports.',
+                'variables': '["primary_diagnosis"]',
+                'dependent_variables': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'decision_name': 'total_surgeries',
+                'instruction': 'Count total number of unique surgical procedures',
+                'decision_type': 'integer',
+                'prompt_template': 'Count the total number of unique surgery_date values across all documents.',
+                'variables': '["surgery_date"]',
+                'dependent_variables': '',
+                'default_value_for_empty_response': '0'
+            },
+            
+            {
+                'decision_name': 'best_resection',
+                'instruction': 'Determine the most extensive resection achieved',
+                'decision_type': 'text',
+                'prompt_template': 'From all surgeries (excluding biopsies and shunts), determine which had the best/most extensive resection. Prioritize: gross_total > near_total > subtotal > partial > debulking.',
+                'variables': '["surgery_type", "extent_of_resection"]',
+                'dependent_variables': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'decision_name': 'chemotherapy_regimen',
+                'instruction': 'Aggregate all chemotherapy agents into treatment regimen',
+                'decision_type': 'text',
+                'prompt_template': 'List all unique chemotherapy agents the patient received. Remove duplicates and format as comma-separated list.',
+                'variables': '["chemotherapy_agent"]',
+                'dependent_variables': '',
+                'default_value_for_empty_response': ''
+            },
+            
+            {
+                'decision_name': 'molecular_profile',
+                'instruction': 'Summarize molecular/genetic testing results',
+                'decision_type': 'text',
+                'prompt_template': 'Summarize all molecular test results including IDH mutation and MGMT methylation status. Format as "IDH: [status], MGMT: [status]".',
+                'variables': '["idh_mutation", "mgmt_methylation"]',
+                'dependent_variables': '',
+                'default_value_for_empty_response': ''
+            }
+        ]
+        
+        # Write CSV with 7-COLUMN FORMAT
+        with open(decisions_file, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = [
+                'decision_name', 'instruction', 'decision_type', 'prompt_template', 
+                'variables', 'dependent_variables', 'default_value_for_empty_response'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_ALL)
+            writer.writeheader()
+            writer.writerows(decisions)
+        
+        print(f"✅ Generated {decisions_file} with {len(decisions)} decisions")
+        return decisions_file
+    
+    def generate_all(self):
+        """Generate all BRIM CSVs."""
+        print("\n" + "="*70)
+        print("🚀 BRIM CSV GENERATION")
+        print("="*70)
+        print(f"FHIR Patient ID: {self.patient_id}")
+        print(f"Subject ID (PERSON_ID): {self.subject_id}")
+        print(f"Output Dir: {self.output_dir}")
+        print("="*70)
+        
+        # Extract clinical notes
+        self.extract_clinical_notes()
+        
+        # Generate CSVs
+        project_file = self.generate_project_csv()
+        variables_file = self.generate_variables_csv()
+        decisions_file = self.generate_decisions_csv()
+        
+        print("\n" + "="*70)
+        print("✅ GENERATION COMPLETE")
+        print("="*70)
+        print("\n📁 Generated files:")
+        print(f"   1. {project_file}")
+        print(f"   2. {variables_file}")
+        print(f"   3. {decisions_file}")
+        print("\n📋 Next steps:")
+        print("   1. Review the generated CSVs")
+        print("   2. Upload to BRIM platform (https://app.brimhealth.com)")
+        print("   3. Run extraction job in BRIM UI")
+        print("   4. Download results and validate against manual CSVs")
+        print("="*70)
+        
+        return project_file, variables_file, decisions_file
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate BRIM CSVs from FHIR Bundle')
+    parser.add_argument('--bundle-path', default='./pilot_output/fhir_bundle_e4BwD8ZYDBccepXcJ.Ilo3w3.json',
+                        help='Path to FHIR Bundle JSON file')
+    parser.add_argument('--output-dir', default='./pilot_output/brim_csvs',
+                        help='Output directory for BRIM CSVs')
+    
+    args = parser.parse_args()
+    
+    # Generate CSVs
+    generator = BRIMCSVGenerator(args.bundle_path, args.output_dir)
+    generator.generate_all()
+
+
+if __name__ == '__main__':
+    main()
