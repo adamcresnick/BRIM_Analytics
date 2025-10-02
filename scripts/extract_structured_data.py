@@ -252,6 +252,47 @@ class StructuredDataExtractor:
             if 'EGFR' in narrative.upper() or 'EGFR' in component.upper():
                 markers['EGFR'] = narrative
         
+        # FALLBACK: If no molecular markers found in materialized view, try raw observation table
+        if not markers:
+            logger.info("⚠️  No molecular markers in molecular_tests view, trying observation table...")
+            
+            fallback_query = f"""
+            SELECT 
+                o.code_text,
+                o.value_string,
+                o.value_codeable_concept_text,
+                o.effective_datetime
+            FROM {self.v2_database}.observation o
+            WHERE o.subject_reference = '{patient_fhir_id}'
+                AND (
+                    o.code_text = 'Genomics Interpretation'
+                    OR LOWER(o.code_text) LIKE '%molecular%'
+                    OR LOWER(o.code_text) LIKE '%genomic%'
+                    OR LOWER(o.value_string) LIKE '%braf%'
+                    OR LOWER(o.value_string) LIKE '%idh%'
+                    OR LOWER(o.value_string) LIKE '%mgmt%'
+                    OR LOWER(o.value_string) LIKE '%egfr%'
+                )
+            ORDER BY o.effective_datetime DESC
+            """
+            
+            df_fallback = self.query_and_fetch(fallback_query, self.v2_database)
+            
+            for _, row in df_fallback.iterrows():
+                value = row.get('value_string') or row.get('value_codeable_concept_text', '')
+                if not value:
+                    continue
+                    
+                # Parse common markers from fallback
+                if 'BRAF' in value.upper():
+                    markers['BRAF'] = value
+                if 'IDH' in value.upper():
+                    markers['IDH1'] = value
+                if 'MGMT' in value.upper():
+                    markers['MGMT'] = value
+                if 'EGFR' in value.upper():
+                    markers['EGFR'] = value
+        
         logger.info(f"✅ Found {len(markers)} molecular markers")
         return markers
     
