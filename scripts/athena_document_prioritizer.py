@@ -257,22 +257,34 @@ class DocumentPrioritizer:
             event_dates_str = ", ".join([f"CAST('{d}' AS DATE)" for d in event_dates])
         
         query = f"""
-        WITH event_dates AS (
-            SELECT event_date FROM (VALUES
-                {', '.join([f"(CAST('{d}' AS DATE))" for d in event_dates if d])}
-            ) AS t(event_date)
-        ),
-        
-        scored_documents AS (
-            SELECT
-                dr.id as document_id,
-                dr.type_text,
-                dr.date as document_date,
-                dr.description,
-                drc.content_attachment_url as s3_url,
-                drc.content_attachment_size as file_size,
-                
-                -- Document type priority
+        SELECT
+            dr.id as document_id,
+            dr.type_text,
+            dr.date as document_date,
+            dr.description,
+            drc.content_attachment_url as s3_url,
+            drc.content_attachment_size as file_size,
+            
+            -- Document type priority
+            CASE
+                WHEN LOWER(dr.type_text) LIKE '%pathology%' THEN 100
+                WHEN LOWER(dr.type_text) LIKE '%op note%' THEN 95
+                WHEN LOWER(dr.type_text) LIKE '%operative%' THEN 95
+                WHEN LOWER(dr.type_text) LIKE '%radiology%' THEN 85
+                WHEN LOWER(dr.type_text) LIKE '%mri%' THEN 85
+                WHEN LOWER(dr.type_text) LIKE '%ct%' THEN 85
+                WHEN LOWER(dr.type_text) LIKE '%oncology%' THEN 90
+                WHEN LOWER(dr.type_text) LIKE '%consult%' THEN 80
+                WHEN LOWER(dr.type_text) LIKE '%h&p%' THEN 80
+                WHEN LOWER(dr.type_text) LIKE '%progress%' THEN 70
+                ELSE 50
+            END as document_type_priority,
+            
+            0 as days_from_nearest_event,
+            50 as temporal_relevance_score,
+            
+            -- Composite score (simplified - just use document type priority)
+            CAST(
                 CASE
                     WHEN LOWER(dr.type_text) LIKE '%pathology%' THEN 100
                     WHEN LOWER(dr.type_text) LIKE '%op note%' THEN 95
@@ -285,37 +297,19 @@ class DocumentPrioritizer:
                     WHEN LOWER(dr.type_text) LIKE '%h&p%' THEN 80
                     WHEN LOWER(dr.type_text) LIKE '%progress%' THEN 70
                     ELSE 50
-                END as document_type_priority,
-                
-                -- Temporal relevance (find nearest event)
-                (
-                    SELECT MIN(ABS(DATE_DIFF('day', CAST(dr.date AS DATE), ed.event_date)))
-                    FROM event_dates ed
-                ) as days_from_nearest_event,
-                
-                -- Temporal relevance score
-                CASE
-                    WHEN (SELECT MIN(ABS(DATE_DIFF('day', CAST(dr.date AS DATE), ed.event_date))) FROM event_dates ed) <= 1 THEN 100
-                    WHEN (SELECT MIN(ABS(DATE_DIFF('day', CAST(dr.date AS DATE), ed.event_date))) FROM event_dates ed) <= 7 THEN 90
-                    WHEN (SELECT MIN(ABS(DATE_DIFF('day', CAST(dr.date AS DATE), ed.event_date))) FROM event_dates ed) <= 30 THEN 70
-                    WHEN (SELECT MIN(ABS(DATE_DIFF('day', CAST(dr.date AS DATE), ed.event_date))) FROM event_dates ed) <= 90 THEN 50
-                    ELSE 25
-                END as temporal_relevance_score
-                
-            FROM {self.athena.document_database}.document_reference dr
-            LEFT JOIN {self.athena.document_database}.document_reference_content drc 
-                ON dr.id = drc.document_reference_id
-            WHERE dr.subject_reference = 'Patient/{patient_fhir_id}'
-                AND dr.status = 'current'
-                AND (drc.content_attachment_size IS NULL OR drc.content_attachment_size < 10000000)
-        )
-        
-        SELECT
-            *,
-            (CAST(document_type_priority AS DOUBLE) * 0.5 + CAST(temporal_relevance_score AS DOUBLE) * 0.5) as composite_priority_score,
+                END AS DOUBLE
+            ) as composite_priority_score,
+            
             'UNKNOWN' as nearest_event_type
-        FROM scored_documents
-        WHERE composite_priority_score >= 60
+            
+        FROM {self.athena.document_database}.document_reference dr
+        LEFT JOIN {self.athena.document_database}.document_reference_content drc 
+            ON dr.id = drc.document_reference_id
+        WHERE dr.subject_reference = '{patient_fhir_id}'
+            AND dr.status = 'current'
+            AND (drc.content_attachment_size IS NULL 
+                 OR drc.content_attachment_size = '' 
+                 OR TRY_CAST(drc.content_attachment_size AS BIGINT) < 10000000)
         ORDER BY composite_priority_score DESC, document_date DESC
         LIMIT {limit}
         """
@@ -349,7 +343,10 @@ class ProcedureDocumentLinker:
         self.athena = athena
     
     def find_procedure_linked_documents(self, patient_fhir_id: str) -> pd.DataFrame:
-        """Query procedure_report to find operative notes"""
+        """Query procedure_report to find operative notes and pathology linked to procedures
+        
+        Note: procedure_report.report_reference contains document_reference.id directly (not 'DocumentReference/xxx')
+        """
         
         query = f"""
         SELECT DISTINCT
@@ -358,19 +355,28 @@ class ProcedureDocumentLinker:
             p.code_text as procedure_name,
             pcc.code_coding_code as cpt_code,
             pcc.code_coding_display as cpt_display,
-            pr.reference as document_reference,
-            REGEXP_EXTRACT(pr.reference, 'DocumentReference/(.+)') as document_id
-        FROM {self.athena.database}.procedure p
-        LEFT JOIN {self.athena.database}.procedure_code_coding pcc ON p.id = pcc.procedure_id
-        LEFT JOIN {self.athena.database}.procedure_report pr ON p.id = pr.procedure_id
-        WHERE p.subject_reference = 'Patient/{patient_fhir_id}'
-            AND pr.reference LIKE 'DocumentReference/%'
+            pr.report_reference as document_id,
+            dr.type_text as document_type,
+            dr.date as document_date,
+            drc.content_attachment_url as s3_url
+        FROM fhir_v2_prd_db.procedure p
+        LEFT JOIN fhir_v2_prd_db.procedure_code_coding pcc ON p.id = pcc.procedure_id
+        LEFT JOIN fhir_v2_prd_db.procedure_report pr ON p.id = pr.procedure_id
+        LEFT JOIN fhir_v1_prd_db.document_reference dr ON pr.report_reference = dr.id
+        LEFT JOIN fhir_v1_prd_db.document_reference_content drc ON dr.id = drc.document_reference_id
+        WHERE p.subject_reference = '{patient_fhir_id}'
+            AND pr.report_reference IS NOT NULL
+            AND dr.status = 'current'
             AND (
-                pcc.code_coding_code IN ('61510', '61512', '61518', '61500')
-                OR LOWER(p.code_text) LIKE '%craniotomy%'
-                OR LOWER(p.code_text) LIKE '%resection%'
+                -- Operative notes and pathology reports
+                LOWER(dr.type_text) LIKE '%operative%'
+                OR LOWER(dr.type_text) LIKE '%operation%'
+                OR LOWER(dr.type_text) LIKE '%op note%'
+                OR LOWER(dr.type_text) LIKE '%pathology%'
+                OR LOWER(dr.type_text) LIKE '%surgical%'
+                OR LOWER(dr.type_text) LIKE '%procedure%'
             )
-        ORDER BY p.performed_date_time
+        ORDER BY p.performed_date_time DESC
         """
         
         df = self.athena.query_and_fetch(query)
@@ -452,7 +458,10 @@ def main():
     print(f"PROCEDURE-LINKED DOCUMENTS ({len(linked_docs)} found)")
     print(f"{'='*80}")
     for _, row in linked_docs.iterrows():
-        print(f"  {row['surgery_date']} | {row['procedure_name'][:50]} → {row['document_id']}")
+        print(f"  {row['surgery_date'][:10] if pd.notna(row['surgery_date']) else 'Unknown'} | "
+              f"{row['procedure_name'][:40]:40s} → "
+              f"{row['document_type'][:30]:30s} | "
+              f"{row['document_id'][:30]}")
     
     # Save results
     output = {
@@ -477,7 +486,7 @@ def main():
             }
             for d in prioritized_docs
         ],
-        'procedure_linked_documents': linked_docs.to_dict('records') if not linked_docs.empty else []
+        'procedure_linked_documents': linked_docs if isinstance(linked_docs, list) else linked_docs.to_dict('records') if not linked_docs.empty else []
     }
     
     with open(args.output, 'w') as f:
