@@ -49,18 +49,24 @@ class PrioritizedDocument:
 
 
 class AthenaQueryEngine:
-    """Execute Athena queries against fhir_v2_prd_db materialized views"""
+    """Execute Athena queries against FHIR databases
+    
+    Uses fhir_v2_prd_db for most queries (condition, procedure, medication, observation)
+    Uses fhir_v1_prd_db for document_reference queries (v2 incomplete for documents)
+    """
     
     def __init__(
         self, 
         aws_profile: str = '343218191717_AWSAdministratorAccess',
         database: str = 'fhir_v2_prd_db',
+        document_database: str = 'fhir_v1_prd_db',
         s3_output_location: str = 's3://aws-athena-query-results-343218191717-us-east-1/'
     ):
         self.session = boto3.Session(profile_name=aws_profile)
         self.athena_client = self.session.client('athena', region_name='us-east-1')
         self.s3_client = self.session.client('s3', region_name='us-east-1')
-        self.database = database
+        self.database = database  # v2 for condition, procedure, medication, observation
+        self.document_database = document_database  # v1 for document_reference
         self.s3_output_location = s3_output_location
     
     def execute_query(self, query: str, wait: bool = True) -> str:
@@ -296,8 +302,8 @@ class DocumentPrioritizer:
                     ELSE 25
                 END as temporal_relevance_score
                 
-            FROM {self.athena.database}.document_reference dr
-            LEFT JOIN {self.athena.database}.document_reference_content drc 
+            FROM {self.athena.document_database}.document_reference dr
+            LEFT JOIN {self.athena.document_database}.document_reference_content drc 
                 ON dr.id = drc.document_reference_id
             WHERE dr.subject_reference = 'Patient/{patient_fhir_id}'
                 AND dr.status = 'current'

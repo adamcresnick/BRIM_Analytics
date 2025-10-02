@@ -193,6 +193,11 @@ class BRIMCSVGenerator:
         """Fetch Binary resource content directly from S3 source/Binary/ folder.
         
         Binary files are stored in prd/source/Binary/ with the Binary ID as the filename.
+        NOTE: Due to S3 naming bug, periods (.) in Binary IDs are replaced with underscores (_) in filenames.
+        
+        Example:
+            Binary ID: e.AHt-I-WoBGSMKmuuusnGLrnV6wFTfGWHVBq1xg4H543
+            S3 Key: prd/source/Binary/e_AHt-I-WoBGSMKmuuusnGLrnV6wFTfGWHVBq1xg4H543
         """
         # Track fetch attempts for debugging
         if not hasattr(self, '_binary_fetch_count'):
@@ -204,8 +209,12 @@ class BRIMCSVGenerator:
             if debug:
                 print(f"         Fetching Binary ID: {binary_id}")
             
-            # Try to fetch directly from prd/source/Binary/{binary_id}
-            s3_key = f"prd/source/Binary/{binary_id}"
+            # IMPORTANT: Replace periods with underscores due to S3 naming bug
+            s3_filename = binary_id.replace('.', '_')
+            s3_key = f"prd/source/Binary/{s3_filename}"
+            
+            if debug:
+                print(f"         S3 Key (with underscore fix): {s3_key}")
             
             try:
                 response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=s3_key)
