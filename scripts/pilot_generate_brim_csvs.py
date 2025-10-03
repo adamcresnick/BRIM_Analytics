@@ -135,6 +135,92 @@ class BRIMCSVGenerator:
         
         return self.clinical_notes
     
+    def extract_prioritized_documents(self):
+        """Extract clinical notes from prioritized documents list.
+        
+        Uses the prioritized_documents.json file from athena_document_prioritizer.py
+        which contains Binary IDs and metadata for the most relevant clinical documents.
+        """
+        if not self.prioritized_docs:
+            print("\n⚠️  No prioritized documents list provided, skipping...")
+            return
+        
+        print(f"\n📄 Extracting prioritized clinical documents...")
+        
+        # Get both prioritized and procedure-linked documents
+        all_docs = []
+        
+        if 'prioritized_documents' in self.prioritized_docs:
+            all_docs.extend(self.prioritized_docs['prioritized_documents'])
+            print(f"   Processing {len(self.prioritized_docs['prioritized_documents'])} prioritized documents...")
+        
+        if 'procedure_linked_documents' in self.prioritized_docs:
+            # Convert DataFrame records to dict format
+            proc_docs = self.prioritized_docs['procedure_linked_documents']
+            if proc_docs:  # Not empty list
+                all_docs.extend(proc_docs)
+                print(f"   Processing {len(proc_docs)} procedure-linked documents...")
+        
+        if not all_docs:
+            print("   ⚠️  No documents found in prioritized list")
+            return
+        
+        print(f"   Total documents to extract: {len(all_docs)}")
+        
+        # Track success/failure
+        success_count = 0
+        failure_count = 0
+        
+        for i, doc in enumerate(all_docs, 1):
+            try:
+                # Extract Binary ID from s3_url (format: Binary/fXXXXXXX...)
+                s3_url = doc.get('s3_url', '')
+                if not s3_url or 'Binary/' not in s3_url:
+                    failure_count += 1
+                    continue
+                
+                binary_id = s3_url.split('Binary/')[-1]
+                
+                # Progress update
+                if i <= 10 or i % 50 == 0:
+                    print(f"   Progress: {i}/{len(all_docs)} - Fetching Binary ID: {binary_id[:30]}...")
+                
+                # Fetch Binary content
+                text_content = self._fetch_binary_content(binary_id)
+                
+                if not text_content:
+                    failure_count += 1
+                    if i <= 10:
+                        print(f"      ⚠️  Failed to fetch Binary content")
+                    continue
+                
+                # Sanitize HTML
+                text_content = self._sanitize_html(text_content)
+                
+                # Create note entry
+                note = {
+                    'note_id': doc.get('document_id', binary_id),
+                    'note_date': doc.get('document_date', ''),
+                    'note_type': doc.get('type_text') or doc.get('document_type', 'Clinical Document'),
+                    'note_text': text_content
+                }
+                
+                self.clinical_notes.append(note)
+                success_count += 1
+                
+                if i <= 10:
+                    print(f"      ✅ Successfully extracted (Type: {note['note_type']}, {len(text_content)} chars)")
+                
+            except Exception as e:
+                failure_count += 1
+                if i <= 10:
+                    print(f"      ⚠️  Error: {e}")
+        
+        print(f"\n✅ Successfully extracted {success_count} prioritized documents")
+        if failure_count > 0:
+            print(f"⚠️  Failed to extract {failure_count} documents")
+        print(f"📊 Total clinical notes in memory: {len(self.clinical_notes)}")
+    
     def _query_s3_select(self, file_key):
         """Use S3 Select to query NDJSON file for patient documents."""
         sql = f"""
@@ -210,7 +296,7 @@ class BRIMCSVGenerator:
             return None
     
     def _fetch_binary_content(self, binary_id):
-        """Fetch Binary resource content directly from S3 source/Binary/ folder.
+        """Fetch Binary resource content from S3 source/Binary/ folder.
         
         Binary files are stored in prd/source/Binary/ with the Binary ID as the filename.
         NOTE: Due to S3 naming bug, periods (.) in Binary IDs are replaced with underscores (_) in filenames.
@@ -234,41 +320,36 @@ class BRIMCSVGenerator:
             s3_key = f"prd/source/Binary/{s3_filename}"
             
             if debug:
-                print(f"         S3 Key (with underscore fix): {s3_key}")
+                print(f"         S3 Key: {s3_key}")
             
+            # Fetch from S3 using boto3
+            response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=s3_key)
+            binary_data = response['Body'].read()
+            
+            if debug:
+                print(f"         Downloaded {len(binary_data)} bytes")
+            
+            # Try to decode as JSON first (FHIR Binary resource format)
             try:
-                response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=s3_key)
-                binary_data = response['Body'].read()
-                
-                if debug:
-                    print(f"         Downloaded {len(binary_data)} bytes from {s3_key}")
-                
-                # Try to decode as JSON first (FHIR Binary resource format)
+                binary_resource = json.loads(binary_data.decode('utf-8'))
+                # Extract base64 data field
+                data = binary_resource.get('data', '')
+                if data:
+                    decoded = base64.b64decode(data).decode('utf-8', errors='ignore')
+                    if debug:
+                        print(f"         Decoded {len(decoded)} characters from base64")
+                    return decoded
+            except json.JSONDecodeError:
+                # If not JSON, try direct decoding (plain text or HTML)
                 try:
-                    binary_resource = json.loads(binary_data.decode('utf-8'))
-                    # Extract base64 data field
-                    data = binary_resource.get('data', '')
-                    if data:
-                        decoded = base64.b64decode(data).decode('utf-8', errors='ignore')
-                        if debug:
-                            print(f"         Decoded {len(decoded)} characters from base64")
-                        return decoded
-                except json.JSONDecodeError:
-                    # If not JSON, try direct decoding (plain text or HTML)
-                    try:
-                        decoded = binary_data.decode('utf-8', errors='ignore')
-                        if debug:
-                            print(f"         Decoded {len(decoded)} characters directly")
-                        return decoded
-                    except:
-                        return None
-                
-                return None
-                
-            except self.s3_client.exceptions.NoSuchKey:
-                if debug:
-                    print(f"         Binary file not found: {s3_key}")
-                return None
+                    decoded = binary_data.decode('utf-8', errors='ignore')
+                    if debug:
+                        print(f"         Decoded {len(decoded)} characters directly")
+                    return decoded
+                except:
+                    return None
+            
+            return None
             
         except Exception as e:
             if debug:
@@ -742,8 +823,13 @@ class BRIMCSVGenerator:
         print(f"Output Dir: {self.output_dir}")
         print("="*70)
         
-        # Extract clinical notes
-        self.extract_clinical_notes()
+        # Extract clinical notes (try prioritized documents first, fallback to full S3 scan)
+        if self.prioritized_docs:
+            print("\n📌 Using prioritized documents list for targeted extraction...")
+            self.extract_prioritized_documents()
+        else:
+            print("\n📥 No prioritized documents list provided, falling back to full S3 scan...")
+            self.extract_clinical_notes()
         
         # Generate CSVs
         project_file = self.generate_project_csv()
