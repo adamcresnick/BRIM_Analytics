@@ -31,9 +31,10 @@ load_dotenv()
 
 
 class BRIMCSVGenerator:
-    """Generate BRIM-compatible CSVs from FHIR Bundle and Clinical Notes."""
+    """Generate BRIM-compatible CSVs from FHIR Bundle, Clinical Notes, and Structured Data."""
     
-    def __init__(self, bundle_path, output_dir='./pilot_output/brim_csvs'):
+    def __init__(self, bundle_path, output_dir='./pilot_output/brim_csvs', 
+                 structured_data_path=None, prioritized_docs_path=None):
         self.bundle_path = bundle_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +55,25 @@ class BRIMCSVGenerator:
         with open(bundle_path, 'r') as f:
             self.bundle = json.load(f)
         print(f"✅ Loaded bundle with {len(self.bundle.get('entry', []))} resources")
+        
+        # Load structured data (diagnosis, surgeries, molecular, treatments)
+        self.structured_data = None
+        if structured_data_path and Path(structured_data_path).exists():
+            print(f"📊 Loading structured data from {structured_data_path}")
+            with open(structured_data_path, 'r') as f:
+                self.structured_data = json.load(f)
+            print(f"✅ Loaded structured data: {len(self.structured_data.get('surgeries', []))} surgeries, "
+                  f"{len(self.structured_data.get('molecular_markers', []))} molecular markers, "
+                  f"{len(self.structured_data.get('treatments', []))} treatments")
+        
+        # Load prioritized documents list
+        self.prioritized_docs = None
+        if prioritized_docs_path and Path(prioritized_docs_path).exists():
+            print(f"📄 Loading prioritized documents from {prioritized_docs_path}")
+            with open(prioritized_docs_path, 'r') as f:
+                self.prioritized_docs = json.load(f)
+            print(f"✅ Loaded {len(self.prioritized_docs.get('prioritized_documents', []))} prioritized documents, "
+                  f"{len(self.prioritized_docs.get('procedure_linked_documents', []))} procedure-linked documents")
         
         # Storage for clinical notes
         self.clinical_notes = []
@@ -271,8 +291,146 @@ class BRIMCSVGenerator:
         
         return clean_text
     
+    def create_structured_findings_documents(self):
+        """Create synthetic 'documents' from structured data findings.
+        
+        These are NOT from Binary HTML files, but rather from materialized views:
+        - Molecular markers (molecular_tests view)
+        - Surgery details (procedure view)
+        - Treatment history (patient_medications view)
+        
+        These findings are fed into BRIM as supplementary context to improve extraction accuracy.
+        """
+        synthetic_docs = []
+        
+        if not self.structured_data:
+            return synthetic_docs
+        
+        # 1. Molecular Markers Summary
+        if self.structured_data.get('molecular_markers'):
+            markers_text = "MOLECULAR/GENETIC TESTING RESULTS (Structured Data Extract):\n\n"
+            
+            # Handle both dict and list formats
+            markers = self.structured_data['molecular_markers']
+            if isinstance(markers, dict):
+                # Format: {"BRAF": "fusion description text..."}
+                for gene_name, finding in markers.items():
+                    markers_text += f"Gene: {gene_name}\n"
+                    markers_text += f"Finding: {finding}\n"
+                    markers_text += "-" * 60 + "\n"
+            elif isinstance(markers, list):
+                # Format: [{"test_name": "...", "result": "..."}, ...]
+                for marker in markers:
+                    markers_text += f"Test: {marker.get('test_name', 'Unknown')}\n"
+                    markers_text += f"Result: {marker.get('result_display', 'N/A')}\n"
+                    markers_text += f"Value: {marker.get('value_string', 'N/A')}\n"
+                    markers_text += f"Date: {marker.get('result_datetime', 'Unknown')}\n"
+                    markers_text += "-" * 60 + "\n"
+            
+            synthetic_docs.append({
+                'document_id': 'STRUCTURED_molecular_markers',
+                'document_type': 'Molecular Testing Summary',
+                'document_date': '',
+                'text_content': markers_text
+            })
+        
+        # 2. Surgery Details Summary
+        if self.structured_data.get('surgeries'):
+            surgery_text = "SURGICAL PROCEDURES (Structured Data Extract):\n\n"
+            for i, surgery in enumerate(self.structured_data['surgeries'], 1):
+                surgery_text += f"Surgery #{i}:\n"
+                # Handle both formats: date vs performed_date_time
+                surgery_date = surgery.get('date') or surgery.get('performed_date_time', 'Unknown')
+                surgery_text += f"Date: {surgery_date if surgery_date else 'Not specified'}\n"
+                # Handle both formats: description/code_text/cpt_display
+                procedure_name = surgery.get('description') or surgery.get('code_text') or surgery.get('cpt_display', 'Unknown')
+                surgery_text += f"Procedure: {procedure_name}\n"
+                # Handle both formats: cpt_code (single) vs cpt_codes (list)
+                if surgery.get('cpt_code'):
+                    surgery_text += f"CPT Code: {surgery['cpt_code']}\n"
+                elif surgery.get('cpt_codes'):
+                    surgery_text += f"CPT Codes: {', '.join(surgery['cpt_codes'])}\n"
+                if surgery.get('body_site_text'):
+                    surgery_text += f"Body Site: {surgery['body_site_text']}\n"
+                surgery_text += "-" * 60 + "\n"
+            
+            synthetic_docs.append({
+                'document_id': 'STRUCTURED_surgeries',
+                'document_type': 'Surgical History Summary',
+                'document_date': self.structured_data['surgeries'][0].get('date') or self.structured_data['surgeries'][0].get('performed_date_time', ''),
+                'text_content': surgery_text
+            })
+        
+        # 3. Treatment History Summary
+        if self.structured_data.get('treatments'):
+            treatment_text = "TREATMENT HISTORY (Structured Data Extract):\n\n"
+            
+            # Group by medication name
+            meds_by_name = {}
+            for tx in self.structured_data['treatments']:
+                # Handle both formats: medication vs medication_name
+                med_name = tx.get('medication') or tx.get('medication_name', 'Unknown')
+                if med_name not in meds_by_name:
+                    meds_by_name[med_name] = []
+                meds_by_name[med_name].append(tx)
+            
+            for med_name, records in meds_by_name.items():
+                treatment_text += f"Medication: {med_name}\n"
+                # Handle both formats: rx_norm_codes (string) vs rx_norm_code (single value)
+                rx_codes = set()
+                for r in records:
+                    if r.get('rx_norm_codes'):
+                        rx_codes.add(str(r['rx_norm_codes']))
+                    elif r.get('rx_norm_code'):
+                        rx_codes.add(str(r['rx_norm_code']))
+                if rx_codes and rx_codes != {'None', 'null'}:
+                    treatment_text += f"RxNorm Codes: {', '.join(rx_codes)}\n"
+                # Handle both formats: start_date vs authored_on
+                dates = [r.get('start_date') or r.get('authored_on', '9999') for r in records]
+                treatment_text += f"First Recorded: {min(dates)}\n"
+                treatment_text += f"Total Records: {len(records)}\n"
+                treatment_text += "-" * 60 + "\n"
+            
+            synthetic_docs.append({
+                'document_id': 'STRUCTURED_treatments',
+                'document_type': 'Treatment History Summary',
+                'document_date': min(tx.get('start_date') or tx.get('authored_on', '9999') for tx in self.structured_data['treatments']),
+                'text_content': treatment_text
+            })
+        
+        # 4. Diagnosis Summary
+        if self.structured_data.get('diagnosis'):
+            dx = self.structured_data['diagnosis']
+            dx_text = "PRIMARY DIAGNOSIS (Structured Data Extract):\n\n"
+            dx_text += f"Diagnosis: {dx.get('diagnosis_name', 'Unknown')}\n"
+            dx_text += f"ICD-10 Code: {dx.get('icd10_code', 'N/A')}\n"
+            dx_text += f"Onset Date: {dx.get('onset_date_time', 'Unknown')}\n"
+            dx_text += f"Clinical Status: {dx.get('clinical_status', 'N/A')}\n"
+            
+            synthetic_docs.append({
+                'document_id': 'STRUCTURED_diagnosis',
+                'document_type': 'Diagnosis Summary',
+                'document_date': dx.get('onset_date_time', ''),
+                'text_content': dx_text
+            })
+        elif self.structured_data.get('diagnosis_date'):
+            # Simpler format: just diagnosis_date
+            dx_text = "PRIMARY DIAGNOSIS DATE (Structured Data Extract):\n\n"
+            dx_text += f"Diagnosis Date: {self.structured_data['diagnosis_date']}\n"
+            dx_text += "Source: problem_list_diagnoses materialized view\n"
+            
+            synthetic_docs.append({
+                'document_id': 'STRUCTURED_diagnosis_date',
+                'document_type': 'Diagnosis Date Summary',
+                'document_date': self.structured_data['diagnosis_date'],
+                'text_content': dx_text
+            })
+        
+        print(f"   Created {len(synthetic_docs)} structured finding documents")
+        return synthetic_docs
+    
     def generate_project_csv(self):
-        """Generate project.csv with FHIR Bundle + Clinical Notes."""
+        """Generate project.csv with FHIR Bundle + Clinical Notes + Structured Findings."""
         print(f"\n📝 Generating project.csv...")
         
         project_file = self.output_dir / 'project.csv'
@@ -289,7 +447,18 @@ class BRIMCSVGenerator:
             'NOTE_TITLE': 'FHIR_BUNDLE'
         })
         
-        # Rows 2-N: Clinical Notes
+        # Rows 2-N: Structured Findings (molecular, surgical, treatment summaries)
+        structured_docs = self.create_structured_findings_documents()
+        for doc in structured_docs:
+            rows.append({
+                'NOTE_ID': doc['document_id'],
+                'PERSON_ID': self.subject_id,
+                'NOTE_DATETIME': doc['document_date'] or datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                'NOTE_TEXT': doc['text_content'],
+                'NOTE_TITLE': doc['document_type']
+            })
+        
+        # Rows N+1...: Clinical Notes from Binary HTML files
         for note in self.clinical_notes:
             rows.append({
                 'NOTE_ID': note['note_id'],
@@ -599,16 +768,25 @@ class BRIMCSVGenerator:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate BRIM CSVs from FHIR Bundle')
+    parser = argparse.ArgumentParser(description='Generate BRIM CSVs from FHIR Bundle, Structured Data, and Prioritized Documents')
     parser.add_argument('--bundle-path', default='./pilot_output/fhir_bundle_e4BwD8ZYDBccepXcJ.Ilo3w3.json',
                         help='Path to FHIR Bundle JSON file')
+    parser.add_argument('--structured-data', dest='structured_data_path',
+                        help='Path to structured data JSON (diagnosis, surgeries, molecular, treatments)')
+    parser.add_argument('--prioritized-docs', dest='prioritized_docs_path',
+                        help='Path to prioritized documents JSON from athena_document_prioritizer.py')
     parser.add_argument('--output-dir', default='./pilot_output/brim_csvs',
                         help='Output directory for BRIM CSVs')
     
     args = parser.parse_args()
     
     # Generate CSVs
-    generator = BRIMCSVGenerator(args.bundle_path, args.output_dir)
+    generator = BRIMCSVGenerator(
+        args.bundle_path, 
+        args.output_dir,
+        structured_data_path=args.structured_data_path,
+        prioritized_docs_path=args.prioritized_docs_path
+    )
     generator.generate_all()
 
 
