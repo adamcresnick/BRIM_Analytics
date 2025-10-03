@@ -154,7 +154,7 @@ class StructuredDataExtractor:
         return None
     
     def extract_surgeries(self, patient_fhir_id: str) -> List[Dict]:
-        """Extract surgery dates and details from procedure table
+        """Extract TUMOR RESECTION surgery dates and details from procedure table
         
         Schema reference: data/materialized_view_schema.csv
         Per COMPREHENSIVE_SURGICAL_CAPTURE_GUIDE.md:
@@ -164,12 +164,32 @@ class StructuredDataExtractor:
         - procedure.status (column 3)
         - procedure_code_coding.code_coding_code (CPT codes)
         - procedure_code_coding.code_coding_display
+        
+        IMPORTANT: This extracts ONLY tumor resection procedures, NOT all procedures.
+        CPT code filtering:
+        - 61500-61576: Excision/resection of brain tumor (supratentorial, infratentorial)
+        - EXCLUDES: 62201 (CSF shunt/ETV - hydrocephalus management, NOT tumor surgery)
+        - EXCLUDES: 61304-61315 (biopsy only - not resection)
         """
+        
+        # TUMOR RESECTION CPT codes only (excludes shunts, biopsies, diagnostic procedures)
+        TUMOR_RESECTION_CPTS = [
+            '61500', '61501', '61510', '61512', '61514', '61516',  # Supratentorial tumor resection
+            '61518', '61519', '61520', '61521', '61524', '61526',  # Infratentorial/posterior fossa tumor resection
+            '61530', '61531', '61536', '61537', '61538', '61539',  # Additional tumor resection codes
+            '61545', '61546', '61548', '61550', '61552',           # Transsphenoidal/skull base approaches
+        ]
         
         query = f"""
         SELECT 
             p.id as procedure_id,
+            CASE 
+                WHEN p.performed_date_time IS NOT NULL AND p.performed_date_time != '' THEN p.performed_date_time
+                WHEN p.performed_period_start IS NOT NULL AND p.performed_period_start != '' THEN SUBSTR(p.performed_period_start, 1, 10)
+                ELSE NULL
+            END as surgery_date,
             p.performed_date_time,
+            p.performed_period_start,
             p.code_text,
             p.status,
             pcc.code_coding_code as cpt_code,
@@ -179,33 +199,54 @@ class StructuredDataExtractor:
             ON p.id = pcc.procedure_id
         WHERE p.subject_reference = '{patient_fhir_id}'
             AND p.status = 'completed'
-            AND p.performed_date_time IS NOT NULL
             AND (
-                pcc.code_coding_code IN ('61500', '61501', '61510', '61512', '61514', '61516', 
-                                         '61518', '61519', '61520', '61521', '61524', '61526',
-                                         '62201', '62223', '61304', '61305', '61312', '61313', '61314', '61315')
-                OR LOWER(p.code_text) LIKE '%craniotomy%'
-                OR LOWER(p.code_text) LIKE '%craniectomy%'
-                OR LOWER(p.code_text) LIKE '%resection%'
-                OR LOWER(pcc.code_coding_display) LIKE '%craniec%'
-                OR LOWER(pcc.code_coding_display) LIKE '%cranioto%'
-                OR LOWER(pcc.code_coding_display) LIKE '%resect%'
+                p.performed_date_time IS NOT NULL 
+                OR p.performed_period_start IS NOT NULL
             )
-        ORDER BY p.performed_date_time
+            AND (
+                pcc.code_coding_code IN {tuple(TUMOR_RESECTION_CPTS)}
+                OR (
+                    pcc.code_coding_code BETWEEN '61500' AND '61576'
+                    AND pcc.code_coding_code NOT IN ('62201', '62223')  -- Exclude shunts
+                )
+                OR (
+                    LOWER(pcc.code_coding_display) LIKE '%tumor resection%'
+                    OR LOWER(pcc.code_coding_display) LIKE '%excision%tumor%'
+                    OR LOWER(pcc.code_coding_display) LIKE '%brain tumor%'
+                )
+            )
+            AND pcc.code_coding_code NOT IN ('62201', '62223', '61304', '61305', '61312', '61313', '61314', '61315')
+        ORDER BY surgery_date
         """
         
         df = self.query_and_fetch(query, self.v2_database)
         
         surgeries = []
         for _, row in df.iterrows():
+            # Skip if CPT code is a shunt or biopsy (defensive check)
+            cpt_code = row['cpt_code']
+            if cpt_code in ['62201', '62223', '61304', '61305', '61312', '61313', '61314', '61315']:
+                logger.info(f"⏭️  Skipping non-resection procedure: {cpt_code} ({row['cpt_display']})")
+                continue
+            
+            # Use the COALESCE'd surgery_date field
+            surgery_date = row['surgery_date']
+            if not surgery_date or str(surgery_date).strip() == '' or str(surgery_date) == 'nan':
+                logger.info(f"⏭️  Skipping procedure without date: {cpt_code} ({row['cpt_display']})")
+                continue
+            
+            # Extract just the date part (YYYY-MM-DD) from timestamp
+            date_str = str(surgery_date).split('T')[0] if 'T' in str(surgery_date) else str(surgery_date)
+            
             surgeries.append({
-                'date': row['performed_date_time'],
+                'date': date_str,
                 'cpt_code': row['cpt_code'],
                 'cpt_display': row['cpt_display'],
                 'description': row['code_text']
             })
         
-        logger.info(f"✅ Found {len(surgeries)} surgeries")
+        logger.info(f"✅ Found {len(surgeries)} TUMOR RESECTION surgeries (filtered from query results)")
+        logger.info(f"   NOTE: Excludes shunts (62201), biopsies (61304-61315), and other non-resection procedures")
         return surgeries
     
     def extract_molecular_markers(self, patient_fhir_id: str) -> Dict[str, str]:
