@@ -1,0 +1,84 @@
+variable_name,cardinality,scope,instruction
+first_surgery_date,one_per_patient,patient_level,"PRIORITY 1: Check STRUCTURED_surgeries document FIRST.
+
+STEP 1: Locate the surgery history table in STRUCTURED_surgeries document
+STEP 2: Extract the date from Row 1 ONLY (first surgery) from the 'Date' column
+STEP 3: Return in format YYYY-MM-DD
+
+Data Dictionary Alignment:
+- Field Name: surgery_date
+- Field Type: date
+- Format: YYYY-MM-DD
+
+Gold Standard for Patient C1277724: 2018-05-28
+
+If STRUCTURED_surgeries document not found:
+- Search FHIR Bundle Procedure resources for performed_date_time or performed_period_start
+- Filter to neurosurgical CPT codes only (61000-62258)
+- Return the EARLIEST date found"
+first_surgery_type,one_per_patient,patient_level,"PRIORITY 1: Check STRUCTURED_surgeries document FIRST.
+
+STEP 1: Locate the surgery history table in STRUCTURED_surgeries document
+STEP 2: Extract the surgery type from Row 1 ONLY (first surgery) from the 'Surgery Type' column
+STEP 3: Return EXACTLY one of these Data Dictionary values:
+   - 'Tumor Resection' (if CPT 61510-61576)
+   - 'Biopsy' (if CPT 61140, 61150, 61512)
+   - 'Shunt' (if CPT 62200-62258)
+   - 'Other' (any other neurosurgical procedure)
+
+Data Dictionary Alignment:
+- Field Name: surgery_type
+- Field Type: dropdown
+- Valid Values: 'Tumor Resection', 'Biopsy', 'Shunt', 'Other'
+- CRITICAL: Match exactly - case sensitive, use Title Case
+
+Gold Standard for Patient C1277724: 'Tumor Resection'
+
+Do NOT use variations like:
+- 'RESECTION' or 'Tumor resection' or 'resection' (wrong case)
+- Generic terms like 'craniotomy' (use standardized dropdown value)
+
+If STRUCTURED_surgeries document not found:
+- Check Procedure.code for CPT codes and map using rules above"
+first_surgery_extent,one_per_patient,patient_level,"PRIORITY 1: Check STRUCTURED_surgeries document FIRST.
+
+STEP 1: Locate the surgery history table in STRUCTURED_surgeries document
+STEP 2: Extract the extent of resection from Row 1 ONLY (first surgery) from the 'Extent of Resection' column
+STEP 3: Return EXACTLY one of these Data Dictionary values:
+   - 'Gross Total Resection'
+   - 'Near Total Resection'
+   - 'Subtotal Resection'
+   - 'Partial Resection'
+   - 'Biopsy Only'
+
+Data Dictionary Alignment:
+- Field Name: extent_of_resection
+- Field Type: dropdown
+- Valid Values: Listed above with Title Case
+- CRITICAL: Match exactly - 'Partial Resection' NOT 'Partial resection' or 'partial'
+
+Gold Standard for Patient C1277724: 'Partial Resection'
+
+If STRUCTURED_surgeries document not found:
+- Search operative notes for keywords: 'gross total', 'near total', 'subtotal', 'partial', 'biopsy only'
+- Return closest matching dropdown value
+- If unclear, return 'Unknown'"
+first_surgery_location,one_per_patient,patient_level,"PRIORITY 1: Check STRUCTURED_surgeries document FIRST.
+
+STEP 1: Locate the surgery history table in STRUCTURED_surgeries document  
+STEP 2: Extract the anatomical location from Row 1 ONLY (first surgery) from the 'Anatomical Location' column
+STEP 3: Return the location as free text
+
+Data Dictionary Alignment:
+- Field Name: surgery_location
+- Field Type: text (free text - not constrained)
+- Format: Anatomical region (e.g., 'Posterior fossa', 'Cerebellum', 'Frontal lobe')
+
+Gold Standard for Patient C1277724: 'Posterior fossa' OR 'Cerebellum'
+
+If STRUCTURED_surgeries document not found:
+- Search operative notes for anatomical keywords:
+  - Brain regions: cerebellum, frontal lobe, temporal lobe, parietal lobe, occipital lobe
+  - Specific areas: posterior fossa, supratentorial, infratentorial, brainstem
+- Return the most specific location mentioned
+- Can include multiple locations separated by semicolons if applicable"
