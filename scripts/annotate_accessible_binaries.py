@@ -2,6 +2,27 @@
 """
 Enhance accessible_binary_files.csv with additional annotations.
 Reads existing CSV and adds type_coding_display, content_type, and category_text columns.
+
+CRITICAL FIXES IMPLEMENTED:
+1. Full batching: Processes ALL documents in batches of 1,000 (no limits)
+2. Multiple values: Documents with multiple content types/categories stored as semicolon-separated lists
+   Example: "text/html; text/rtf" for documents with both HTML and RTF versions
+3. No preferences: ALL annotations captured without filtering or prioritization
+4. Proper JOIN handling: Each annotation type queried separately with batching to handle Athena query limits
+
+USAGE:
+  python3 annotate_accessible_binaries.py
+
+INPUT:
+  accessible_binary_files.csv (from query_accessible_binaries.py)
+
+OUTPUT:
+  accessible_binary_files_annotated.csv with 3 additional columns:
+    - type_coding_display: Document type coding display name(s)
+    - content_type: MIME type(s) from content_attachment_content_type
+    - category_text: Document category/categories
+
+RUNTIME: ~10-15 minutes for ~4,000 documents (12 Athena queries total)
 """
 
 import boto3
@@ -100,47 +121,104 @@ def main():
     # Extract all document_reference_ids
     doc_ref_ids = [doc['document_reference_id'] for doc in existing_docs]
     
-    # Query for type_coding_display
+    # Batch size for queries (Athena has query length limits)
+    BATCH_SIZE = 1000
+    total_batches = (len(doc_ref_ids) + BATCH_SIZE - 1) // BATCH_SIZE
+    
+    # Query for type_coding_display (with batching)
     print(f"Step 2: Querying type_coding_display...")
-    type_coding_query = f"""
-    SELECT 
-        document_reference_id,
-        type_coding_display
-    FROM fhir_v1_prd_db.document_reference_type_coding
-    WHERE document_reference_id IN ({','.join("'" + id + "'" for id in doc_ref_ids[:1000])})
-    """
-    # Note: Athena has query length limits, so we might need to batch this
-    type_coding_results = run_athena_query(type_coding_query)
-    type_coding_map = {row[0]: row[1] for row in type_coding_results}
-    print(f"  Retrieved {len(type_coding_map)} type_coding_display values")
+    print(f"  Processing {len(doc_ref_ids)} documents in {total_batches} batches of {BATCH_SIZE}")
+    type_coding_map = {}
+    for batch_num in range(total_batches):
+        start_idx = batch_num * BATCH_SIZE
+        end_idx = min(start_idx + BATCH_SIZE, len(doc_ref_ids))
+        batch_ids = doc_ref_ids[start_idx:end_idx]
+        
+        print(f"  Batch {batch_num + 1}/{total_batches}: Processing documents {start_idx + 1}-{end_idx}...")
+        type_coding_query = f"""
+        SELECT 
+            document_reference_id,
+            type_coding_display
+        FROM fhir_v1_prd_db.document_reference_type_coding
+        WHERE document_reference_id IN ({','.join("'" + id + "'" for id in batch_ids)})
+        """
+        type_coding_results = run_athena_query(type_coding_query)
+        # Handle multiple type codings per document - store all as comma-separated list
+        for row in type_coding_results:
+            doc_id, type_coding = row[0], row[1]
+            if doc_id in type_coding_map:
+                # Document has multiple type codings - append to list
+                existing_types = type_coding_map[doc_id].split('; ')
+                if type_coding not in existing_types:
+                    type_coding_map[doc_id] = type_coding_map[doc_id] + '; ' + type_coding
+            else:
+                type_coding_map[doc_id] = type_coding
+    
+    print(f"  ✅ Retrieved {len(type_coding_map)} type_coding_display values")
     print()
     
-    # Query for content_type (from document_reference_content)
+    # Query for content_type (from document_reference_content) - with batching
     print(f"Step 3: Querying content_type...")
-    content_type_query = f"""
-    SELECT 
-        document_reference_id,
-        content_attachment_content_type
-    FROM fhir_v1_prd_db.document_reference_content
-    WHERE document_reference_id IN ({','.join("'" + id + "'" for id in doc_ref_ids[:1000])})
-    """
-    content_type_results = run_athena_query(content_type_query)
-    content_type_map = {row[0]: row[1] for row in content_type_results}
-    print(f"  Retrieved {len(content_type_map)} content_type values")
+    print(f"  Processing {len(doc_ref_ids)} documents in {total_batches} batches of {BATCH_SIZE}")
+    content_type_map = {}
+    for batch_num in range(total_batches):
+        start_idx = batch_num * BATCH_SIZE
+        end_idx = min(start_idx + BATCH_SIZE, len(doc_ref_ids))
+        batch_ids = doc_ref_ids[start_idx:end_idx]
+        
+        print(f"  Batch {batch_num + 1}/{total_batches}: Processing documents {start_idx + 1}-{end_idx}...")
+        content_type_query = f"""
+        SELECT 
+            document_reference_id,
+            content_attachment_content_type
+        FROM fhir_v1_prd_db.document_reference_content
+        WHERE document_reference_id IN ({','.join("'" + id + "'" for id in batch_ids)})
+        """
+        content_type_results = run_athena_query(content_type_query)
+        # Handle multiple content types per document - store all as comma-separated list
+        for row in content_type_results:
+            doc_id, content_type = row[0], row[1]
+            if doc_id in content_type_map:
+                # Document has multiple content types - append to list
+                existing_types = content_type_map[doc_id].split('; ')
+                if content_type not in existing_types:
+                    content_type_map[doc_id] = content_type_map[doc_id] + '; ' + content_type
+            else:
+                content_type_map[doc_id] = content_type
+    
+    print(f"  ✅ Retrieved {len(content_type_map)} content_type values")
     print()
     
-    # Query for category_text
+    # Query for category_text (with batching)
     print(f"Step 4: Querying category_text...")
-    category_query = f"""
-    SELECT 
-        document_reference_id,
-        category_text
-    FROM fhir_v1_prd_db.document_reference_category
-    WHERE document_reference_id IN ({','.join("'" + id + "'" for id in doc_ref_ids[:1000])})
-    """
-    category_results = run_athena_query(category_query)
-    category_map = {row[0]: row[1] for row in category_results}
-    print(f"  Retrieved {len(category_map)} category_text values")
+    print(f"  Processing {len(doc_ref_ids)} documents in {total_batches} batches of {BATCH_SIZE}")
+    category_map = {}
+    for batch_num in range(total_batches):
+        start_idx = batch_num * BATCH_SIZE
+        end_idx = min(start_idx + BATCH_SIZE, len(doc_ref_ids))
+        batch_ids = doc_ref_ids[start_idx:end_idx]
+        
+        print(f"  Batch {batch_num + 1}/{total_batches}: Processing documents {start_idx + 1}-{end_idx}...")
+        category_query = f"""
+        SELECT 
+            document_reference_id,
+            category_text
+        FROM fhir_v1_prd_db.document_reference_category
+        WHERE document_reference_id IN ({','.join("'" + id + "'" for id in batch_ids)})
+        """
+        category_results = run_athena_query(category_query)
+        # Handle multiple categories per document - store all as comma-separated list
+        for row in category_results:
+            doc_id, category = row[0], row[1]
+            if doc_id in category_map:
+                # Document has multiple categories - append to list
+                existing_cats = category_map[doc_id].split('; ')
+                if category not in existing_cats:
+                    category_map[doc_id] = category_map[doc_id] + '; ' + category
+            else:
+                category_map[doc_id] = category
+    
+    print(f"  ✅ Retrieved {len(category_map)} category_text values")
     print()
     
     # Enhance existing docs with new columns
