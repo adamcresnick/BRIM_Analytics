@@ -53,8 +53,9 @@ def read_brim_export(filepath: str) -> Dict[str, List[str]]:
     with open(filepath, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            variable_name = row.get('variable_name', '').strip()
-            value = row.get('value', '').strip()
+            # BRIM export uses 'Name' and 'Value' columns (not 'variable_name' and 'value')
+            variable_name = row.get('Name', '').strip()
+            value = row.get('Value', '').strip()
             if variable_name and value:
                 extractions[variable_name].append(value)
     
