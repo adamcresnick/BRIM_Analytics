@@ -1,0 +1,4 @@
+patient_fhir_id,medication_name,medication_start_date,medication_end_date,medication_status,rxnorm_code
+e4BwD8ZYDBccepXcJ.Ilo3w3,Vinblastine,2018-10-01,2019-05-01,completed,11118
+e4BwD8ZYDBccepXcJ.Ilo3w3,Bevacizumab,2019-05-15,2021-04-30,completed,3002
+e4BwD8ZYDBccepXcJ.Ilo3w3,Selumetinib,2021-05-01,,active,1656052
