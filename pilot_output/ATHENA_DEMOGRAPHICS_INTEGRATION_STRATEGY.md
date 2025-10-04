@@ -262,13 +262,19 @@ aws athena start-query-execution \
 
 ### Step 2: Update variables.csv
 
-**Changes required**:
-1. `date_of_birth`: Reference patient_demographics.csv first
-2. `age_at_diagnosis`: Explicit calculation directive, block text extraction
-3. `diagnosis_date`: Clarify pathology vs surgery date priority
-4. `patient_gender`: Reference patient_demographics.csv (should return "Female" not "female")
-5. `race`: Reference patient_demographics.csv (should return "White" not "Unavailable")
-6. `ethnicity`: Reference patient_demographics.csv (should return "Hispanic or Latino" not "Unavailable")
+**ALL 5 Demographics Variables Should Use Athena Data**:
+
+From Athena `patient_access` table → Pre-populated in `patient_demographics.csv`:
+1. ✅ `patient_gender`: Reference patient_demographics.csv (Athena: "female" → BRIM: "Female")
+2. ✅ `date_of_birth`: Reference patient_demographics.csv (Athena: "2005-05-13" → BRIM: "2005-05-13")
+3. ✅ `race`: Reference patient_demographics.csv (Athena: "White" → BRIM: "White")
+4. ✅ `ethnicity`: Reference patient_demographics.csv (Athena: "Not Hispanic or Latino" → BRIM: "Not Hispanic or Latino")
+5. ✅ `age_at_diagnosis`: CALCULATE from patient_demographics.csv birth_date + extracted diagnosis_date
+
+Additional variable updates:
+6. `diagnosis_date`: Clarify pathology vs surgery date priority
+
+**Key Principle**: ALL structured demographics should come from Athena, NOT text extraction
 
 ### Step 3: Upload Phase 3a_v2 to BRIM
 
@@ -324,11 +330,64 @@ aws athena start-query-execution \
 
 ## Conclusion
 
-The discovery of `fhir_v2_prd_db.patient_access_with_fhir_id` fundamentally changes our extraction strategy:
+The discovery of Athena's `fhir_v2_prd_db.patient_access` table fundamentally changes our extraction strategy:
 
-**Before**: Text extraction from clinical notes → 81% accuracy
-**After**: Structured query from Athena → Expected 95%+ accuracy
+**Before**: Text extraction from clinical notes → 81% accuracy (13/16)
+**After**: Structured query from Athena → Expected 95%+ accuracy (15-16/16)
+
+**Demographics Impact**:
+- **Before Athena**: 20% (1/5) - Only gender accessible via FHIR
+- **After Athena**: 100% (5/5) - All demographics from patient_access table
 
 **Key Insight**: Phase 3a wasn't failing - it was succeeding within the constraints we gave it. By providing access to structured data, we can achieve near-perfect accuracy for demographics and date calculations.
 
-**Recommendation**: Proceed with Phase 3a_v2 using Athena demographics integration. This will establish the pattern for all future structured data extraction (labs, medications, imaging, etc.).
+## Athena Integration Pattern for Future Phases
+
+### Apply This Pattern to ALL Structured Data
+
+**Tier 2+ Variables That Should Use Athena**:
+
+1. **Medications** (Tier 2):
+   - Table: `fhir_v2_prd_db.patient_medications`
+   - Variables: chemotherapy_agent, chemotherapy_start_date, chemotherapy_line, etc.
+   - Benefit: Drug names, RxNorm codes, dates all structured
+
+2. **Radiation** (Tier 2):
+   - Table: `fhir_v2_prd_db.radiology_imaging`
+   - Variables: radiation_therapy_yn, radiation_start_date, radiation_dose, etc.
+   - Benefit: Procedure dates, modalities all structured
+
+3. **Labs** (Future):
+   - Tables: `fhir_v2_prd_db.lab_tests`, `lab_test_results`
+   - Variables: Any lab values, test dates
+   - Benefit: Numeric values, units, reference ranges all structured
+
+4. **Imaging** (Future):
+   - Table: `fhir_v2_prd_db.radiology_imaging`, `radiology_imaging_mri`
+   - Variables: MRI dates, findings, modalities
+   - Benefit: Dates, procedures, status all structured
+
+5. **Diagnoses** (Future):
+   - Table: `fhir_v2_prd_db.problem_list_diagnoses`
+   - Variables: Comorbidities, ICD-10 codes, onset dates
+   - Benefit: Coded diagnoses, dates, status all structured
+
+### General Principle
+
+**ALWAYS prioritize Athena structured data over text extraction when:**
+- ✅ Variable represents a discrete data point (demographics, dates, codes)
+- ✅ Data exists in Athena tables
+- ✅ Data quality in Athena is high
+- ✅ Performance gain is significant (80% boost for demographics)
+
+**Use text extraction ONLY when:**
+- ❌ Data not available in structured form (e.g., tumor characteristics from pathology)
+- ❌ Nuanced interpretation required (e.g., "extent of resection" from op notes)
+- ❌ Complex reasoning needed (e.g., inferring IDH status from BRAF fusion)
+
+## Recommendation
+
+✅ **Proceed with Phase 3a_v2** using Athena demographics integration
+✅ **Establish this pattern** for all future Tier 2-4 structured data extraction
+✅ **Expected accuracy boost**: 81% → 95%+ (14-point improvement from demographics alone)
+✅ **Apply to Tier 2**: Query medications and radiation tables from Athena for chemotherapy/radiation variables

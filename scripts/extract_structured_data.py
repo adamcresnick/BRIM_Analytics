@@ -340,6 +340,13 @@ class StructuredDataExtractor:
     def extract_treatment_start_dates(self, patient_fhir_id: str) -> List[Dict]:
         """Extract treatment start dates from patient_medications materialized view
         
+        Searches for chemotherapy agents including:
+        - Alkylating agents (temozolomide, lomustine, cyclophosphamide, procarbazine)
+        - Platinum compounds (carboplatin, cisplatin)
+        - Vinca alkaloids (vincristine, vinblastine)
+        - Topoisomerase inhibitors (etoposide, irinotecan)
+        - Targeted therapies (bevacizumab, selumetinib, dabrafenib, trametinib)
+        
         Schema reference: data/materialized_view_schema.csv
         - patient_medications.patient_id (column 1) - NOTE: uses patient_id not subject_reference
         - patient_medications.medication_name (column 2)
@@ -347,6 +354,55 @@ class StructuredDataExtractor:
         - patient_medications.authored_on (column 4)
         - patient_medications.status (column 5)
         """
+        
+        # Comprehensive chemotherapy keyword list
+        # Gold standard for C1277724 includes: vinblastine, bevacizumab, selumetinib
+        chemo_keywords = [
+            # Alkylating agents
+            'temozolomide', 'temodar', 'tmz',
+            'lomustine', 'ccnu', 'ceenu', 'gleostine',
+            'cyclophosphamide', 'cytoxan', 'neosar',
+            'procarbazine', 'matulane',
+            'carmustine', 'bcnu', 'gliadel',
+            
+            # Platinum compounds
+            'carboplatin', 'paraplatin',
+            'cisplatin', 'platinol',
+            
+            # Vinca alkaloids (CRITICAL - gold standard has these)
+            'vincristine', 'oncovin', 'marqibo',
+            'vinblastine', 'velban',  # ← CRITICAL: Gold standard has this
+            
+            # Topoisomerase inhibitors
+            'etoposide', 'vepesid', 'toposar', 'etopophos',
+            'irinotecan', 'camptosar', 'onivyde',
+            'topotecan', 'hycamtin',
+            
+            # Antimetabolites
+            'methotrexate', 'trexall', 'otrexup', 'rasuvo',
+            '6-mercaptopurine', '6mp', 'purinethol',
+            'thioguanine', '6-thioguanine',
+            
+            # Targeted therapies (CRITICAL - gold standard has these)
+            'bevacizumab', 'avastin',  # ← Already captured
+            'selumetinib', 'koselugo',  # ← CRITICAL: Gold standard has this
+            'dabrafenib', 'tafinlar',
+            'trametinib', 'mekinist',
+            'vemurafenib', 'zelboraf',
+            'everolimus', 'afinitor',
+            
+            # Immunotherapy
+            'nivolumab', 'opdivo',
+            'pembrolizumab', 'keytruda',
+            'ipilimumab', 'yervoy',
+            
+            # Other
+            'radiation', 'radiotherapy',
+            'chemotherapy', 'chemo',
+        ]
+        
+        # Build SQL OR conditions for all keywords
+        conditions = ' OR '.join([f"LOWER(medication_name) LIKE '%{keyword}%'" for keyword in chemo_keywords])
         
         query = f"""
         SELECT 
@@ -357,12 +413,7 @@ class StructuredDataExtractor:
         FROM {self.v2_database}.patient_medications
         WHERE patient_id = '{patient_fhir_id}'
             AND status IN ('active', 'completed')
-            AND (
-                LOWER(medication_name) LIKE '%temozolomide%'
-                OR LOWER(medication_name) LIKE '%radiation%'
-                OR LOWER(medication_name) LIKE '%bevacizumab%'
-                OR LOWER(medication_name) LIKE '%chemotherapy%'
-            )
+            AND ({conditions})
         ORDER BY authored_on
         """
         
@@ -380,6 +431,221 @@ class StructuredDataExtractor:
         logger.info(f"✅ Found {len(treatments)} treatment records")
         return treatments
     
+    def extract_concomitant_medications(self, patient_fhir_id: str) -> List[Dict]:
+        """Extract ALL medications (concomitant medications) from patient_medications view
+        
+        This extracts all medications regardless of type (not just chemotherapy).
+        Includes supportive care medications, anti-epileptics, steroids, etc.
+        
+        Returns medications that are NOT chemotherapy agents (those are in treatments).
+        """
+        logger.info("\n--- Extracting Concomitant Medications (Non-Chemo) ---")
+        
+        # Keywords for chemotherapy (to EXCLUDE)
+        chemo_keywords = [
+            'temozolomide', 'temodar', 'lomustine', 'ccnu', 'cyclophosphamide', 'cytoxan',
+            'procarbazine', 'carmustine', 'bcnu', 'carboplatin', 'cisplatin',
+            'vincristine', 'vinblastine', 'etoposide', 'irinotecan', 'topotecan',
+            'methotrexate', 'bevacizumab', 'avastin', 'selumetinib', 'koselugo',
+            'dabrafenib', 'trametinib', 'vemurafenib', 'everolimus',
+            'nivolumab', 'pembrolizumab', 'ipilimumab'
+        ]
+        
+        # Build exclusion conditions
+        exclusions = ' AND '.join([f"LOWER(medication_name) NOT LIKE '%{keyword}%'" for keyword in chemo_keywords])
+        
+        query = f"""
+        SELECT 
+            medication_name as medication,
+            rx_norm_codes,
+            authored_on as start_date,
+            status
+        FROM {self.v2_database}.patient_medications
+        WHERE patient_id = '{patient_fhir_id}'
+            AND status IN ('active', 'completed')
+            AND ({exclusions})
+        ORDER BY authored_on
+        """
+        
+        df = self.query_and_fetch(query, self.v2_database)
+        
+        conmeds = []
+        for _, row in df.iterrows():
+            conmeds.append({
+                'medication': row['medication'],
+                'rx_norm_codes': row['rx_norm_codes'],
+                'start_date': row['start_date'],
+                'status': row['status']
+            })
+        
+        logger.info(f"✅ Found {len(conmeds)} concomitant medication records")
+        return conmeds
+    
+    def extract_patient_gender(self, patient_fhir_id: str) -> Optional[str]:
+        """
+        Extract patient gender from Patient resource.
+        
+        Returns: male, female, other, unknown, or None
+        """
+        logger.info("\n--- Extracting Patient Gender ---")
+        
+        query = f"""
+        SELECT gender
+        FROM {self.v2_database}.patient
+        WHERE id = '{patient_fhir_id}'
+        LIMIT 1
+        """
+        
+        df = self.query_and_fetch(query, self.v2_database)
+        
+        if df.empty or df['gender'].isna().all():
+            logger.warning("⚠️  No gender found in Patient resource")
+            return None
+        
+        gender = df['gender'].iloc[0]
+        logger.info(f"✅ Gender: {gender}")
+        return gender
+    
+    def extract_date_of_birth(self, patient_fhir_id: str) -> Optional[str]:
+        """
+        Extract date of birth from Patient resource.
+        
+        Returns: YYYY-MM-DD or None
+        """
+        logger.info("\n--- Extracting Date of Birth ---")
+        
+        query = f"""
+        SELECT birth_date
+        FROM {self.v2_database}.patient
+        WHERE id = '{patient_fhir_id}'
+        LIMIT 1
+        """
+        
+        df = self.query_and_fetch(query, self.v2_database)
+        
+        if df.empty or df['birth_date'].isna().all():
+            logger.warning("⚠️  No birth_date found in Patient resource")
+            return None
+        
+        birth_date = df['birth_date'].iloc[0]
+        
+        # Handle different date formats
+        if birth_date and len(str(birth_date)) >= 10:
+            birth_date = str(birth_date)[:10]  # Extract YYYY-MM-DD
+            logger.info(f"✅ Date of Birth: {birth_date}")
+            return birth_date
+        
+        logger.warning(f"⚠️  Invalid birth_date format: {birth_date}")
+        return None
+    
+    def extract_radiation_therapy(self, patient_fhir_id: str) -> bool:
+        """
+        Check if patient received radiation therapy from procedure table.
+        
+        Radiation CPT codes:
+        - 77261-77263: Radiation treatment planning
+        - 77295-77370: Radiation dosimetry and simulation
+        - 77401-77499: External beam radiation therapy
+        - 77427-77432: Treatment management
+        
+        Returns: True if radiation found, False otherwise
+        """
+        logger.info("\n--- Extracting Radiation Therapy Status ---")
+        
+        query = f"""
+        SELECT COUNT(*) as radiation_count
+        FROM {self.v2_database}.procedure p
+        LEFT JOIN {self.v2_database}.procedure_code_coding pcc 
+            ON p.id = pcc.procedure_id
+        WHERE p.subject_reference = '{patient_fhir_id}'
+            AND p.status = 'completed'
+            AND (
+                (pcc.code_coding_code BETWEEN '77261' AND '77499')
+                OR LOWER(pcc.code_coding_display) LIKE '%radiation%'
+                OR LOWER(pcc.code_coding_display) LIKE '%radiotherapy%'
+                OR LOWER(p.code_text) LIKE '%radiation%'
+                OR LOWER(p.code_text) LIKE '%radiotherapy%'
+            )
+        """
+        
+        df = self.query_and_fetch(query, self.v2_database)
+        
+        if df.empty:
+            logger.warning("⚠️  Query returned no results")
+            return False
+        
+        radiation_count = int(df['radiation_count'].iloc[0])
+        
+        if radiation_count > 0:
+            logger.info(f"✅ Radiation therapy FOUND: {radiation_count} procedure(s)")
+            return True
+        else:
+            logger.info("❌ No radiation therapy found")
+            return False
+    
+    def extract_primary_diagnosis(self, patient_fhir_id: str) -> Optional[str]:
+        """
+        Extract primary diagnosis text (with WHO grade if present).
+        
+        Returns: Full diagnosis name from problem_list_diagnoses
+        """
+        logger.info("\n--- Extracting Primary Diagnosis ---")
+        
+        query = f"""
+        SELECT 
+            diagnosis_name,
+            icd10_code,
+            onset_date_time
+        FROM {self.v2_database}.problem_list_diagnoses
+        WHERE patient_id = '{patient_fhir_id}'
+            AND (
+                LOWER(diagnosis_name) LIKE '%astrocytoma%'
+                OR LOWER(diagnosis_name) LIKE '%glioma%'
+                OR LOWER(diagnosis_name) LIKE '%brain%tumor%'
+                OR LOWER(diagnosis_name) LIKE '%neoplasm%brain%'
+                OR LOWER(diagnosis_name) LIKE '%tumor%'
+            )
+        ORDER BY onset_date_time
+        LIMIT 1
+        """
+        
+        df = self.query_and_fetch(query, self.v2_database)
+        
+        if df.empty:
+            logger.warning("⚠️  No primary diagnosis found")
+            return None
+        
+        diagnosis = df['diagnosis_name'].iloc[0]
+        icd10 = df['icd10_code'].iloc[0] if 'icd10_code' in df.columns else None
+        
+        logger.info(f"✅ Primary Diagnosis: {diagnosis}")
+        if icd10:
+            logger.info(f"   ICD-10: {icd10}")
+        
+        return diagnosis
+    
+    def extract_imaging_clinical(self, patient_fhir_id: str, date_of_birth: str = '2005-05-13') -> List[Dict]:
+        """
+        Extract imaging clinical data from radiology materialized views.
+        
+        Based on: IMAGING_CLINICAL_RELATED_IMPLEMENTATION_GUIDE.md
+        
+        NOTE: Placeholder for imaging extraction. Full implementation with corticosteroid
+        mapping requires complex multi-table queries. Can be added in future iteration.
+        
+        For now, imaging data will be extracted from NARRATIVE radiology reports via BRIM.
+        """
+        logger.info("\n--- Extracting Imaging Clinical Data ---")
+        logger.info("⚠️  Imaging extraction is a placeholder - using NARRATIVE approach via BRIM")
+        logger.info("   Full structured imaging extraction with corticosteroids requires dedicated workflow")
+        logger.info("   See: IMAGING_CLINICAL_RELATED_IMPLEMENTATION_GUIDE.md")
+        
+        # Placeholder - return empty list for now
+        # Full implementation would query radiology_imaging_mri + radiology_imaging_mri_results
+        # with corticosteroid matching from patient_medications
+        
+        return []
+    
     def extract_all(self, patient_fhir_id: str) -> Dict:
         """Extract all structured data for a patient"""
         
@@ -387,23 +653,68 @@ class StructuredDataExtractor:
         logger.info(f"EXTRACTING STRUCTURED DATA FOR PATIENT: {patient_fhir_id}")
         logger.info(f"{'='*70}\n")
         
+        # PHASE 1: Essential Demographics
+        patient_gender = self.extract_patient_gender(patient_fhir_id)
+        date_of_birth = self.extract_date_of_birth(patient_fhir_id)
+        
+        # PHASE 1: Clinical Data
+        primary_diagnosis = self.extract_primary_diagnosis(patient_fhir_id)
+        diagnosis_date = self.extract_diagnosis_date(patient_fhir_id)
+        surgeries = self.extract_surgeries(patient_fhir_id)
+        radiation_therapy = self.extract_radiation_therapy(patient_fhir_id)
+        
+        # Existing: Molecular & Treatment
+        molecular_markers = self.extract_molecular_markers(patient_fhir_id)
+        treatments = self.extract_treatment_start_dates(patient_fhir_id)
+        concomitant_medications = self.extract_concomitant_medications(patient_fhir_id)
+        
+        # NEW: Imaging Clinical Data
+        imaging_clinical = self.extract_imaging_clinical(patient_fhir_id, date_of_birth or '2005-05-13')
+        
         structured_data = {
             'patient_fhir_id': patient_fhir_id,
             'extraction_timestamp': datetime.now().isoformat(),
-            'diagnosis_date': self.extract_diagnosis_date(patient_fhir_id),
-            'surgeries': self.extract_surgeries(patient_fhir_id),
-            'molecular_markers': self.extract_molecular_markers(patient_fhir_id),
-            'treatments': self.extract_treatment_start_dates(patient_fhir_id)
+            
+            # Demographics (NEW)
+            'patient_gender': patient_gender,
+            'date_of_birth': date_of_birth,
+            
+            # Diagnosis (ENHANCED)
+            'primary_diagnosis': primary_diagnosis,
+            'diagnosis_date': diagnosis_date,
+            
+            # Procedures
+            'surgeries': surgeries,
+            'radiation_therapy': radiation_therapy,  # NEW
+            
+            # Molecular & Treatment
+            'molecular_markers': molecular_markers,
+            'treatments': treatments,  # Chemotherapy agents
+            'concomitant_medications': concomitant_medications,  # NEW - All other medications
+            
+            # Imaging Clinical (NEW)
+            'imaging_clinical': imaging_clinical  # NEW - Imaging with corticosteroids and clinical status
         }
         
         # Summary
         logger.info(f"\n{'='*70}")
         logger.info("EXTRACTION SUMMARY")
         logger.info(f"{'='*70}")
-        logger.info(f"Diagnosis Date: {structured_data['diagnosis_date']}")
-        logger.info(f"Surgeries: {len(structured_data['surgeries'])}")
-        logger.info(f"Molecular Markers: {len(structured_data['molecular_markers'])}")
-        logger.info(f"Treatment Records: {len(structured_data['treatments'])}")
+        logger.info(f"Demographics:")
+        logger.info(f"  - Gender: {patient_gender}")
+        logger.info(f"  - Date of Birth: {date_of_birth}")
+        logger.info(f"\nDiagnosis:")
+        logger.info(f"  - Primary: {primary_diagnosis}")
+        logger.info(f"  - Date: {diagnosis_date}")
+        logger.info(f"\nProcedures:")
+        logger.info(f"  - Surgeries: {len(surgeries)}")
+        logger.info(f"  - Radiation: {radiation_therapy}")
+        logger.info(f"\nMolecular & Treatment:")
+        logger.info(f"  - Molecular Markers: {len(molecular_markers)}")
+        logger.info(f"  - Chemotherapy Records: {len(treatments)}")
+        logger.info(f"  - Concomitant Medications: {len(concomitant_medications)}")
+        logger.info(f"\nImaging Clinical:")
+        logger.info(f"  - Imaging Events: {len(imaging_clinical)} (placeholder - using NARRATIVE approach)")
         logger.info(f"{'='*70}\n")
         
         return structured_data

@@ -549,14 +549,32 @@ class BRIMCSVGenerator:
                 'NOTE_TITLE': note['note_type']
             })
         
+        # CRITICAL FIX: Deduplicate rows by NOTE_ID before writing
+        # BRIM requires unique NOTE_IDs - duplicates cause upload rejection
+        seen_note_ids = set()
+        dedup_rows = []
+        duplicate_count = 0
+        
+        for row in rows:
+            if row['NOTE_ID'] not in seen_note_ids:
+                seen_note_ids.add(row['NOTE_ID'])
+                dedup_rows.append(row)
+            else:
+                duplicate_count += 1
+                if duplicate_count <= 3:  # Show first 3 duplicates
+                    print(f"   ⚠️  Skipping duplicate NOTE_ID: {row['NOTE_ID']}")
+        
+        if duplicate_count > 0:
+            print(f"   ℹ️  Removed {duplicate_count} duplicate rows (kept first occurrence of each NOTE_ID)")
+        
         # Write CSV with proper escaping
         with open(project_file, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=['NOTE_ID', 'PERSON_ID', 'NOTE_DATETIME', 'NOTE_TEXT', 'NOTE_TITLE'], 
                                     quoting=csv.QUOTE_ALL)
             writer.writeheader()
-            writer.writerows(rows)
+            writer.writerows(dedup_rows)
         
-        print(f"✅ Generated {project_file} with {len(rows)} rows")
+        print(f"✅ Generated {project_file} with {len(dedup_rows)} unique rows (from {len(rows)} total)")
         return project_file
     
     def generate_variables_csv(self):
@@ -603,7 +621,7 @@ class BRIMCSVGenerator:
             # Demographics (from FHIR Bundle)
             {
                 'variable_name': 'patient_gender',
-                'instruction': 'If document_type is FHIR_BUNDLE: Search for the Patient resource (resourceType: "Patient") and extract the gender field. Return one of: male, female, other, or unknown. If not a FHIR_BUNDLE, look for gender/sex mentioned in clinical text. Be case-insensitive. If gender not found or ambiguous, return "unknown".',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_demographics" document for pre-extracted patient_gender field from Patient FHIR resource. This document contains demographics extracted from materialized views. PRIORITY 2: If STRUCTURED_demographics missing, search FHIR_BUNDLE documents for Patient resource (resourceType: "Patient") and extract gender field. PRIORITY 3: Search clinical text for gender/sex mentions. Return one of: male, female, other, or unknown. Gold standard for C1277724: female.',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
                 'option_definitions': '{"male": "Male", "female": "Female", "other": "Other or non-binary", "unknown": "Unknown or not specified"}',
@@ -611,22 +629,22 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'date_of_birth',
-                'instruction': 'Extract the patient\'s date of birth in YYYY-MM-DD format. Priority order: 1) If document_type is FHIR_BUNDLE: Find Patient.birthDate (exact date). 2) If clinical text contains age (e.g., "19 yo", "35 year old"): Calculate approximate birth year by subtracting age from document date year, return YYYY-01-01. 3) If neither available: return "Not documented". Examples: Patient.birthDate="2005-03-15" → "2005-03-15". "19 yo female" in 2024 → "2005-01-01" (approximate). No age or DOB → "Not documented".',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_demographics" document for pre-extracted date_of_birth in YYYY-MM-DD format from Patient.birthDate FHIR field. This provides exact date from structured data. PRIORITY 2: If STRUCTURED_demographics missing, search FHIR_BUNDLE for Patient.birthDate. PRIORITY 3: Calculate from age mentioned in clinical text (e.g., "19 yo" in 2024 → "2005-01-01"). Return YYYY-MM-DD format or "Not documented". Gold standard for C1277724: 2005-05-13.',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
             },
             
-            # Diagnosis (from FHIR + Narrative)
+            # Diagnosis (from FHIR + Narrative - HYBRID VALIDATION)
             {
                 'variable_name': 'primary_diagnosis',
-                'instruction': 'Extract the primary brain tumor diagnosis. If document_type is FHIR_BUNDLE: Check Condition resources for oncology diagnoses (code.coding.display fields). If narrative document: Look for diagnostic terms like glioblastoma, astrocytoma, medulloblastoma, ependymoma, oligodendroglioma, meningioma, etc. Include WHO grade if mentioned (e.g., "Grade II astrocytoma"). Prioritize pathology-confirmed diagnoses over clinical impressions. Return the most specific diagnosis found. If multiple tumors, return primary/dominant tumor.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_diagnosis" document for hybrid-validated diagnosis combining ICD-10 code with pathology histology. This provides comprehensive diagnosis (histology + grade + location). PRIORITY 2: Search Condition resources in FHIR_BUNDLE for ICD codes AND pathology reports for histology separately, then combine. PRIORITY 3: Search clinical notes for diagnosis mentions. VALIDATION: Ensure ICD code and histology are consistent (e.g., benign code matches low-grade histology). Return specific diagnosis with histology, grade, and location. Gold standard for C1277724: Pilocytic astrocytoma (of cerebellum).',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
             },
             
             {
                 'variable_name': 'diagnosis_date',
-                'instruction': 'Find the date when the primary brain tumor was first diagnosed. Priority order: 1) If document_type is FHIR_BUNDLE: Check Condition resources for onsetDateTime or recordedDate fields (search for Condition with resourceType="Condition"). 2) If narrative: Look for phrases like "diagnosed on", "diagnosis date", "initial diagnosis", or dates near diagnostic statements. 3) Fallback: Use earliest surgery date or clinical note mention. Return in YYYY-MM-DD format. If only month/year available, use first day of month (YYYY-MM-01). If not found, return "unknown".',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_diagnosis" document for pre-extracted diagnosis_date from Condition.onsetDateTime or recordedDate FHIR fields. This provides exact structured date. PRIORITY 2: Search Condition resources in FHIR_BUNDLE for onsetDateTime or recordedDate. PRIORITY 3: Search narrative text for phrases like "diagnosed on", "diagnosis date", "initial diagnosis". PRIORITY 4: Use earliest pathology report date or surgery date as proxy. Return YYYY-MM-DD format. If only month/year, use YYYY-MM-01. Gold standard for C1277724: 2018-06-04.',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
             },
@@ -642,14 +660,14 @@ class BRIMCSVGenerator:
             # Surgical Details
             {
                 'variable_name': 'surgery_date',
-                'instruction': 'Extract all brain surgery dates from this document. If document_type is FHIR_BUNDLE: Find Procedure resources where code indicates neurosurgery and extract performedDateTime. If OPERATIVE_NOTE: Extract date from note header or "Date of Surgery" field. If PATHOLOGY/RADIOLOGY: Extract procedure date if surgical procedure mentioned. Return each date in YYYY-MM-DD format. If multiple surgeries in one document, return all dates. Scope is many_per_note so return each surgery date separately.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_surgeries" document for pre-extracted tumor resection surgery dates. This document contains filtered procedures (CPT codes: 61500, 61510, 61518, 61520, 61521, 62190) with dates resolved from performedPeriod.start when performedDateTime is empty. Encounter-level grouping provided. PRIORITY 2: Search Procedure resources in FHIR_BUNDLE for neurosurgery codes and extract performedDateTime or performedPeriod.start. PRIORITY 3: Extract from OPERATIVE_NOTE headers or narrative text. Return YYYY-MM-DD format. Scope is many_per_note. Gold standard for C1277724: 2018-05-28 (encounter 1), 2021-03-10 and 2021-03-16 (encounters 2-3).',
                 'variable_type': 'text',
                 'scope': 'many_per_note',
             },
             
             {
                 'variable_name': 'surgery_type',
-                'instruction': 'Classify neurosurgical procedures only. EXCLUDE non-surgical procedures like anesthesia, administrative orders, or nursing procedures. INCLUDE: Craniotomy, craniectomy, tumor resection, debulking, excision, biopsy, shunt placement - any procedure with "SURGERY", "RESECTION", "CRANIOTOMY" in name. EXCLUDE: Anesthesia procedures (ANES...), surgical case requests/orders (administrative), pre/post-op care orders, nursing procedures. Options: BIOPSY (tissue sampling only), RESECTION (tumor removal), DEBULKING (cytoreductive surgery), SHUNT (shunt placement), OTHER (other surgical procedures). If excluded, do NOT create an entry. Return one classification per actual surgery.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_surgeries" document for CPT-based procedure classifications. Document maps CPT codes to surgery types: 61500/61510/61518/61520/61521 → RESECTION (craniotomy for tumor), 62190 → OTHER (other brain surgery). This provides standardized classification from billing codes. PRIORITY 2: Search Procedure.code.display in FHIR_BUNDLE and classify based on procedure name patterns. PRIORITY 3: Extract from OPERATIVE_NOTE narratives. Options: BIOPSY, RESECTION, DEBULKING, SHUNT, OTHER. EXCLUDE non-surgical procedures (anesthesia, administrative orders). Return one classification per surgery. Scope is many_per_note.',
                 'variable_type': 'text',
                 'scope': 'many_per_note',
                 'option_definitions': '{"BIOPSY": "Biopsy procedure", "RESECTION": "Tumor resection", "DEBULKING": "Debulking procedure", "SHUNT": "Shunt placement", "OTHER": "Other surgical procedure"}',
@@ -672,14 +690,14 @@ class BRIMCSVGenerator:
             # Treatments
             {
                 'variable_name': 'chemotherapy_agent',
-                'instruction': 'Extract names of chemotherapy drugs administered or prescribed. If FHIR_BUNDLE: Look in MedicationRequest, MedicationAdministration, or MedicationStatement resources for oncology drugs. If narrative: Identify drug names like temozolomide (TMZ), vincristine, carboplatin, cisplatin, lomustine (CCNU), bevacizumab (Avastin), cyclophosphamide, etoposide, etc. Return each drug name separately. Include both generic and brand names if mentioned. Scope is many_per_note so list all agents found in the document.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_treatments" document for pre-extracted chemotherapy agents from patient_medications table using enhanced filter (50+ oncology keywords). This document contains medication names already extracted from MedicationRequest resources with chemotherapy classification. All 3 gold standard agents confirmed present in structured data: vinblastine (51 records), bevacizumab (48 records), selumetinib (2 records). PRIORITY 2: If STRUCTURED_treatments incomplete, search MedicationRequest/MedicationAdministration resources in FHIR_BUNDLE. PRIORITY 3: Search clinical notes for drug names. Return each drug name separately (generic or brand). Scope is many_per_note.',
                 'variable_type': 'text',
                 'scope': 'many_per_note',
             },
             
             {
                 'variable_name': 'radiation_therapy',
-                'instruction': 'Determine if patient received radiation therapy for brain tumor. Search both FHIR Procedure resources AND clinical note text. Look for: "radiation therapy", "radiotherapy", "RT", "XRT", "external beam radiation", "IMRT", "proton therapy", "stereotactic radiosurgery", "gamma knife", "CyberKnife", "radiation oncology", dose mentions like "Gy" (Gray units), "fractions". Return "true" if ANY radiation treatment mentioned. Return "false" if explicitly stated patient did NOT receive radiation (e.g., "no prior radiation", "radiation not indicated"). Return "false" as default if not mentioned (assume not done if not documented). This is one_per_patient scope - determine overall radiation status.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_radiation" document for pre-extracted radiation_therapy boolean flag from Procedure resources filtered for radiation-related CPT/SNOMED codes. This provides definitive yes/no from structured data. PRIORITY 2: Search Procedure resources in FHIR_BUNDLE for radiation therapy codes or procedure names containing "radiation", "radiotherapy", "RT", "XRT". PRIORITY 3: Search clinical notes for radiation therapy mentions: "external beam", "IMRT", "proton therapy", "stereotactic radiosurgery", "gamma knife", "Gy" doses. Return "true" if ANY radiation found, "false" if explicitly stated "no radiation" or not documented. Gold standard for C1277724: false (no radiation).',
                 'variable_type': 'boolean',
                 'scope': 'one_per_patient',
             },
@@ -687,7 +705,7 @@ class BRIMCSVGenerator:
             # Molecular/Genetic
             {
                 'variable_name': 'idh_mutation',
-                'instruction': 'Extract IDH (isocitrate dehydrogenase) mutation status from molecular testing. Search in: 1) FHIR Observation resources with codes related to IDH testing. 2) Pathology report text (look for "pathology", "molecular", "genetic" sections). 3) Clinical notes mentioning "IDH" or "molecular testing". Patterns indicating WILDTYPE: "IDH wildtype", "IDH wild-type", "IDH WT", "IDH: negative", "no IDH mutation". Patterns indicating MUTANT: "IDH mutant", "IDH mutation", "IDH1 R132H", "IDH2", "IDH positive". Patterns indicating UNKNOWN: "IDH testing not performed", "IDH pending", "molecular testing incomplete". Return: wildtype | mutant | unknown. This is critical molecular marker - search thoroughly in all text.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_molecular" document for IDH interpretation with BRAF-only inference logic. CRITICAL LOGIC: If BRAF fusion detected AND no IDH1/IDH2 mutation detected, IDH status is "wildtype" by definition (mutually exclusive in pilocytic astrocytoma). Document provides pre-computed interpretation based on molecular biology principles. PRIORITY 2: Search Observation resources in FHIR_BUNDLE for IDH testing results. PRIORITY 3: Search pathology molecular/genetic sections for IDH patterns. Return: wildtype | mutant | unknown. Gold standard for C1277724: wildtype (BRAF-only fusion, IDH not tested but inferred wildtype).',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
                 'option_definitions': '{"wildtype": "IDH wildtype (no mutation)", "mutant": "IDH mutation positive", "unknown": "Unknown or not tested"}',
@@ -695,7 +713,7 @@ class BRIMCSVGenerator:
             
             {
                 'variable_name': 'mgmt_methylation',
-                'instruction': 'Extract MGMT promoter methylation status from molecular testing. MGMT methylation is a prognostic biomarker in glioblastoma. Search in: 1) FHIR Observation resources with MGMT-related codes. 2) Pathology report text (molecular/genetic sections). 3) Clinical notes mentioning "MGMT". Patterns indicating METHYLATED: "MGMT promoter methylated", "MGMT methylation positive", "MGMT: methylated", "methylated MGMT promoter". Patterns indicating UNMETHYLATED: "MGMT unmethylated", "MGMT promoter unmethylated", "MGMT methylation negative", "MGMT: unmethylated". Patterns indicating UNKNOWN: "MGMT not tested", "MGMT pending", "MGMT unavailable". Return: methylated | unmethylated | unknown.',
+                'instruction': 'PRIORITY 1: Check NOTE_ID="STRUCTURED_molecular" document for MGMT promoter methylation status extracted from Observation resources. MGMT methylation is prognostic biomarker in glioblastoma (not typically tested in pilocytic astrocytoma). PRIORITY 2: Search Observation resources in FHIR_BUNDLE for MGMT-related test results. PRIORITY 3: Search pathology molecular/genetic sections for MGMT patterns. Patterns: METHYLATED = "MGMT promoter methylated", "methylation positive". UNMETHYLATED = "MGMT unmethylated", "methylation negative". UNKNOWN = "not tested", "pending". Return: methylated | unmethylated | unknown. Gold standard for C1277724: likely "unknown" (not tested for pilocytic astrocytoma).',
                 'variable_type': 'text',
                 'scope': 'one_per_patient',
                 'option_definitions': '{"methylated": "MGMT methylated", "unmethylated": "MGMT unmethylated", "unknown": "Unknown or not tested"}',

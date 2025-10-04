@@ -39,6 +39,15 @@ Second Surgery:  2021-03-10  →  Age: 15.82 years = 15 years ✅
 
 ## Integration Strategy for Phase 3a_v2
 
+### Variables That Should Use Athena patient_access Table
+
+**All 5 Demographics Variables**:
+1. ✅ `patient_gender` → `patient_access.gender` (capitalize to match data dictionary)
+2. ✅ `date_of_birth` → `patient_access.birth_date`
+3. ✅ `race` → `patient_access.race`
+4. ✅ `ethnicity` → `patient_access.ethnicity`
+5. ✅ `age_at_diagnosis` → **CALCULATED** from `patient_access.birth_date` + `diagnosis_date`
+
 ### Approach: Pre-populate Demographics CSV
 
 **File**: `pilot_output/brim_csvs_iteration_3c_phase3a_v2/patient_demographics.csv`
@@ -47,6 +56,15 @@ Second Surgery:  2021-03-10  →  Age: 15.82 years = 15 years ✅
 patient_fhir_id,gender,birth_date,race,ethnicity
 e4BwD8ZYDBccepXcJ.Ilo3w3,Female,2005-05-13,White,Not Hispanic or Latino
 ```
+
+**Mapping from Athena to BRIM**:
+| Athena Column | Athena Value | BRIM Variable | BRIM Value | Transformation |
+|---------------|--------------|---------------|------------|----------------|
+| `gender` | female | `patient_gender` | Female | Capitalize first letter |
+| `birth_date` | 2005-05-13 | `date_of_birth` | 2005-05-13 | Direct copy |
+| `race` | White | `race` | White | Direct copy |
+| `ethnicity` | Not Hispanic or Latino | `ethnicity` | Not Hispanic or Latino | Direct copy |
+| (calculated) | - | `age_at_diagnosis` | 13 | Calculate from birth_date + diagnosis_date |
 
 **Note**: 
 - Gender capitalized to "Female" (Athena has "female", data dictionary expects "Female")
@@ -130,18 +148,44 @@ If date_of_birth or diagnosis_date unavailable, return 'Unable to calculate'."
 
 ## Expected Phase 3a_v2 Results
 
-With `patient_demographics.csv` provided:
+### Demographics Variables (5 total) - ALL from Athena
 
-| Variable | Phase 3a | Phase 3a_v2 Expected | Change |
-|----------|----------|---------------------|--------|
-| date_of_birth | Unavailable | 2005-05-13 | ✅ FIXED |
-| patient_gender | Female | Female | ✅ Maintained |
-| race | Unavailable | White | ✅ FIXED |
-| ethnicity | Unavailable | Not Hispanic or Latino | ✅ FIXED |
-| age_at_diagnosis | 15 years | 13 | ✅ FIXED |
+With `patient_demographics.csv` provided from Athena `patient_access` table:
+
+| Variable | Phase 3a Result | Athena Source | Phase 3a_v2 Expected | Status |
+|----------|----------------|---------------|---------------------|--------|
+| patient_gender | Female | patient_access.gender="female" | Female | ✅ Maintained (was correct) |
+| date_of_birth | Unavailable | patient_access.birth_date="2005-05-13" | 2005-05-13 | ✅ FIXED |
+| race | Unavailable | patient_access.race="White" | White | ✅ FIXED |
+| ethnicity | Unavailable | patient_access.ethnicity="Not Hispanic or Latino" | Not Hispanic or Latino | ✅ FIXED |
+| age_at_diagnosis | 15 years | CALCULATED from birth_date + diagnosis_date | 13 | ✅ FIXED |
+
+**Demographics Accuracy**: 
+- Phase 3a: 20% (1/5) - Only gender was correct
+- Phase 3a_v2: 100% (5/5) - All will use Athena data
+
+### Other Variables (11 total)
+
+| Variable | Phase 3a Result | Phase 3a_v2 Expected | Status |
+|----------|----------------|---------------------|--------|
+| primary_diagnosis | Pilocytic astrocytoma | Pilocytic astrocytoma | ✅ Maintained |
 | diagnosis_date | 2018-05-28 | 2018-06-04 | ⚠️ Needs clarification |
+| who_grade | Grade I | Grade I | ✅ Maintained |
+| tumor_location | Cerebellum/Posterior Fossa | Cerebellum/Posterior Fossa | ✅ Maintained |
+| idh_mutation | IDH wild-type | IDH wild-type | ✅ Maintained |
+| mgmt_methylation | Not tested | Not tested | ✅ Maintained |
+| braf_status | BRAF fusion | BRAF fusion | ✅ Maintained |
+| surgery_date | 2018-05-28, 2021-03-10 | 2018-05-28, 2021-03-10 | ✅ Maintained |
+| surgery_type | Tumor Resection | Tumor Resection | ✅ Maintained |
+| surgery_extent | Partial Resection | Partial Resection | ✅ Maintained |
+| surgery_location | Cerebellum/Posterior Fossa | Cerebellum/Posterior Fossa | ✅ Maintained |
 
-**Expected Accuracy**: 95-100% (15-16/16 correct)
+**Overall Phase 3a_v2 Expected Accuracy**: 
+- With demographics fixed: **94-100% (15-16/16 correct)**
+- Demographics: 100% (5/5) ← **All from Athena**
+- Diagnosis: 75-100% (3-4/4) ← diagnosis_date pending
+- Molecular: 100% (3/3) ← Already perfect
+- Surgery: 100% (4/4) ← Already perfect
 
 ## Next Steps
 
@@ -156,10 +200,50 @@ With `patient_demographics.csv` provided:
 5. ⏳ Run Phase 3a_v2 extraction (Pilot 7)
 6. ⏳ Validate results (expect 95%+ accuracy)
 
+## Key Insights: Why Athena Integration is Critical
+
+### Phase 3a Demographics Performance Without Athena
+
+| Variable | Result | Why It Failed |
+|----------|--------|---------------|
+| patient_gender | ✅ Female | FHIR Patient resource was accessible |
+| date_of_birth | ❌ Unavailable | FHIR birthDate field empty or inaccessible |
+| race | ❌ Unavailable | Not in FHIR Patient, only in Athena |
+| ethnicity | ❌ Unavailable | Not in FHIR Patient, only in Athena |
+| age_at_diagnosis | ❌ 15 years | Extracted from text (wrong surgery date) |
+
+**Demographics Accuracy Without Athena**: 20% (1/5)
+
+### Phase 3a_v2 Demographics Performance With Athena
+
+| Variable | Expected Result | Why It Will Succeed |
+|----------|----------------|---------------------|
+| patient_gender | ✅ Female | Direct from patient_access.gender |
+| date_of_birth | ✅ 2005-05-13 | Direct from patient_access.birth_date |
+| race | ✅ White | Direct from patient_access.race |
+| ethnicity | ✅ Not Hispanic or Latino | Direct from patient_access.ethnicity |
+| age_at_diagnosis | ✅ 13 | Calculated from Athena birth_date |
+
+**Demographics Accuracy With Athena**: 100% (5/5)
+
+### The Athena Advantage
+
+**Structured Data > Text Extraction**:
+- Athena: Normalized, validated, single source of truth
+- Text: Variable formats, temporal ambiguity, extraction errors
+
+**Examples from Phase 3a**:
+- `date_of_birth`: FHIR had no data → Athena has "2005-05-13"
+- `race`: Not in FHIR → Athena has "White"
+- `ethnicity`: Not in FHIR → Athena has "Not Hispanic or Latino"
+- `age_at_diagnosis`: Text said "15 years" (wrong surgery) → Athena calculation gives "13 years"
+
 ## Key Lessons
 
 1. **Always query Athena first** for structured data before assuming text extraction needed
 2. **Pre-populate CSVs** with Athena data for best performance and accuracy
-3. **Block text extraction** explicitly for calculated fields (age_at_diagnosis)
-4. **Validate gold standards** against authoritative sources (Athena) before assuming failures
-5. **Understand temporal context** - narrative text may refer to different time points (surgery vs diagnosis)
+3. **ALL demographics should use Athena** - race, ethnicity, DOB, gender (not just DOB)
+4. **Block text extraction** explicitly for calculated fields (age_at_diagnosis)
+5. **Validate gold standards** against authoritative sources (Athena) before assuming failures
+6. **Understand temporal context** - narrative text may refer to different time points (surgery vs diagnosis)
+7. **80% accuracy boost** possible for demographics just by adding Athena integration (20% → 100%)
