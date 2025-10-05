@@ -1,0 +1,24 @@
+# Ophthalmology Documents (found via context fields)
+# Total: 18 accessible documents
+# Source: context_facility_type_text / context_practice_setting_text
+# Generated: 2025-10-04 20:28:45
+
+document_reference_id	date	type	content_type
+eJgNfk.VYZWmQ0c27HD7w-vKTTeiszFpYMtRgu.4S12U3	2025-01-03	Progress Notes; Progress note	text/html; text/rtf
+efKKqV65SkMvb8fw7bft0jqzGvqVaK7T-UjgyqFoV81M3	2024-07-16	Progress Notes; Progress note	text/html; text/rtf
+e4.pFUJeTv5sqG6VnL4CNsChUwKyETfIkumSMVXbBOQg3	2023-07-06	Progress Notes; Progress note	text/html; text/rtf
+eGT1jD-PK3VBj-aKw9laN9Yw4Dbh8.jC3pNpoIvvewAo3	2022-06-16	Progress Notes; Progress note	text/html; text/rtf
+eu1XiFISnq7JhL0OwyJb3vhzzsiXJquyE-DqMlv72-Ec3	2021-12-13	Progress Notes; Progress note	text/html; text/rtf
+esFM-1LBt9GGCCDB2p-0YFilx9XzAiqO3bqJ67t5c3SY3	2021-05-21	Progress Notes; Progress note	text/html; text/rtf
+eD0e152HDUgECX1FSm0fGEGq4gxKRpCdKKpJSHFDEXmo3	2021-05-04	Progress Notes; Progress note	text/html; text/rtf
+frs2.DEgDEthplUmYD0ASHIbbo8pFw4LkaSmzt21tCN84	2021-03-12	Consult Note; Consult note	text/html; text/rtf
+fru58SYqcr2SKy3EqAmxAiIqLshUNoIQNYapDEy.i6OM4	2021-03-12	Consult Note; Consult note	text/html; text/rtf
+elJ7CX21xRIW49Xj.QjBWo1Y3sWH.-eIC4w4m5n6oTbg3	2021-03-12	Consult Note; Consult note	text/html; text/rtf
+e2jY19l-w79RP6txUdC0GMaiAmX1oB7aHFHGVbZGtjvs3	2021-01-27	Progress Notes; Progress note	text/html; text/rtf
+eSBsIeaCCMdgwK7V39iHgbrOb-2xsJ5inYxguX75XnIc3	2019-12-02	Progress Notes; Progress note	text/html; text/rtf
+eZ1M3ms6k2yCVEnoPu0gT6nOom2g1uaV993Lid8bzOUk3	2019-05-23	Progress Notes; Progress note	text/html; text/rtf
+elKzQNlcnBGODmCcWLqD6RNP1mDOndwWDlIdKmdEMe1U3	2018-12-15	Progress Notes; Progress note	text/html; text/rtf
+eFWBmc8ApCsuQsqvG2h18bxHLnDZr8RKyzAD8yAd5zUU3	2018-09-11	Progress Notes; Progress note	text/html; text/rtf
+fX60Lh7r47mXA5mtp4AwNwg65Spl8ZDvDdraU5ehDYCg4	2018-06-07	Consult Note; Consult note	text/html; text/rtf
+epZInOig9boC1Ahi87qOTinGDP.tmurYkISZvbwRa5uc3	2018-06-07	Consult Note; Consult note	text/html; text/rtf
+fGiC7wQohnmHHQ4.oRV-.veCt0g2dSnF-pPGp.8BT3hU4	2018-06-07	Consult Note; Consult note	text/html; text/rtf

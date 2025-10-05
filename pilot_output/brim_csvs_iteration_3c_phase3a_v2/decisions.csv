@@ -1,1 +1,114 @@
 decision_name,decision_type,input_variables,output_variable,prompt,aggregation_prompt
+diagnosis_surgery1,filter,surgery_number;surgery_date;document_type;primary_diagnosis,diagnosis_surgery1,"Extract diagnosis associated with FIRST surgery event.
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
+- Prioritize document_type='OPERATIVE' or 'PATHOLOGY' near this surgery date
+- Look for pathology-confirmed diagnosis
+
+RETURN: Primary CNS tumor diagnosis name for first surgery
+
+Gold Standard for C1277724 Surgery 1 (2018-05-28): Pilocytic astrocytoma",
+extent_surgery1,filter,surgery_number;surgery_date;surgery_extent;document_type,extent_surgery1,"Extract extent of resection for FIRST surgery.
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
+- Prioritize document_type='OPERATIVE' for surgeon's assessment
+- Post-operative imaging (document_type='IMAGING') may confirm extent
+
+RETURN: One of: Gross Total Resection, Near Total Resection, Subtotal Resection, Partial Resection, Biopsy Only, Unknown
+
+Gold Standard for C1277724 Surgery 1 (2018-05-28): Partial Resection",
+location_surgery1,filter,surgery_number;surgery_date;surgery_location;document_type,location_surgery1,"Extract tumor location for FIRST surgery.
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
+- Prioritize document_type='OPERATIVE' or 'IMAGING' near this surgery date
+
+RETURN: One of 24 anatomical locations (e.g., Cerebellum/Posterior Fossa)
+
+Gold Standard for C1277724 Surgery 1 (2018-05-28): Cerebellum/Posterior Fossa",
+diagnosis_surgery2,filter,surgery_number;surgery_date;document_type;primary_diagnosis,diagnosis_surgery2,"Extract diagnosis associated with SECOND surgery event (if surgery_number >= 2).
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
+- Return empty string if surgery_number < 2
+- Prioritize document_type='OPERATIVE' or 'PATHOLOGY' near this surgery date
+
+RETURN: Diagnosis name for second surgery (may be same as first or recurrence diagnosis)
+
+Gold Standard for C1277724 Surgery 2 (2021-03-10): Pilocytic astrocytoma, recurrent",
+extent_surgery2,filter,surgery_number;surgery_date;surgery_extent;document_type,extent_surgery2,"Extract extent of resection for SECOND surgery (if surgery_number >= 2).
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
+- Return empty string if surgery_number < 2
+- Prioritize document_type='OPERATIVE'
+
+RETURN: Extent category for second surgery
+
+Gold Standard for C1277724 Surgery 2 (2021-03-10): Partial Resection",
+location_surgery2,filter,surgery_number;surgery_date;surgery_location;document_type,location_surgery2,"Extract tumor location for SECOND surgery (if surgery_number >= 2).
+
+CRITICAL FILTERING:
+- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
+- Return empty string if surgery_number < 2
+
+RETURN: Anatomical location for second surgery
+
+Gold Standard for C1277724 Surgery 2 (2021-03-10): Cerebellum/Posterior Fossa",
+total_surgeries,aggregation,surgery_date,total_surgeries,,"Count total tumor resection surgeries by counting DISTINCT surgery_date values.
+
+AGGREGATION LOGIC:
+- Count unique surgery_date values extracted from all documents
+- This should match surgery_number variable
+- Used for validation and cross-checking
+
+Gold Standard for C1277724: 2 surgeries"
+all_chemotherapy_agents,aggregation,chemotherapy_agents,all_chemotherapy_agents,,"Aggregate all chemotherapy agents into semicolon-separated list.
+
+AGGREGATION LOGIC:
+- Collect all chemotherapy_agents extractions across all documents
+- Remove duplicates
+- Return semicolon-separated list
+
+Gold Standard for C1277724: vinblastine;bevacizumab;selumetinib"
+all_symptoms,aggregation,symptoms_present,all_symptoms,,"Aggregate all documented symptoms into semicolon-separated list.
+
+AGGREGATION LOGIC:
+- Collect all symptoms_present extractions across all documents
+- Remove duplicates
+- Return semicolon-separated list
+
+Gold Standard for C1277724: Emesis;Headaches;Hydrocephalus;Visual deficit;Posterior fossa syndrome"
+earliest_symptom_date,aggregation,symptoms_present;document_type,earliest_symptom_date,,"Identify earliest date when symptoms were documented.
+
+AGGREGATION LOGIC:
+- Find earliest document with symptoms_present != 'None documented'
+- Prioritize document_type='H&P' or 'CONSULTATION' for initial presentation
+- Return document date (from NOTE_TITLE or FHIR timestamp)
+
+Gold Standard for C1277724: Around initial diagnosis date (2018-06-04)"
+molecular_tests_summary,aggregation,molecular_testing_performed;braf_status;idh_mutation;mgmt_methylation,molecular_tests_summary,,"Create comprehensive molecular profile summary.
+
+AGGREGATION LOGIC:
+- Combine all molecular test results into single text summary
+- Format: 'BRAF: [status]; IDH: [status]; MGMT: [status]; Tests: [list]'
+
+Example Gold Standard for C1277724: 'BRAF: KIAA1549-BRAF fusion; IDH: wild-type; MGMT: Not tested; Tests: WGS, Fusion Panel'"
+imaging_progression_timeline,aggregation,imaging_findings;document_type,imaging_progression_timeline,,"Create timeline of imaging findings showing disease course.
+
+AGGREGATION LOGIC:
+- Extract all imaging_findings with document dates
+- Prioritize document_type='IMAGING'
+- Sort chronologically
+- Return semicolon-separated list with dates
+
+Gold Standard for C1277724: Multiple imaging studies documenting progression at ages 5095, 5780 days"
+treatment_response_summary,aggregation,treatment_response;chemotherapy_agents,treatment_response_summary,,"Summarize treatment response for each treatment line.
+
+AGGREGATION LOGIC:
+- Match chemotherapy_agents with corresponding treatment_response assessments
+- Create summary: '[agent]: [response]' for each treatment line
+
+Gold Standard for C1277724: vinblastine: [response]; bevacizumab: [response]; selumetinib: [response]"
