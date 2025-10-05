@@ -734,9 +734,12 @@ class BRIMCSVGenerator:
                 'default_value_for_empty_response'
             ]
             
-            # Ensure prompt_template is empty string (per production examples)
+            # CRITICAL FIX: Populate prompt_template from instruction field
+            # BRIM requires prompt_template to be populated for decisions to work
+            # If empty, decisions will be skipped with "incomplete info" error
             for var in variables:
-                var['prompt_template'] = ''
+                if not var.get('prompt_template'):
+                    var['prompt_template'] = var['instruction']
             
             writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
