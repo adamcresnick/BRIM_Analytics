@@ -14,7 +14,22 @@ COUNTING LOGIC:
 
 Gold Standard for C1277724: 2 surgeries (2018-05-28, 2021-03-10)
 
-IMPORTANT: This variable is used by all dependent decisions to filter surgery-specific extractions. Accurate count is critical.",,,,integer,one_per_patient,,,,0
+IMPORTANT: This variable is used by all dependent decisions to filter surgery-specific extractions. Accurate count is critical.","CRITICAL FIRST VARIABLE: Count total documented surgeries for this patient. 
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Contains ground truth from Procedure table with ALL surgeries listed
+2. FHIR_BUNDLE Procedure resources with CPT codes 61500-61576 (tumor resection procedures)
+3. Operative notes with procedure dates
+
+COUNTING LOGIC:
+- Count DISTINCT surgery dates (NOT individual procedures on same date)
+- Include ONLY tumor resection surgeries (CPT 61500-61576)
+- EXCLUDE shunt procedures (CPT 62201, 62223)
+- EXCLUDE biopsies alone (CPT 61304-61315) unless part of resection
+
+Gold Standard for C1277724: 2 surgeries (2018-05-28, 2021-03-10)
+
+IMPORTANT: This variable is used by all dependent decisions to filter surgery-specific extractions. Accurate count is critical.",,,integer,one_per_patient,,,,0
 document_type,"Classify this document into EXACTLY one category for prioritization during extraction.
 
 CLASSIFICATION RULES:
@@ -31,7 +46,23 @@ CLASSIFICATION RULES:
 
 CRITICAL: Return EXACTLY one of: FHIR_BUNDLE, STRUCTURED, PATHOLOGY, OPERATIVE, PROGRESS, CONSULTATION, H&P, IMAGING, ANESTHESIA, OTHER
 
-Purpose: Used for document prioritization in surgery-specific extractions.",,,,text,one_per_note,"{""FHIR_BUNDLE"": ""FHIR_BUNDLE"", ""STRUCTURED"": ""STRUCTURED"", ""PATHOLOGY"": ""PATHOLOGY"", ""OPERATIVE"": ""OPERATIVE"", ""PROGRESS"": ""PROGRESS"", ""CONSULTATION"": ""CONSULTATION"", ""H&P"": ""H&P"", ""IMAGING"": ""IMAGING"", ""ANESTHESIA"": ""ANESTHESIA"", ""OTHER"": ""OTHER""}",,,OTHER
+Purpose: Used for document prioritization in surgery-specific extractions.","Classify this document into EXACTLY one category for prioritization during extraction.
+
+CLASSIFICATION RULES:
+1. If NOTE_TITLE contains 'FHIR_BUNDLE' → return 'FHIR_BUNDLE'
+2. If NOTE_TITLE contains 'STRUCTURED_' → return 'STRUCTURED'
+3. If NOTE_TITLE contains 'Pathology' OR 'PATH' → return 'PATHOLOGY'
+4. If NOTE_TITLE contains 'Operative' OR 'Surgery' → return 'OPERATIVE'
+5. If NOTE_TITLE contains 'Progress' → return 'PROGRESS'
+6. If NOTE_TITLE contains 'Consult' → return 'CONSULTATION'
+7. If NOTE_TITLE contains 'H&P' OR 'History and Physical' → return 'H&P'
+8. If NOTE_TITLE contains 'Radiology' OR 'Imaging' OR 'MRI' OR 'CT' → return 'IMAGING'
+9. If NOTE_TITLE contains 'Anesthesia' → return 'ANESTHESIA'
+10. Default → return 'OTHER'
+
+CRITICAL: Return EXACTLY one of: FHIR_BUNDLE, STRUCTURED, PATHOLOGY, OPERATIVE, PROGRESS, CONSULTATION, H&P, IMAGING, ANESTHESIA, OTHER
+
+Purpose: Used for document prioritization in surgery-specific extractions.",,,text,one_per_note,"{""FHIR_BUNDLE"": ""FHIR_BUNDLE"", ""STRUCTURED"": ""STRUCTURED"", ""PATHOLOGY"": ""PATHOLOGY"", ""OPERATIVE"": ""OPERATIVE"", ""PROGRESS"": ""PROGRESS"", ""CONSULTATION"": ""CONSULTATION"", ""H&P"": ""H&P"", ""IMAGING"": ""IMAGING"", ""ANESTHESIA"": ""ANESTHESIA"", ""OTHER"": ""OTHER""}",,,OTHER
 patient_gender,"Extract patient gender/sex.
 
 PRIORITY SEARCH ORDER:
@@ -47,7 +78,22 @@ RETURN VALUES: Return EXACTLY one of: 'Male', 'Female', 'Unavailable'
 
 Gold Standard for C1277724: Female
 
-Data Dictionary: legal_sex (dropdown: Male, Female, Unavailable)",,,,text,one_per_patient,"{""Male"": ""Male"", ""Female"": ""Female"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+Data Dictionary: legal_sex (dropdown: Male, Female, Unavailable)","Extract patient gender/sex.
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Patient resource → Patient.gender field
+2. NOTE_ID='STRUCTURED_diagnosis_date' → may contain demographics
+3. Clinical notes demographics section
+
+RETURN VALUES: Return EXACTLY one of: 'Male', 'Female', 'Unavailable'
+- Title Case required
+- If FHIR Patient.gender='female' → return 'Female'
+- If FHIR Patient.gender='male' → return 'Male'
+- If missing → return 'Unavailable'
+
+Gold Standard for C1277724: Female
+
+Data Dictionary: legal_sex (dropdown: Male, Female, Unavailable)",,,text,one_per_patient,"{""Male"": ""Male"", ""Female"": ""Female"", ""Unavailable"": ""Unavailable""}",,,Unavailable
 date_of_birth,"Extract patient date of birth.
 
 PRIORITY SEARCH ORDER:
@@ -63,7 +109,22 @@ CRITICAL:
 
 Gold Standard for C1277724: 2005-05-13 (calculated from diagnosis age)
 
-Data Dictionary: date_of_birth (text, yyyy-mm-dd format)",,,,text,one_per_patient,,,,Unavailable
+Data Dictionary: date_of_birth (text, yyyy-mm-dd format)","Extract patient date of birth.
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Patient resource → Patient.birthDate field
+2. Clinical notes demographics sections containing 'DOB:' or 'Date of Birth:'
+
+RETURN FORMAT: YYYY-MM-DD (e.g., 2005-05-13)
+
+CRITICAL: 
+- Extract exact date from structured FHIR field (DO NOT calculate from age)
+- If multiple dates found, use earliest
+- If not found, return 'Unavailable'
+
+Gold Standard for C1277724: 2005-05-13 (calculated from diagnosis age)
+
+Data Dictionary: date_of_birth (text, yyyy-mm-dd format)",,,text,one_per_patient,,,,Unavailable
 age_at_diagnosis,"Calculate patient age at diagnosis in years.
 
 CALCULATION RULE:
@@ -79,7 +140,22 @@ CRITICAL:
 
 Gold Standard for C1277724: 13 years (DOB 2005-05-13, diagnosis 2018-06-04)
 
-Data Dictionary: age_at_diagnosis (integer)",,,,integer,one_per_patient,,,,Unknown
+Data Dictionary: age_at_diagnosis (integer)","Calculate patient age at diagnosis in years.
+
+CALCULATION RULE:
+1. Get date_of_birth from previous variable
+2. Get diagnosis_date from STRUCTURED_diagnosis_date or next variable
+3. Calculate: (diagnosis_date - date_of_birth) in years
+4. Round DOWN to integer (e.g., 13.9 years → 13)
+
+CRITICAL:
+- DO NOT extract age from clinical note text (notes may reference different dates)
+- MUST calculate mathematically from dates
+- If either date unavailable, return 'Unknown'
+
+Gold Standard for C1277724: 13 years (DOB 2005-05-13, diagnosis 2018-06-04)
+
+Data Dictionary: age_at_diagnosis (integer)",,,integer,one_per_patient,,,,Unknown
 race,"Extract patient race.
 
 PRIORITY SEARCH ORDER:
@@ -97,7 +173,24 @@ VALID VALUES: Return semicolon-separated list if multiple:
 
 Gold Standard for C1277724: White
 
-Data Dictionary: race (checkbox, multiple selections possible)",,,,text,one_per_patient,"{""White"": ""White"", ""Black or African American"": ""Black or African American"", ""Asian"": ""Asian"", ""Native Hawaiian or Other Pacific Islander"": ""Native Hawaiian or Other Pacific Islander"", ""American Indian or Alaska Native"": ""American Indian or Alaska Native"", ""Other"": ""Other"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+Data Dictionary: race (checkbox, multiple selections possible)","Extract patient race.
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Patient resource → Patient.extension where url contains 'race'
+2. Clinical notes demographics sections
+
+VALID VALUES: Return semicolon-separated list if multiple:
+- White
+- Black or African American
+- Asian
+- Native Hawaiian or Other Pacific Islander
+- American Indian or Alaska Native
+- Other
+- Unavailable
+
+Gold Standard for C1277724: White
+
+Data Dictionary: race (checkbox, multiple selections possible)",,,text,one_per_patient,"{""White"": ""White"", ""Black or African American"": ""Black or African American"", ""Asian"": ""Asian"", ""Native Hawaiian or Other Pacific Islander"": ""Native Hawaiian or Other Pacific Islander"", ""American Indian or Alaska Native"": ""American Indian or Alaska Native"", ""Other"": ""Other"", ""Unavailable"": ""Unavailable""}",,,Unavailable
 ethnicity,"Extract patient ethnicity.
 
 PRIORITY SEARCH ORDER:
@@ -111,7 +204,20 @@ VALID VALUES: Return EXACTLY one of:
 
 Gold Standard for C1277724: Not Hispanic or Latino
 
-Data Dictionary: ethnicity (radio button, single selection)",,,,text,one_per_patient,"{""Hispanic or Latino"": ""Hispanic or Latino"", ""Not Hispanic or Latino"": ""Not Hispanic or Latino"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+Data Dictionary: ethnicity (radio button, single selection)","Extract patient ethnicity.
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Patient resource → Patient.extension where url contains 'ethnicity'
+2. Clinical notes demographics sections
+
+VALID VALUES: Return EXACTLY one of:
+- Hispanic or Latino
+- Not Hispanic or Latino
+- Unavailable
+
+Gold Standard for C1277724: Not Hispanic or Latino
+
+Data Dictionary: ethnicity (radio button, single selection)",,,text,one_per_patient,"{""Hispanic or Latino"": ""Hispanic or Latino"", ""Not Hispanic or Latino"": ""Not Hispanic or Latino"", ""Unavailable"": ""Unavailable""}",,,Unavailable
 primary_diagnosis,"Extract primary CNS tumor diagnosis.
 
 PRIORITY SEARCH ORDER:
@@ -134,7 +240,29 @@ EXAMPLES:
 
 Gold Standard for C1277724: Pilocytic astrocytoma
 
-Data Dictionary: cns_integrated_diagnosis (checkbox with 123 WHO CNS 2021 options)",,,,text,one_per_patient,,,,Unknown
+Data Dictionary: cns_integrated_diagnosis (checkbox with 123 WHO CNS 2021 options)","Extract primary CNS tumor diagnosis.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_diagnosis_date' document - Contains diagnosis from problem_list_diagnoses view
+2. FHIR_BUNDLE Condition resources with oncology codes
+3. Pathology reports with diagnosis sections
+4. Operative notes with diagnosis mentions
+
+EXTRACTION RULES:
+- Return most specific diagnosis name (include histologic subtype)
+- Exclude WHO grade from diagnosis name (extracted separately)
+- Prioritize pathology-confirmed diagnoses over clinical impressions
+- If multiple diagnoses, return primary/initial CNS tumor
+
+EXAMPLES:
+- 'Pilocytic astrocytoma' (correct)
+- 'Glioblastoma'
+- 'Medulloblastoma'
+- 'Ependymoma'
+
+Gold Standard for C1277724: Pilocytic astrocytoma
+
+Data Dictionary: cns_integrated_diagnosis (checkbox with 123 WHO CNS 2021 options)",,,text,one_per_patient,,,,Unknown
 diagnosis_date,"Extract date of primary CNS tumor diagnosis.
 
 PRIORITY SEARCH ORDER:
@@ -152,7 +280,24 @@ FALLBACK LOGIC:
 
 Gold Standard for C1277724: 2018-06-04
 
-Data Dictionary: Converted to age_at_event_days in gold standard",,,,text,one_per_patient,,,,Unknown
+Data Dictionary: Converted to age_at_event_days in gold standard","Extract date of primary CNS tumor diagnosis.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_diagnosis_date' document - Contains diagnosis date from problem_list_diagnoses view (Ground Truth)
+2. FHIR_BUNDLE Condition resources → Condition.onsetDateTime or recordedDate
+3. Pathology reports with diagnosis dates
+4. Clinical notes with 'diagnosed on' or 'diagnosis date' phrases
+
+RETURN FORMAT: YYYY-MM-DD
+
+FALLBACK LOGIC:
+- If explicit diagnosis date not found, use date of first biopsy/surgery
+- If no surgical date, search for earliest clinical note mentioning diagnosis
+- If no dates found, return 'Unknown'
+
+Gold Standard for C1277724: 2018-06-04
+
+Data Dictionary: Converted to age_at_event_days in gold standard",,,text,one_per_patient,,,,Unknown
 who_grade,"Extract WHO tumor grade.
 
 PRIORITY SEARCH ORDER:
@@ -176,7 +321,30 @@ CRITICAL: Return Title Case format ('Grade I' NOT 'grade 1' or '1')
 
 Gold Standard for C1277724: Grade I (pilocytic astrocytoma)
 
-Data Dictionary: who_grade (dropdown: 1, 2, 3, 4, No grade specified)",,,,text,one_per_patient,"{""Grade I"": ""Grade I"", ""Grade II"": ""Grade II"", ""Grade III"": ""Grade III"", ""Grade IV"": ""Grade IV"", ""No grade specified"": ""No grade specified""}",,,No grade specified
+Data Dictionary: who_grade (dropdown: 1, 2, 3, 4, No grade specified)","Extract WHO tumor grade.
+
+PRIORITY SEARCH ORDER:
+1. Pathology reports with WHO grade classification
+2. NOTE_ID='STRUCTURED_molecular_markers' or 'STRUCTURED_diagnosis_date'
+3. Clinical notes with grade mentions
+
+VALID VALUES: Return EXACTLY one of:
+- Grade I
+- Grade II
+- Grade III
+- Grade IV
+- No grade specified
+
+INFERENCE RULES:
+- If diagnosis='Pilocytic astrocytoma' and no grade mentioned → infer 'Grade I' (standard for this diagnosis)
+- If diagnosis='Glioblastoma' and no grade mentioned → infer 'Grade IV'
+- Look for keywords: 'WHO grade I', 'Grade 1', 'low-grade', 'high-grade'
+
+CRITICAL: Return Title Case format ('Grade I' NOT 'grade 1' or '1')
+
+Gold Standard for C1277724: Grade I (pilocytic astrocytoma)
+
+Data Dictionary: who_grade (dropdown: 1, 2, 3, 4, No grade specified)",,,text,one_per_patient,"{""Grade I"": ""Grade I"", ""Grade II"": ""Grade II"", ""Grade III"": ""Grade III"", ""Grade IV"": ""Grade IV"", ""No grade specified"": ""No grade specified""}",,,No grade specified
 tumor_location,"Extract primary tumor anatomical location.
 
 PRIORITY SEARCH ORDER:
@@ -218,7 +386,48 @@ CRITICAL:
 
 Gold Standard for C1277724: Cerebellum/Posterior Fossa
 
-Data Dictionary: tumor_location (checkbox with 24 options)",,,,text,one_per_patient,"{""Cerebellum/Posterior Fossa"": ""Cerebellum/Posterior Fossa"", ""Frontal Lobe"": ""Frontal Lobe"", ""Temporal Lobe"": ""Temporal Lobe"", ""Parietal Lobe"": ""Parietal Lobe"", ""Occipital Lobe"": ""Occipital Lobe"", ""Thalamus"": ""Thalamus"", ""Ventricles"": ""Ventricles"", ""Suprasellar/Hypothalamic/Pituitary"": ""Suprasellar/Hypothalamic/Pituitary"", ""Brain Stem-Medulla"": ""Brain Stem-Medulla"", ""Brain Stem-Midbrain/Tectum"": ""Brain Stem-Midbrain/Tectum"", ""Brain Stem-Pons"": ""Brain Stem-Pons"", ""Spinal Cord-Cervical"": ""Spinal Cord-Cervical"", ""Spinal Cord-Thoracic"": ""Spinal Cord-Thoracic"", ""Spinal Cord-Lumbar/Thecal Sac"": ""Spinal Cord-Lumbar/Thecal Sac"", ""Optic Pathway"": ""Optic Pathway"", ""Cranial Nerves NOS"": ""Cranial Nerves NOS"", ""Pineal Gland"": ""Pineal Gland"", ""Basal Ganglia"": ""Basal Ganglia"", ""Hippocampus"": ""Hippocampus"", ""Meninges/Dura"": ""Meninges/Dura"", ""Skull"": ""Skull"", ""Spine NOS"": ""Spine NOS"", ""Other locations NOS"": ""Other locations NOS"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+Data Dictionary: tumor_location (checkbox with 24 options)","Extract primary tumor anatomical location.
+
+PRIORITY SEARCH ORDER:
+1. Imaging reports (MRI, CT) describing tumor location
+2. Pathology reports with specimen location
+3. Operative notes describing tumor site
+4. FHIR_BUNDLE Condition resources → Condition.bodySite
+
+VALID VALUES: Return EXACTLY one of 24 locations:
+- Cerebellum/Posterior Fossa
+- Frontal Lobe
+- Temporal Lobe
+- Parietal Lobe
+- Occipital Lobe
+- Thalamus
+- Ventricles
+- Suprasellar/Hypothalamic/Pituitary
+- Brain Stem-Medulla
+- Brain Stem-Midbrain/Tectum
+- Brain Stem-Pons
+- Spinal Cord-Cervical
+- Spinal Cord-Thoracic
+- Spinal Cord-Lumbar/Thecal Sac
+- Optic Pathway
+- Cranial Nerves NOS
+- Pineal Gland
+- Basal Ganglia
+- Hippocampus
+- Meninges/Dura
+- Skull
+- Spine NOS
+- Other locations NOS
+- Unavailable
+
+CRITICAL:
+- Extract TUMOR location (NOT surgical approach/incision site)
+- DO NOT return 'Craniotomy' (that's a procedure, not location)
+- Look for: 'cerebellar tumor', 'posterior fossa mass', 'cerebellar hemisphere'
+
+Gold Standard for C1277724: Cerebellum/Posterior Fossa
+
+Data Dictionary: tumor_location (checkbox with 24 options)",,,text,one_per_patient,"{""Cerebellum/Posterior Fossa"": ""Cerebellum/Posterior Fossa"", ""Frontal Lobe"": ""Frontal Lobe"", ""Temporal Lobe"": ""Temporal Lobe"", ""Parietal Lobe"": ""Parietal Lobe"", ""Occipital Lobe"": ""Occipital Lobe"", ""Thalamus"": ""Thalamus"", ""Ventricles"": ""Ventricles"", ""Suprasellar/Hypothalamic/Pituitary"": ""Suprasellar/Hypothalamic/Pituitary"", ""Brain Stem-Medulla"": ""Brain Stem-Medulla"", ""Brain Stem-Midbrain/Tectum"": ""Brain Stem-Midbrain/Tectum"", ""Brain Stem-Pons"": ""Brain Stem-Pons"", ""Spinal Cord-Cervical"": ""Spinal Cord-Cervical"", ""Spinal Cord-Thoracic"": ""Spinal Cord-Thoracic"", ""Spinal Cord-Lumbar/Thecal Sac"": ""Spinal Cord-Lumbar/Thecal Sac"", ""Optic Pathway"": ""Optic Pathway"", ""Cranial Nerves NOS"": ""Cranial Nerves NOS"", ""Pineal Gland"": ""Pineal Gland"", ""Basal Ganglia"": ""Basal Ganglia"", ""Hippocampus"": ""Hippocampus"", ""Meninges/Dura"": ""Meninges/Dura"", ""Skull"": ""Skull"", ""Spine NOS"": ""Spine NOS"", ""Other locations NOS"": ""Other locations NOS"", ""Unavailable"": ""Unavailable""}",,,Unavailable
 idh_mutation,"Extract IDH mutation status.
 
 PRIORITY SEARCH ORDER:
@@ -240,7 +449,28 @@ INFERENCE RULES:
 
 Gold Standard for C1277724: IDH wild-type (has BRAF fusion, IDH not mutated)
 
-Data Dictionary: idh_mutation (radio: Mutant, Wildtype, Unknown, Not tested)",,,,text,one_per_patient,"{""IDH mutant"": ""IDH mutant"", ""IDH wild-type"": ""IDH wild-type"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
+Data Dictionary: idh_mutation (radio: Mutant, Wildtype, Unknown, Not tested)","Extract IDH mutation status.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_molecular_markers' document - AUTHORITATIVE ground truth from Observation table
+2. Pathology reports molecular sections
+3. Clinical notes mentioning genetic testing
+
+VALID VALUES: Return EXACTLY one of:
+- IDH mutant
+- IDH wild-type
+- Unknown
+- Not tested
+
+INFERENCE RULES:
+- If STRUCTURED_molecular_markers mentions BRAF fusion WITHOUT IDH mention → return 'IDH wild-type' (BRAF and IDH mutations are mutually exclusive in gliomas)
+- If IDH1 or IDH2 mutation explicitly mentioned → return 'IDH mutant'
+- If no molecular testing mentioned → return 'Not tested'
+- If testing done but IDH not reported → return 'Unknown'
+
+Gold Standard for C1277724: IDH wild-type (has BRAF fusion, IDH not mutated)
+
+Data Dictionary: idh_mutation (radio: Mutant, Wildtype, Unknown, Not tested)",,,text,one_per_patient,"{""IDH mutant"": ""IDH mutant"", ""IDH wild-type"": ""IDH wild-type"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
 mgmt_methylation,"Extract MGMT promoter methylation status.
 
 PRIORITY SEARCH ORDER:
@@ -261,7 +491,27 @@ CLINICAL CONTEXT:
 
 Gold Standard for C1277724: Not tested (low-grade pilocytic astrocytoma, MGMT not typically tested)
 
-Data Dictionary: mgmt_methylation (radio: Methylated, Unmethylated, Unknown, Not tested)",,,,text,one_per_patient,"{""Methylated"": ""Methylated"", ""Unmethylated"": ""Unmethylated"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
+Data Dictionary: mgmt_methylation (radio: Methylated, Unmethylated, Unknown, Not tested)","Extract MGMT promoter methylation status.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_molecular_markers' document
+2. Pathology reports molecular sections
+3. Clinical notes with MGMT test results
+
+VALID VALUES: Return EXACTLY one of:
+- Methylated
+- Unmethylated
+- Unknown
+- Not tested
+
+CLINICAL CONTEXT:
+- MGMT testing primarily performed for high-grade gliomas (glioblastoma)
+- Rarely tested for low-grade tumors (Grade I-II)
+- If no mention in molecular reports, return 'Not tested'
+
+Gold Standard for C1277724: Not tested (low-grade pilocytic astrocytoma, MGMT not typically tested)
+
+Data Dictionary: mgmt_methylation (radio: Methylated, Unmethylated, Unknown, Not tested)",,,text,one_per_patient,"{""Methylated"": ""Methylated"", ""Unmethylated"": ""Unmethylated"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
 braf_status,"Extract BRAF genetic alteration status.
 
 PRIORITY SEARCH ORDER:
@@ -285,7 +535,30 @@ EXTRACTION RULES:
 
 Gold Standard for C1277724: BRAF fusion (specifically KIAA1549-BRAF)
 
-Data Dictionary: Custom field for BRAF alterations",,,,text,one_per_patient,"{""BRAF fusion"": ""BRAF fusion"", ""BRAF V600E mutation"": ""BRAF V600E mutation"", ""BRAF wild-type"": ""BRAF wild-type"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
+Data Dictionary: Custom field for BRAF alterations","Extract BRAF genetic alteration status.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_molecular_markers' document - AUTHORITATIVE ground truth from Observation table
+2. Pathology reports with NGS/molecular testing sections
+3. Clinical notes mentioning BRAF testing
+
+VALID VALUES: Return EXACTLY one of:
+- BRAF fusion (includes all fusion types: KIAA1549-BRAF, FAM131B-BRAF, etc)
+- BRAF V600E mutation
+- BRAF wild-type
+- Unknown
+- Not tested
+
+EXTRACTION RULES:
+- If 'KIAA1549-BRAF' or any BRAF fusion mentioned → return 'BRAF fusion'
+- If 'V600E' mentioned → return 'BRAF V600E mutation'
+- If 'BRAF negative' or 'no BRAF alteration' → return 'BRAF wild-type'
+- If no BRAF testing mentioned → return 'Not tested'
+- Prioritize fusion over V600E if both present
+
+Gold Standard for C1277724: BRAF fusion (specifically KIAA1549-BRAF)
+
+Data Dictionary: Custom field for BRAF alterations",,,text,one_per_patient,"{""BRAF fusion"": ""BRAF fusion"", ""BRAF V600E mutation"": ""BRAF V600E mutation"", ""BRAF wild-type"": ""BRAF wild-type"", ""Unknown"": ""Unknown"", ""Not tested"": ""Not tested""}",,,Not tested
 surgery_date,"Extract ALL surgery dates for this patient.
 
 PRIORITY SEARCH ORDER:
@@ -305,7 +578,26 @@ FILTERING:
 
 Gold Standard for C1277724: Two surgery dates (2018-05-28, 2021-03-10)
 
-Data Dictionary: Converted to age_at_surgery in gold standard",,,,text,many_per_note,,,,unknown
+Data Dictionary: Converted to age_at_surgery in gold standard","Extract ALL surgery dates for this patient.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Contains ALL surgeries from Procedure table with dates
+2. FHIR_BUNDLE Procedure resources → performedDateTime or performedPeriod.start
+3. Operative notes with procedure dates
+
+RETURN FORMAT: YYYY-MM-DD (one date per surgery, all surgeries returned)
+
+SCOPE: many_per_note means BRIM extracts multiple dates across all documents
+
+FILTERING:
+- Include ONLY tumor resection surgeries (CPT 61500-61576)
+- EXCLUDE shunt procedures (CPT 62201, 62223)
+- EXCLUDE standalone biopsies (CPT 61304-61315)
+- If STRUCTURED_surgeries exists, extract ALL dates from surgery table
+
+Gold Standard for C1277724: Two surgery dates (2018-05-28, 2021-03-10)
+
+Data Dictionary: Converted to age_at_surgery in gold standard",,,text,many_per_note,,,,unknown
 surgery_type,"Classify each surgery type.
 
 PRIORITY SEARCH ORDER:
@@ -329,7 +621,30 @@ CRITICAL: Match EXACTLY with Title Case - 'Tumor Resection' NOT 'resection' or '
 
 Gold Standard for C1277724: Both surgeries are 'Tumor Resection'
 
-Data Dictionary: Maps to surgery field (Yes/No) in treatments table",,,,text,many_per_note,"{""Tumor Resection"": ""Tumor Resection"", ""Biopsy"": ""Biopsy"", ""Shunt"": ""Shunt"", ""Other"": ""Other""}",,,Other
+Data Dictionary: Maps to surgery field (Yes/No) in treatments table","Classify each surgery type.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Surgery Type column
+2. FHIR_BUNDLE Procedure resources → CPT code mapping
+3. Operative note titles and descriptions
+
+VALID VALUES: Return EXACTLY one per surgery:
+- Tumor Resection (CPT 61510-61576)
+- Biopsy (CPT 61140, 61150, 61512)
+- Shunt (CPT 62200-62258)
+- Other
+
+MAPPING RULES:
+- CPT 61510, 61518, 61519, 61520, 61521, 61524 → 'Tumor Resection'
+- CPT 61140, 61150, 61512 → 'Biopsy'
+- CPT 62201, 62223 → 'Shunt'
+- All others → 'Other'
+
+CRITICAL: Match EXACTLY with Title Case - 'Tumor Resection' NOT 'resection' or 'RESECTION'
+
+Gold Standard for C1277724: Both surgeries are 'Tumor Resection'
+
+Data Dictionary: Maps to surgery field (Yes/No) in treatments table",,,text,many_per_note,"{""Tumor Resection"": ""Tumor Resection"", ""Biopsy"": ""Biopsy"", ""Shunt"": ""Shunt"", ""Other"": ""Other""}",,,Other
 surgery_extent,"Extract extent of tumor resection for each surgery.
 
 PRIORITY SEARCH ORDER:
@@ -355,7 +670,32 @@ CRITICAL: Match EXACTLY with Title Case
 
 Gold Standard for C1277724: Both surgeries are 'Partial Resection'
 
-Data Dictionary: extent_of_tumor_resection (dropdown in treatments table)",,,,text,many_per_note,"{""Gross Total Resection"": ""Gross Total Resection"", ""Near Total Resection"": ""Near Total Resection"", ""Subtotal Resection"": ""Subtotal Resection"", ""Partial Resection"": ""Partial Resection"", ""Biopsy Only"": ""Biopsy Only"", ""Unknown"": ""Unknown""}",,,Unknown
+Data Dictionary: extent_of_tumor_resection (dropdown in treatments table)","Extract extent of tumor resection for each surgery.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Extent of Resection column
+2. Operative notes - Surgeon's assessment sections
+3. Post-operative imaging reports mentioning residual tumor
+
+VALID VALUES: Return EXACTLY one per surgery:
+- Gross Total Resection (GTR, >95% removed, no visible residual)
+- Near Total Resection (NTR, 90-95% removed, minimal residual)
+- Subtotal Resection (STR, 50-90% removed)
+- Partial Resection (<50% removed or debulking)
+- Biopsy Only (no resection, diagnostic only)
+- Unknown
+
+KEYWORDS TO SEARCH:
+- GTR: 'gross total', 'complete resection', 'no residual'
+- STR: 'subtotal', 'partial resection', 'residual tumor'
+- Partial: 'partial resection', 'debulking'
+- Biopsy: 'biopsy only', 'diagnostic biopsy'
+
+CRITICAL: Match EXACTLY with Title Case
+
+Gold Standard for C1277724: Both surgeries are 'Partial Resection'
+
+Data Dictionary: extent_of_tumor_resection (dropdown in treatments table)",,,text,many_per_note,"{""Gross Total Resection"": ""Gross Total Resection"", ""Near Total Resection"": ""Near Total Resection"", ""Subtotal Resection"": ""Subtotal Resection"", ""Partial Resection"": ""Partial Resection"", ""Biopsy Only"": ""Biopsy Only"", ""Unknown"": ""Unknown""}",,,Unknown
 surgery_location,"Extract anatomical location for each surgery.
 
 PRIORITY SEARCH ORDER:
@@ -373,7 +713,71 @@ CRITICAL:
 
 Gold Standard for C1277724: Both surgeries at 'Cerebellum/Posterior Fossa'
 
-Data Dictionary: Maps to tumor_location in diagnosis table",,,,text,many_per_note,"{""Cerebellum/Posterior Fossa"": ""Cerebellum/Posterior Fossa"", ""Frontal Lobe"": ""Frontal Lobe"", ""Temporal Lobe"": ""Temporal Lobe"", ""Parietal Lobe"": ""Parietal Lobe"", ""Occipital Lobe"": ""Occipital Lobe"", ""Thalamus"": ""Thalamus"", ""Ventricles"": ""Ventricles"", ""Suprasellar/Hypothalamic/Pituitary"": ""Suprasellar/Hypothalamic/Pituitary"", ""Brain Stem-Medulla"": ""Brain Stem-Medulla"", ""Brain Stem-Midbrain/Tectum"": ""Brain Stem-Midbrain/Tectum"", ""Brain Stem-Pons"": ""Brain Stem-Pons"", ""Spinal Cord-Cervical"": ""Spinal Cord-Cervical"", ""Spinal Cord-Thoracic"": ""Spinal Cord-Thoracic"", ""Spinal Cord-Lumbar/Thecal Sac"": ""Spinal Cord-Lumbar/Thecal Sac"", ""Optic Pathway"": ""Optic Pathway"", ""Cranial Nerves NOS"": ""Cranial Nerves NOS"", ""Pineal Gland"": ""Pineal Gland"", ""Basal Ganglia"": ""Basal Ganglia"", ""Hippocampus"": ""Hippocampus"", ""Meninges/Dura"": ""Meninges/Dura"", ""Skull"": ""Skull"", ""Spine NOS"": ""Spine NOS"", ""Other locations NOS"": ""Other locations NOS"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+Data Dictionary: Maps to tumor_location in diagnosis table","Extract anatomical location for each surgery.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Anatomical Location column
+2. Operative notes describing tumor location
+3. Pre-operative imaging reports
+
+VALID VALUES: Same 24 locations as tumor_location variable
+
+CRITICAL:
+- Extract TUMOR location being operated on (NOT surgical approach/incision)
+- For multiple surgeries on same tumor, location should match primary tumor_location
+- If tumor progresses to new location, extract new location for that surgery
+- DO NOT return procedure names like 'Craniotomy'
+
+Gold Standard for C1277724: Both surgeries at 'Cerebellum/Posterior Fossa'
+
+Data Dictionary: Maps to tumor_location in diagnosis table",,,text,many_per_note,"{""Cerebellum/Posterior Fossa"": ""Cerebellum/Posterior Fossa"", ""Frontal Lobe"": ""Frontal Lobe"", ""Temporal Lobe"": ""Temporal Lobe"", ""Parietal Lobe"": ""Parietal Lobe"", ""Occipital Lobe"": ""Occipital Lobe"", ""Thalamus"": ""Thalamus"", ""Ventricles"": ""Ventricles"", ""Suprasellar/Hypothalamic/Pituitary"": ""Suprasellar/Hypothalamic/Pituitary"", ""Brain Stem-Medulla"": ""Brain Stem-Medulla"", ""Brain Stem-Midbrain/Tectum"": ""Brain Stem-Midbrain/Tectum"", ""Brain Stem-Pons"": ""Brain Stem-Pons"", ""Spinal Cord-Cervical"": ""Spinal Cord-Cervical"", ""Spinal Cord-Thoracic"": ""Spinal Cord-Thoracic"", ""Spinal Cord-Lumbar/Thecal Sac"": ""Spinal Cord-Lumbar/Thecal Sac"", ""Optic Pathway"": ""Optic Pathway"", ""Cranial Nerves NOS"": ""Cranial Nerves NOS"", ""Pineal Gland"": ""Pineal Gland"", ""Basal Ganglia"": ""Basal Ganglia"", ""Hippocampus"": ""Hippocampus"", ""Meninges/Dura"": ""Meninges/Dura"", ""Skull"": ""Skull"", ""Spine NOS"": ""Spine NOS"", ""Other locations NOS"": ""Other locations NOS"", ""Unavailable"": ""Unavailable""}",,,Unavailable
+surgery_diagnosis,"Extract the primary diagnosis associated with each documented surgery.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Contains diagnosis from Procedure/Condition linkage
+2. Pathology reports dated within ±7 days of surgery_date
+3. Operative notes with diagnosis documented in procedure description
+4. FHIR_BUNDLE Procedure.reasonCode or Condition resources linked to Procedure
+
+EXTRACTION RULES:
+- Return diagnosis name for EACH surgery found (one per surgery)
+- Include histologic subtype if stated (e.g., ""Pilocytic astrocytoma"")
+- Include recurrence status if mentioned (e.g., ""Pilocytic astrocytoma, recurrent"")
+- Prioritize pathology-confirmed diagnoses over clinical impressions
+- If diagnosis changed between surgeries, return different diagnosis for each
+
+SCOPE: many_per_note means BRIM extracts diagnosis for each surgery across all documents
+
+Gold Standard for C1277724: 
+- Surgery 1 (2018-05-28): Pilocytic astrocytoma
+- Surgery 2 (2021-03-10): Pilocytic astrocytoma, recurrent
+
+RETURN FORMAT: Diagnosis name (free text)
+- If no diagnosis found for a surgery → return ""Unknown""
+","Extract the primary diagnosis associated with each documented surgery.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_surgeries' document - Contains diagnosis from Procedure/Condition linkage
+2. Pathology reports dated within ±7 days of surgery_date
+3. Operative notes with diagnosis documented in procedure description
+4. FHIR_BUNDLE Procedure.reasonCode or Condition resources linked to Procedure
+
+EXTRACTION RULES:
+- Return diagnosis name for EACH surgery found (one per surgery)
+- Include histologic subtype if stated (e.g., ""Pilocytic astrocytoma"")
+- Include recurrence status if mentioned (e.g., ""Pilocytic astrocytoma, recurrent"")
+- Prioritize pathology-confirmed diagnoses over clinical impressions
+- If diagnosis changed between surgeries, return different diagnosis for each
+
+SCOPE: many_per_note means BRIM extracts diagnosis for each surgery across all documents
+
+Gold Standard for C1277724: 
+- Surgery 1 (2018-05-28): Pilocytic astrocytoma
+- Surgery 2 (2021-03-10): Pilocytic astrocytoma, recurrent
+
+RETURN FORMAT: Diagnosis name (free text)
+- If no diagnosis found for a surgery → return ""Unknown""
+",,,text,many_per_note,,,,Unknown
 chemotherapy_received,"Determine if patient received chemotherapy (boolean).
 
 PRIORITY SEARCH ORDER:
@@ -393,7 +797,26 @@ CHEMOTHERAPY AGENTS (partial list):
 
 Gold Standard for C1277724: Yes (received vinblastine, bevacizumab, selumetinib)
 
-Data Dictionary: chemotherapy (radio Yes/No in treatments table)",,,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No""}",,,No
+Data Dictionary: chemotherapy (radio Yes/No in treatments table)","Determine if patient received chemotherapy (boolean).
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_treatments' document - Contains all medications from patient_medications view
+2. FHIR_BUNDLE MedicationRequest resources
+3. Oncology notes mentioning chemotherapy
+
+RETURN VALUES:
+- 'Yes' if ANY chemotherapy agents found
+- 'No' if explicitly stated no chemotherapy OR no chemo agents found
+
+CHEMOTHERAPY AGENTS (partial list):
+- temozolomide, bevacizumab, vincristine, vinblastine
+- carboplatin, cisplatin, lomustine (CCNU), cyclophosphamide
+- etoposide, irinotecan, topotecan
+- dabrafenib, trametinib, selumetinib (targeted therapy for BRAF)
+
+Gold Standard for C1277724: Yes (received vinblastine, bevacizumab, selumetinib)
+
+Data Dictionary: chemotherapy (radio Yes/No in treatments table)",,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No""}",,,No
 chemotherapy_agents,"Extract ALL chemotherapy agent names.
 
 PRIORITY SEARCH ORDER:
@@ -421,7 +844,34 @@ EXTRACTION RULES:
 
 Gold Standard for C1277724: vinblastine;bevacizumab;selumetinib (3 agents across 2 treatment lines)
 
-Data Dictionary: chemotherapy_agents (text field, semicolon-separated)",,,,text,many_per_note,,,,unknown
+Data Dictionary: chemotherapy_agents (text field, semicolon-separated)","Extract ALL chemotherapy agent names.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_treatments' document - AUTHORITATIVE list from patient_medications view
+2. FHIR_BUNDLE MedicationRequest resources
+3. Oncology treatment notes
+4. Progress notes mentioning chemo regimens
+
+RETURN FORMAT: Semicolon-separated list of agent names (e.g., 'vinblastine;bevacizumab')
+
+SCOPE: many_per_note means extract all agents found across all documents
+
+CHEMOTHERAPY AGENTS LIST:
+Standard Chemo: temozolomide, carmustine (BCNU), lomustine (CCNU), vincristine, vinblastine, 
+carboplatin, cisplatin, cyclophosphamide, etoposide, ifosfamide, procarbazine, 
+thiotepa, methotrexate, cytarabine, irinotecan, topotecan
+
+Targeted/Immunotherapy: bevacizumab (Avastin), selumetinib (Koselugo), trametinib, 
+dabrafenib, everolimus, nivolumab, pembrolizumab
+
+EXTRACTION RULES:
+- Extract generic names (lowercase preferred but not required)
+- Include brand names if generic unknown: 'Koselugo' → 'selumetinib'
+- One agent name per extraction (BRIM handles aggregation)
+
+Gold Standard for C1277724: vinblastine;bevacizumab;selumetinib (3 agents across 2 treatment lines)
+
+Data Dictionary: chemotherapy_agents (text field, semicolon-separated)",,,text,many_per_note,,,,unknown
 radiation_received,"Determine if patient received radiation therapy (boolean).
 
 PRIORITY SEARCH ORDER:
@@ -438,7 +888,23 @@ RADIATION CPT CODES: 77261-77799 (radiation therapy planning, simulation, treatm
 
 Gold Standard for C1277724: No (patient did NOT receive radiation)
 
-Data Dictionary: radiation (radio Yes/No in treatments table)",,,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No""}",,,No
+Data Dictionary: radiation (radio Yes/No in treatments table)","Determine if patient received radiation therapy (boolean).
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Procedure resources with CPT codes 77xxx (radiation therapy codes)
+2. NOTE_ID='STRUCTURED_treatments' document
+3. Radiation oncology notes
+4. Progress notes mentioning radiation
+
+RETURN VALUES:
+- 'Yes' if ANY radiation therapy found
+- 'No' if explicitly stated no radiation OR no radiation procedures found
+
+RADIATION CPT CODES: 77261-77799 (radiation therapy planning, simulation, treatment)
+
+Gold Standard for C1277724: No (patient did NOT receive radiation)
+
+Data Dictionary: radiation (radio Yes/No in treatments table)",,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No""}",,,No
 clinical_status,"Extract patient's current clinical status (alive/deceased).
 
 PRIORITY SEARCH ORDER:
@@ -453,7 +919,21 @@ RETURN VALUES:
 
 Gold Standard for C1277724: Alive (as of last follow-up)
 
-Data Dictionary: clinical_status_at_event (text in encounters table)",,,,text,one_per_patient,"{""Alive"": ""Alive"", ""Deceased"": ""Deceased"", ""Unknown"": ""Unknown""}",,,Alive
+Data Dictionary: clinical_status_at_event (text in encounters table)","Extract patient's current clinical status (alive/deceased).
+
+PRIORITY SEARCH ORDER:
+1. FHIR_BUNDLE Patient resource → Patient.deceasedBoolean or Patient.deceasedDateTime
+2. Most recent progress notes
+3. Most recent encounter notes
+
+RETURN VALUES:
+- 'Alive' if Patient.deceasedBoolean = false OR no death information found
+- 'Deceased' if Patient.deceasedBoolean = true OR Patient.deceasedDateTime exists
+- 'Unknown' if conflicting or unclear information
+
+Gold Standard for C1277724: Alive (as of last follow-up)
+
+Data Dictionary: clinical_status_at_event (text in encounters table)",,,text,one_per_patient,"{""Alive"": ""Alive"", ""Deceased"": ""Deceased"", ""Unknown"": ""Unknown""}",,,Alive
 tumor_progression,"Identify if tumor showed progression during follow-up.
 
 SEARCH STRATEGY:
@@ -474,7 +954,27 @@ KEYWORDS:
 
 Gold Standard for C1277724: Progressive (2 documented progressions at ages 5095, 5780 days)
 
-Data Dictionary: Related to event_type and site_of_progression fields",,,,text,one_per_patient,"{""Progressive Disease"": ""Progressive Disease"", ""Stable Disease"": ""Stable Disease"", ""Response/Regression"": ""Response/Regression"", ""Unknown"": ""Unknown""}",,,Unknown
+Data Dictionary: Related to event_type and site_of_progression fields","Identify if tumor showed progression during follow-up.
+
+SEARCH STRATEGY:
+1. Progress notes mentioning 'progression', 'recurrence', 'growth'
+2. Imaging reports comparing to prior studies with tumor size changes
+3. Oncology notes discussing disease status
+
+RETURN VALUES:
+- 'Progressive Disease' if tumor grew or new lesions appeared
+- 'Stable Disease' if tumor unchanged
+- 'Response/Regression' if tumor decreased
+- 'Unknown' if no progression assessment found
+
+KEYWORDS:
+- Progressive: 'increased size', 'new lesions', 'progression', 'recurrence'
+- Stable: 'stable disease', 'no change', 'unchanged'
+- Response: 'decreased', 'regression', 'response to treatment'
+
+Gold Standard for C1277724: Progressive (2 documented progressions at ages 5095, 5780 days)
+
+Data Dictionary: Related to event_type and site_of_progression fields",,,text,one_per_patient,"{""Progressive Disease"": ""Progressive Disease"", ""Stable Disease"": ""Stable Disease"", ""Response/Regression"": ""Response/Regression"", ""Unknown"": ""Unknown""}",,,Unknown
 symptoms_present,"Extract documented symptoms/conditions at diagnosis or during treatment.
 
 SEARCH STRATEGY:
@@ -499,7 +999,31 @@ SCOPE: many_per_note extracts all symptoms across documents
 
 Gold Standard for C1277724: Emesis, Headaches, Hydrocephalus, Visual deficit, Posterior fossa syndrome
 
-Data Dictionary: condition_type in conditions_predispositions table",,,,text,many_per_note,,,,None documented
+Data Dictionary: condition_type in conditions_predispositions table","Extract documented symptoms/conditions at diagnosis or during treatment.
+
+SEARCH STRATEGY:
+1. Progress notes History of Present Illness (HPI) sections
+2. H&P notes chief complaint and review of systems
+3. Consultation notes
+
+COMMON CNS TUMOR SYMPTOMS: Return semicolon-separated list if multiple present
+- Headaches
+- Emesis/Vomiting
+- Visual deficits
+- Seizures
+- Ataxia/Balance problems
+- Weakness/Motor deficits
+- Cognitive changes
+- Hydrocephalus
+- Behavior/Mood changes
+- Posterior fossa syndrome
+- None documented
+
+SCOPE: many_per_note extracts all symptoms across documents
+
+Gold Standard for C1277724: Emesis, Headaches, Hydrocephalus, Visual deficit, Posterior fossa syndrome
+
+Data Dictionary: condition_type in conditions_predispositions table",,,text,many_per_note,,,,None documented
 hydrocephalus_treatment,"Extract hydrocephalus management if present.
 
 SEARCH STRATEGY:
@@ -524,7 +1048,31 @@ SHUNT CPT CODES:
 
 Gold Standard for C1277724: Endoscopic Third Ventriculostomy (ETV) Shunt
 
-Data Dictionary: shunt_required field in diagnosis table",,,,text,one_per_patient,"{""Endoscopic Third Ventriculostomy (ETV)"": ""Endoscopic Third Ventriculostomy (ETV)"", ""Ventriculoperitoneal Shunt (VP Shunt)"": ""Ventriculoperitoneal Shunt (VP Shunt)"", ""Ventriculoatrial Shunt (VA Shunt)"": ""Ventriculoatrial Shunt (VA Shunt)"", ""External Ventricular Drain (EVD)"": ""External Ventricular Drain (EVD)"", ""Lumbar Drain"": ""Lumbar Drain"", ""No hydrocephalus treatment"": ""No hydrocephalus treatment"", ""Unknown"": ""Unknown""}",,,Unknown
+Data Dictionary: shunt_required field in diagnosis table","Extract hydrocephalus management if present.
+
+SEARCH STRATEGY:
+1. FHIR_BUNDLE Procedure resources with shunt CPT codes (62201, 62223)
+2. NOTE_ID='STRUCTURED_surgeries' document
+3. Operative notes for CSF diversion procedures
+4. Neurosurgery consultation notes
+
+VALID VALUES: Return semicolon-separated list if multiple:
+- Endoscopic Third Ventriculostomy (ETV)
+- Ventriculoperitoneal Shunt (VP Shunt)
+- Ventriculoatrial Shunt (VA Shunt)
+- External Ventricular Drain (EVD)
+- Lumbar Drain
+- No hydrocephalus treatment
+- Unknown
+
+SHUNT CPT CODES:
+- 62201: Ventriculocisternostomy (ETV)
+- 62223: VP shunt creation
+- 62225: Shunt replacement
+
+Gold Standard for C1277724: Endoscopic Third Ventriculostomy (ETV) Shunt
+
+Data Dictionary: shunt_required field in diagnosis table",,,text,one_per_patient,"{""Endoscopic Third Ventriculostomy (ETV)"": ""Endoscopic Third Ventriculostomy (ETV)"", ""Ventriculoperitoneal Shunt (VP Shunt)"": ""Ventriculoperitoneal Shunt (VP Shunt)"", ""Ventriculoatrial Shunt (VA Shunt)"": ""Ventriculoatrial Shunt (VA Shunt)"", ""External Ventricular Drain (EVD)"": ""External Ventricular Drain (EVD)"", ""Lumbar Drain"": ""Lumbar Drain"", ""No hydrocephalus treatment"": ""No hydrocephalus treatment"", ""Unknown"": ""Unknown""}",,,Unknown
 imaging_findings,"Extract key imaging findings from radiology reports.
 
 SEARCH STRATEGY:
@@ -546,7 +1094,28 @@ SCOPE: many_per_note extracts findings from multiple imaging reports
 
 Gold Standard for C1277724: Multiple imaging findings documenting tumor progression
 
-Data Dictionary: imaging_findings field in imaging_clinical_related table",,,,text,many_per_note,,,,No imaging findings documented
+Data Dictionary: imaging_findings field in imaging_clinical_related table","Extract key imaging findings from radiology reports.
+
+SEARCH STRATEGY:
+1. Radiology reports (MRI, CT) with impression sections
+2. Neuro-oncology notes discussing imaging
+3. Operative notes referencing pre-op imaging
+
+EXTRACTION FOCUS:
+- Tumor size/measurements (e.g., '3.5 x 2.1 cm')
+- Tumor characteristics (solid, cystic, heterogeneous, enhancing)
+- Mass effect (midline shift, ventricular compression)
+- Edema (perilesional, vasogenic)
+- Comparison to prior (stable, increased, decreased)
+- Post-op changes (resection cavity, residual tumor)
+
+RETURN FORMAT: Free text summary of key findings (one finding per extraction)
+
+SCOPE: many_per_note extracts findings from multiple imaging reports
+
+Gold Standard for C1277724: Multiple imaging findings documenting tumor progression
+
+Data Dictionary: imaging_findings field in imaging_clinical_related table",,,text,many_per_note,,,,No imaging findings documented
 treatment_response,"Extract oncologist's assessment of treatment response.
 
 SEARCH STRATEGY:
@@ -572,7 +1141,32 @@ SCOPE: many_per_note extracts assessments over time
 
 Gold Standard for C1277724: Variable responses across treatment lines
 
-Data Dictionary: Related to tumor_status in encounters table",,,,text,many_per_note,"{""Complete Response"": ""Complete Response"", ""Partial Response"": ""Partial Response"", ""Stable Disease"": ""Stable Disease"", ""Progressive Disease"": ""Progressive Disease"", ""Mixed Response"": ""Mixed Response"", ""Unknown"": ""Unknown""}",,,Unknown
+Data Dictionary: Related to tumor_status in encounters table","Extract oncologist's assessment of treatment response.
+
+SEARCH STRATEGY:
+1. Oncology progress notes
+2. Tumor board notes
+3. Chemotherapy infusion notes with response assessment
+
+VALID VALUES:
+- Complete Response (CR) - No visible tumor
+- Partial Response (PR) - >50% tumor decrease
+- Stable Disease (SD) - No significant change
+- Progressive Disease (PD) - >25% tumor increase or new lesions
+- Mixed Response - Some lesions respond, others progress
+- Unknown - No response assessment documented
+
+KEYWORDS:
+- CR: 'complete response', 'no evidence of disease', 'NED'
+- PR: 'partial response', 'decreased tumor burden', 'responding'
+- SD: 'stable disease', 'no change', 'maintaining'
+- PD: 'progression', 'increased burden', 'new lesions'
+
+SCOPE: many_per_note extracts assessments over time
+
+Gold Standard for C1277724: Variable responses across treatment lines
+
+Data Dictionary: Related to tumor_status in encounters table",,,text,many_per_note,"{""Complete Response"": ""Complete Response"", ""Partial Response"": ""Partial Response"", ""Stable Disease"": ""Stable Disease"", ""Progressive Disease"": ""Progressive Disease"", ""Mixed Response"": ""Mixed Response"", ""Unknown"": ""Unknown""}",,,Unknown
 molecular_testing_performed,"Extract types of molecular/genetic tests performed.
 
 PRIORITY SEARCH ORDER:
@@ -598,7 +1192,32 @@ EXTRACTION RULES:
 
 Gold Standard for C1277724: Whole Genome Sequencing, Fusion Panel, Somatic Tumor Panel
 
-Data Dictionary: molecular_tests field in molecular_tests_performed table",,,,text,many_per_note,,,,Not tested
+Data Dictionary: molecular_tests field in molecular_tests_performed table","Extract types of molecular/genetic tests performed.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_molecular_markers' document
+2. Pathology reports molecular sections
+3. Genetics consultation notes
+
+VALID TEST TYPES: Return semicolon-separated list if multiple:
+- Whole Genome Sequencing (WGS)
+- Whole Exome Sequencing (WES)
+- RNA Sequencing
+- Targeted Gene Panel
+- Fusion Panel (FISH)
+- Single Gene Testing
+- Methylation Profiling
+- Copy Number Analysis
+- Not tested
+
+EXTRACTION RULES:
+- Extract test methodology mentioned (NGS, FISH, PCR, etc)
+- One test type per extraction
+- If report states 'no molecular testing' → return 'Not tested'
+
+Gold Standard for C1277724: Whole Genome Sequencing, Fusion Panel, Somatic Tumor Panel
+
+Data Dictionary: molecular_tests field in molecular_tests_performed table",,,text,many_per_note,,,,Not tested
 concomitant_medications,"Extract non-chemotherapy medications.
 
 PRIORITY SEARCH ORDER:
@@ -620,7 +1239,28 @@ EXCLUSION: Do NOT extract chemotherapy agents (extracted separately in chemother
 
 Gold Standard for C1277724: Multiple supportive medications throughout treatment
 
-Data Dictionary: medication_name in concomitant_medications table",,,,text,many_per_note,,,,No concomitant medications documented
+Data Dictionary: medication_name in concomitant_medications table","Extract non-chemotherapy medications.
+
+PRIORITY SEARCH ORDER:
+1. NOTE_ID='STRUCTURED_treatments' document (may contain all medications)
+2. FHIR_BUNDLE MedicationRequest resources
+3. Progress notes medication lists
+
+MEDICATION CATEGORIES TO EXTRACT:
+- Corticosteroids (dexamethasone, prednisone)
+- Anti-epileptics (levetiracetam, phenytoin)
+- Anti-emetics (ondansetron, metoclopramide)
+- Pain management (acetaminophen, oxycodone)
+- Antibiotics/Antifungals (if relevant)
+- Other supportive care medications
+
+SCOPE: many_per_note extracts all concomitant meds
+
+EXCLUSION: Do NOT extract chemotherapy agents (extracted separately in chemotherapy_agents variable)
+
+Gold Standard for C1277724: Multiple supportive medications throughout treatment
+
+Data Dictionary: medication_name in concomitant_medications table",,,text,many_per_note,,,,No concomitant medications documented
 metastasis_present,"Identify if metastatic disease present.
 
 SEARCH STRATEGY:
@@ -642,7 +1282,28 @@ METASTASIS TYPES:
 
 Gold Standard for C1277724: Yes (leptomeningeal and spine metastases at diagnosis, Event 1)
 
-Data Dictionary: metastasis field (Yes/No) in diagnosis table",,,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No"", ""Unknown"": ""Unknown""}",,,Unknown
+Data Dictionary: metastasis field (Yes/No) in diagnosis table","Identify if metastatic disease present.
+
+SEARCH STRATEGY:
+1. Imaging reports mentioning multiple lesions or distant sites
+2. Pathology reports with metastasis diagnosis
+3. Oncology notes discussing metastatic spread
+4. Spinal MRI reports showing leptomeningeal spread
+
+RETURN VALUES:
+- 'Yes' if metastases documented
+- 'No' if explicitly stated no metastases OR single lesion only
+- 'Unknown' if not assessed
+
+METASTASIS TYPES:
+- Leptomeningeal (drop metastases, CSF spread)
+- Spinal (cord or vertebral lesions)
+- Brain (distant brain sites)
+- Systemic (rare for CNS tumors)
+
+Gold Standard for C1277724: Yes (leptomeningeal and spine metastases at diagnosis, Event 1)
+
+Data Dictionary: metastasis field (Yes/No) in diagnosis table",,,text,one_per_patient,"{""Yes"": ""Yes"", ""No"": ""No"", ""Unknown"": ""Unknown""}",,,Unknown
 metastasis_locations,"If metastasis present, extract specific locations.
 
 SEARCH STRATEGY:
@@ -664,7 +1325,28 @@ SCOPE: many_per_note extracts all metastatic sites
 
 Gold Standard for C1277724: Leptomeningeal;Spine (documented at Event 1, age 4763 days)
 
-Data Dictionary: metastasis_location field in diagnosis table",,,,text,many_per_note,,,,No metastases
+Data Dictionary: metastasis_location field in diagnosis table","If metastasis present, extract specific locations.
+
+SEARCH STRATEGY:
+1. Imaging reports describing metastatic lesions
+2. Pathology reports confirming metastases
+3. Oncology notes
+
+VALID LOCATIONS: Return semicolon-separated list if multiple:
+- Leptomeningeal
+- Spine (specify cervical/thoracic/lumbar if stated)
+- Brain (distant from primary)
+- Bone
+- Liver
+- Lung
+- Other
+- No metastases
+
+SCOPE: many_per_note extracts all metastatic sites
+
+Gold Standard for C1277724: Leptomeningeal;Spine (documented at Event 1, age 4763 days)
+
+Data Dictionary: metastasis_location field in diagnosis table",,,text,many_per_note,,,,No metastases
 follow_up_duration,"Calculate duration of clinical follow-up.
 
 CALCULATION STRATEGY:
@@ -681,4 +1363,20 @@ FALLBACK:
 
 Gold Standard for C1277724: ~1,450+ days follow-up (diagnosis 2018-06-04 to last note 2022+)
 
-Data Dictionary: Calculated from age_at_encounter fields in encounters table",,,,integer,one_per_patient,,,,Unknown
+Data Dictionary: Calculated from age_at_encounter fields in encounters table","Calculate duration of clinical follow-up.
+
+CALCULATION STRATEGY:
+1. Find diagnosis_date (from earlier variable or STRUCTURED_diagnosis_date)
+2. Find most recent encounter date in FHIR_BUNDLE Encounter resources
+3. Calculate difference in days
+4. Return as integer number of days
+
+RETURN FORMAT: Integer (days of follow-up)
+
+FALLBACK:
+- If no encounter dates, use date of most recent document in project.csv
+- If cannot calculate, return 'Unknown'
+
+Gold Standard for C1277724: ~1,450+ days follow-up (diagnosis 2018-06-04 to last note 2022+)
+
+Data Dictionary: Calculated from age_at_encounter fields in encounters table",,,integer,one_per_patient,,,,Unknown

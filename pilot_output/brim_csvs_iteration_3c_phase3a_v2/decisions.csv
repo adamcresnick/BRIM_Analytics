@@ -1,114 +1,118 @@
-decision_name,decision_type,input_variables,output_variable,prompt,aggregation_prompt
-diagnosis_surgery1,filter,surgery_number;surgery_date;document_type;primary_diagnosis,diagnosis_surgery1,"Extract diagnosis associated with FIRST surgery event.
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
-- Prioritize document_type='OPERATIVE' or 'PATHOLOGY' near this surgery date
-- Look for pathology-confirmed diagnosis
-
-RETURN: Primary CNS tumor diagnosis name for first surgery
-
-Gold Standard for C1277724 Surgery 1 (2018-05-28): Pilocytic astrocytoma",
-extent_surgery1,filter,surgery_number;surgery_date;surgery_extent;document_type,extent_surgery1,"Extract extent of resection for FIRST surgery.
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
-- Prioritize document_type='OPERATIVE' for surgeon's assessment
-- Post-operative imaging (document_type='IMAGING') may confirm extent
-
-RETURN: One of: Gross Total Resection, Near Total Resection, Subtotal Resection, Partial Resection, Biopsy Only, Unknown
-
-Gold Standard for C1277724 Surgery 1 (2018-05-28): Partial Resection",
-location_surgery1,filter,surgery_number;surgery_date;surgery_location;document_type,location_surgery1,"Extract tumor location for FIRST surgery.
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the EARLIEST surgery_date for this patient
-- Prioritize document_type='OPERATIVE' or 'IMAGING' near this surgery date
-
-RETURN: One of 24 anatomical locations (e.g., Cerebellum/Posterior Fossa)
-
-Gold Standard for C1277724 Surgery 1 (2018-05-28): Cerebellum/Posterior Fossa",
-diagnosis_surgery2,filter,surgery_number;surgery_date;document_type;primary_diagnosis,diagnosis_surgery2,"Extract diagnosis associated with SECOND surgery event (if surgery_number >= 2).
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
-- Return empty string if surgery_number < 2
-- Prioritize document_type='OPERATIVE' or 'PATHOLOGY' near this surgery date
-
-RETURN: Diagnosis name for second surgery (may be same as first or recurrence diagnosis)
-
-Gold Standard for C1277724 Surgery 2 (2021-03-10): Pilocytic astrocytoma, recurrent",
-extent_surgery2,filter,surgery_number;surgery_date;surgery_extent;document_type,extent_surgery2,"Extract extent of resection for SECOND surgery (if surgery_number >= 2).
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
-- Return empty string if surgery_number < 2
-- Prioritize document_type='OPERATIVE'
-
-RETURN: Extent category for second surgery
-
-Gold Standard for C1277724 Surgery 2 (2021-03-10): Partial Resection",
-location_surgery2,filter,surgery_number;surgery_date;surgery_location;document_type,location_surgery2,"Extract tumor location for SECOND surgery (if surgery_number >= 2).
-
-CRITICAL FILTERING:
-- Filter to rows where surgery_date equals the SECOND EARLIEST surgery_date for this patient
-- Return empty string if surgery_number < 2
-
-RETURN: Anatomical location for second surgery
-
-Gold Standard for C1277724 Surgery 2 (2021-03-10): Cerebellum/Posterior Fossa",
-total_surgeries,aggregation,surgery_date,total_surgeries,,"Count total tumor resection surgeries by counting DISTINCT surgery_date values.
-
-AGGREGATION LOGIC:
-- Count unique surgery_date values extracted from all documents
-- This should match surgery_number variable
-- Used for validation and cross-checking
-
-Gold Standard for C1277724: 2 surgeries"
-all_chemotherapy_agents,aggregation,chemotherapy_agents,all_chemotherapy_agents,,"Aggregate all chemotherapy agents into semicolon-separated list.
-
-AGGREGATION LOGIC:
-- Collect all chemotherapy_agents extractions across all documents
-- Remove duplicates
-- Return semicolon-separated list
-
-Gold Standard for C1277724: vinblastine;bevacizumab;selumetinib"
-all_symptoms,aggregation,symptoms_present,all_symptoms,,"Aggregate all documented symptoms into semicolon-separated list.
-
-AGGREGATION LOGIC:
-- Collect all symptoms_present extractions across all documents
-- Remove duplicates
-- Return semicolon-separated list
-
-Gold Standard for C1277724: Emesis;Headaches;Hydrocephalus;Visual deficit;Posterior fossa syndrome"
-earliest_symptom_date,aggregation,symptoms_present;document_type,earliest_symptom_date,,"Identify earliest date when symptoms were documented.
-
-AGGREGATION LOGIC:
-- Find earliest document with symptoms_present != 'None documented'
-- Prioritize document_type='H&P' or 'CONSULTATION' for initial presentation
-- Return document date (from NOTE_TITLE or FHIR timestamp)
-
-Gold Standard for C1277724: Around initial diagnosis date (2018-06-04)"
-molecular_tests_summary,aggregation,molecular_testing_performed;braf_status;idh_mutation;mgmt_methylation,molecular_tests_summary,,"Create comprehensive molecular profile summary.
-
-AGGREGATION LOGIC:
-- Combine all molecular test results into single text summary
-- Format: 'BRAF: [status]; IDH: [status]; MGMT: [status]; Tests: [list]'
-
-Example Gold Standard for C1277724: 'BRAF: KIAA1549-BRAF fusion; IDH: wild-type; MGMT: Not tested; Tests: WGS, Fusion Panel'"
-imaging_progression_timeline,aggregation,imaging_findings;document_type,imaging_progression_timeline,,"Create timeline of imaging findings showing disease course.
-
-AGGREGATION LOGIC:
-- Extract all imaging_findings with document dates
-- Prioritize document_type='IMAGING'
-- Sort chronologically
-- Return semicolon-separated list with dates
-
-Gold Standard for C1277724: Multiple imaging studies documenting progression at ages 5095, 5780 days"
-treatment_response_summary,aggregation,treatment_response;chemotherapy_agents,treatment_response_summary,,"Summarize treatment response for each treatment line.
-
-AGGREGATION LOGIC:
-- Match chemotherapy_agents with corresponding treatment_response assessments
-- Create summary: '[agent]: [response]' for each treatment line
-
-Gold Standard for C1277724: vinblastine: [response]; bevacizumab: [response]; selumetinib: [response]"
+"decision_name","instruction","decision_type","prompt_template","variables"
+"diagnosis_surgery1","Return the diagnosis associated with the FIRST surgery (earliest surgery_date). FILTERING LOGIC: 1. Identify the EARLIEST value in the surgery_date variable (first surgery date) 2. Look for surgery_diagnosis values associated with that date 3. If surgery_diagnosis not available, use primary_diagnosis from documents near that date 4. Prioritize pathology-confirmed diagnoses. Gold Standard for C1277724 Surgery 1 (2018-05-28): Pilocytic astrocytoma. Return ONLY the diagnosis text. If no diagnosis found, return ""Unknown"".","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_date"", ""surgery_diagnosis"", ""primary_diagnosis"", ""document_type""]"
+"extent_surgery1","Return the extent of resection for the FIRST surgery (earliest surgery_date). FILTERING LOGIC: 1. Identify the EARLIEST value in surgery_date (first surgery date) 2. Find surgery_extent values associated with that date 3. Prioritize document_type=OPERATIVE (surgeons assessment is most authoritative). VALID RETURN VALUES: Must be one of: Gross Total Resection, Near Total Resection, Subtotal Resection, Partial Resection, Biopsy Only, Unknown. Gold Standard for C1277724 Surgery 1 (2018-05-28): Partial Resection. Return ONLY the extent classification.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_date"", ""surgery_extent"", ""document_type""]"
+"location_surgery1","Return the anatomical location for the FIRST surgery (earliest surgery_date). FILTERING LOGIC: 1. Identify the EARLIEST value in surgery_date (first surgery date) 2. Find surgery_location values associated with that date 3. Use most specific location mentioned. Gold Standard for C1277724 Surgery 1 (2018-05-28): Cerebellum/Posterior Fossa. Return ONLY the location name.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_date"", ""surgery_location"", ""document_type""]"
+"diagnosis_surgery2","Return the diagnosis for the SECOND surgery if it exists (second earliest surgery_date). FILTERING LOGIC: 1. Check if surgery_number >= 2 (patient had at least 2 surgeries) 2. If yes: Identify the SECOND EARLIEST value in surgery_date 3. Find surgery_diagnosis associated with that date 4. If not available, use primary_diagnosis from documents near that date 5. If surgery_number < 2: Return ""Unknown"". Gold Standard for C1277724 Surgery 2 (2021-03-10): Pilocytic astrocytoma, recurrent. Return ONLY the diagnosis text.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_number"", ""surgery_date"", ""surgery_diagnosis"", ""primary_diagnosis"", ""document_type""]"
+"extent_surgery2","Return the extent of resection for the SECOND surgery if it exists. FILTERING LOGIC: 1. Check if surgery_number >= 2 2. If yes: Identify SECOND EARLIEST surgery_date 3. Find surgery_extent associated with that date 4. If surgery_number < 2: Return ""Unknown"". Gold Standard for C1277724 Surgery 2 (2021-03-10): Partial Resection. Return ONLY the extent classification.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_number"", ""surgery_date"", ""surgery_extent"", ""document_type""]"
+"location_surgery2","Return the anatomical location for the SECOND surgery if it exists. FILTERING LOGIC: 1. Check if surgery_number >= 2 2. If yes: Identify SECOND EARLIEST surgery_date 3. Find surgery_location associated with that date 4. If surgery_number < 2: Return ""Unknown"". Gold Standard for C1277724 Surgery 2 (2021-03-10): Cerebellum/Posterior Fossa. Return ONLY the location name.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_number"", ""surgery_date"", ""surgery_location"", ""document_type""]"
+"total_surgeries","Count the total number of distinct surgeries for this patient. AGGREGATION LOGIC: Count the number of unique values in surgery_date variable. This should match the surgery_number variable. Gold Standard for C1277724: 2. Return ONLY the integer count.","integer","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""surgery_date""]"
+"all_chemotherapy_agents","Aggregate all chemotherapy agents into a semicolon-separated list. AGGREGATION LOGIC: 1. Collect ALL chemotherapy_agents values extracted across all documents 2. Remove duplicate agent names 3. Return as semicolon-separated list. Gold Standard for C1277724: vinblastine;bevacizumab;selumetinib. Return in format: ""agent1;agent2;agent3""","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""chemotherapy_agents""]"
+"all_symptoms","Aggregate all documented symptoms into a semicolon-separated list. AGGREGATION LOGIC: 1. Collect ALL symptoms_present values across all documents 2. Remove duplicates 3. Return as semicolon-separated list. Gold Standard for C1277724: Emesis;Headaches;Hydrocephalus;Visual deficit;Posterior fossa syndrome. Return in format: ""symptom1;symptom2;symptom3""","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""symptoms_present""]"
+"earliest_symptom_date","Identify the earliest date when symptoms were first documented. AGGREGATION LOGIC: 1. Find the EARLIEST document where symptoms_present != ""None documented"" 2. Prioritize document_type=H&P or CONSULTATION (initial presentation) 3. Return the document date. Gold Standard for C1277724: Around initial diagnosis date (2018-06-04). Return in YYYY-MM-DD format or ""Unknown"".","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""symptoms_present"", ""document_type""]"
+"molecular_tests_summary","Create comprehensive molecular profile summary. AGGREGATION LOGIC: Combine all molecular test results into single text summary. Format: ""BRAF: [status]; IDH: [status]; MGMT: [status]; Tests: [list]"". Gold Standard for C1277724: BRAF fusion present (KIAA1549-BRAF). Return structured summary.","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""molecular_testing_performed"", ""braf_status"", ""idh_mutation"", ""mgmt_methylation""]"
+"imaging_progression_timeline","Create timeline of imaging findings showing disease course. AGGREGATION LOGIC: 1. Extract ALL imaging_findings with their document dates 2. Prioritize document_type=IMAGING 3. Sort chronologically 4. Return as semicolon-separated list with dates. Gold Standard for C1277724: Multiple imaging studies documenting progression. Return in format: ""YYYY-MM-DD: finding;YYYY-MM-DD: finding""","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""imaging_findings"", ""document_type""]"
+"treatment_response_summary","Summarize treatment response for each treatment line. AGGREGATION LOGIC: 1. Match chemotherapy_agents with corresponding treatment_response assessments 2. Create summary: ""[agent]: [response]"" for each treatment line. Gold Standard for C1277724: Variable responses across treatment lines. Return in format: ""agent1: response1; agent2: response2""","text","""{instruction}""	
+Output with the following JSON format:	
+  [	  
+    {{	  
+        ""{name}"": {decision_type}\,
+        ""document_id"": int\,
+        ""Raw Text"": text\, // VERBATIM raw text used to determine if ""{name}"".
+    }}
+  ]","[""treatment_response"", ""chemotherapy_agents""]"
