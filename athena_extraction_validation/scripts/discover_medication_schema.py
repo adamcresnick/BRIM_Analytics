@@ -42,7 +42,7 @@ class MedicationSchemaDiscovery:
         self.athena = self.session.client('athena', region_name='us-east-1')
         self.database = 'fhir_v2_prd_db'
         self.output_location = 's3://aws-athena-query-results-343218191717-us-east-1/'
-        self.patient_fhir_id = 'e4BwD8ZYDBccepXcJ.Ilo3w3'
+        self.patient_fhir_id = 'e4BwD8ZYDBccepXcJ.Ilo3w3'  # NO "Patient/" prefix!
         
     def execute_query(self, query, description=""):
         """Execute Athena query and return results"""
@@ -104,11 +104,12 @@ class MedicationSchemaDiscovery:
         logger.info("="*80)
         
         # Try multiple naming patterns
+        # Based on test results: medication_request exists (no 's', with underscore)
         queries = [
-            ("medication_*", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medication_%'"),
-            ("medicationrequest", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medicationrequest%'"),
-            ("medicationstatement", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medicationstatement%'"),
-            ("medicationadministration", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medicationadministration%'"),
+            ("medication_request*", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medication_request%'"),
+            ("medication_statement*", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medication_statement%'"),
+            ("medication_administration*", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medication_administration%'"),
+            ("medication (base)*", "SHOW TABLES IN fhir_v2_prd_db LIKE 'medication'"),
         ]
         
         all_tables = []
@@ -183,11 +184,12 @@ class MedicationSchemaDiscovery:
             col_type = col.get('data_type', 'unknown')
             logger.info(f"  {i:2d}. {col_name:40s} {col_type}")
         
-        # Get row count for patient
+        # Get row count for patient (try both column names)
         count_query = f"""
         SELECT COUNT(*) as count
         FROM {self.database}.{table_name}
-        WHERE patient_id = '{self.patient_fhir_id}'
+        WHERE subject_reference = '{self.patient_fhir_id}'
+           OR (TRY(patient_id) IS NOT NULL AND patient_id = '{self.patient_fhir_id}')
         """
         
         count_result = self.execute_query(count_query)
@@ -200,7 +202,8 @@ class MedicationSchemaDiscovery:
             sample_query = f"""
             SELECT *
             FROM {self.database}.{table_name}
-            WHERE patient_id = '{self.patient_fhir_id}'
+            WHERE subject_reference = '{self.patient_fhir_id}'
+               OR (TRY(patient_id) IS NOT NULL AND patient_id = '{self.patient_fhir_id}')
             LIMIT 3
             """
             
