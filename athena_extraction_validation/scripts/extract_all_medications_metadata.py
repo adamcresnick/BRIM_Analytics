@@ -3,18 +3,25 @@
 Extract ALL Medications with Complete Metadata for Patient C1277724
 
 This script extracts all 1,001 medication records from patient_medications and joins with:
-1. medication_request_note - Clinical notes with dose adjustments (104 records)
-2. medication_request_reason_code - Treatment indications (335 records)  
-3. medication_request_based_on - Care plan linkages (276 records)
-4. medication_form_coding - Form codes via medication_id (666K rows)
-5. medication_ingredient - Ingredient strengths via medication_id (771K rows)
-6. care_plan - Protocol details (4 care plans)
-7. care_plan_category - ONCOLOGY TREATMENT classification (12 records)
-8. care_plan_addresses - Diagnosis linkage (8 records)
-9. care_plan_activity - Activity status (4 records)
+1. medication_request - ⭐ TEMPORAL FIELDS (validity_period_start/end for stop dates)
+2. medication_request_note - Clinical notes with dose adjustments (104 records)
+3. medication_request_reason_code - Treatment indications (335 records)  
+4. medication_request_based_on - Care plan linkages (276 records)
+5. medication_form_coding - Form codes via medication_id (666K rows)
+6. medication_ingredient - Ingredient strengths via medication_id (771K rows)
+7. care_plan - Protocol details (4 care plans)
+8. care_plan_category - ONCOLOGY TREATMENT classification (12 records)
+9. care_plan_addresses - Diagnosis linkage (8 records)
+10. care_plan_activity - Activity status (4 records)
 
-Output: ALL_MEDICATIONS_METADATA_C1277724.csv with 29+ columns
-Expected: 1,001 medications with enriched metadata
+KEY ADDITIONS:
+- ⭐ validity_period_end: Individual medication stop dates (not just care plan dates)
+- ⭐ course_of_therapy_type_text: Treatment strategy (continuous/acute/seasonal)
+- ⭐ dispense_request durations: Expected supply duration for each medication
+- ⭐ prior_prescription_display: Tracks medication switches/changes
+
+Output: ALL_MEDICATIONS_METADATA_C1277724.csv with 47+ columns (was 29)
+Expected: 1,001 medications with complete temporal and clinical context
 """
 
 import boto3
@@ -203,26 +210,58 @@ def build_comprehensive_query():
         '{PATIENT_MRN}' as patient_mrn,
         pm.patient_id as patient_fhir_id,
         
-        -- Medication request basic info  
+        -- ========================================
+        -- ALL FIELDS FROM patient_medications VIEW (10 fields)
+        -- ========================================
         pm.medication_request_id,
         pm.medication_id,
-        pm.status as medication_status,
-        pm.authored_on,
-        
-        -- Medication details (actual column names from patient_medications)
         pm.medication_name,
-        pm.rx_norm_codes,
         pm.form_text as medication_form,
-        
-        -- Requester and encounter
+        pm.rx_norm_codes,
+        pm.authored_on as medication_start_date,
         pm.requester_name,
+        pm.status as medication_status,
         pm.encounter_display,
         
+        -- ========================================
+        -- TEMPORAL FIELDS FROM medication_request TABLE
+        -- ========================================
+        mr.dispense_request_validity_period_start as validity_period_start,
+        mr.dispense_request_validity_period_end as validity_period_end,  -- ⭐ CRITICAL: Individual medication stop date
+        
+        -- ========================================
+        -- STATUS & PRIORITY FROM medication_request TABLE
+        -- ========================================
+        mr.status_reason_text,
+        mr.priority,
+        mr.intent as medication_intent,
+        mr.do_not_perform,
+        
+        -- ========================================
+        -- TREATMENT STRATEGY CONTEXT FROM medication_request TABLE
+        -- ========================================
+        mr.course_of_therapy_type_text,  -- e.g., "continuous", "acute", "seasonal"
+        mr.dispense_request_initial_fill_duration_value,
+        mr.dispense_request_initial_fill_duration_unit,
+        mr.dispense_request_expected_supply_duration_value,
+        mr.dispense_request_expected_supply_duration_unit,
+        mr.dispense_request_number_of_repeats_allowed,
+        
+        -- ========================================
+        -- TREATMENT CHANGES FROM medication_request TABLE
+        -- ========================================
+        mr.substitution_allowed_boolean,
+        mr.substitution_reason_text,
+        mr.prior_prescription_display,  -- Tracks medication changes/switches
+        
+        -- ========================================
+        -- AGGREGATED METADATA FROM CHILD TABLES
+        -- ========================================
         -- Aggregated notes (dose adjustments, clinical trial status)
         mn.note_text_aggregated as clinical_notes,
         
         -- Aggregated reason codes (chemotherapy encounter, indications)
-        mr.reason_code_text_aggregated as reason_codes,
+        mrr.reason_code_text_aggregated as reason_codes,
         
         -- Care plan linkage
         mrb.based_on_reference as care_plan_reference,
@@ -235,7 +274,9 @@ def build_comprehensive_query():
         -- Ingredient details (via medication_id)
         mi.ingredient_strengths,
         
-        -- Care plan protocol details
+        -- ========================================
+        -- CARE PLAN PROTOCOL DETAILS
+        -- ========================================
         cp.id as care_plan_id,
         cp.title as care_plan_title,
         cp.status as care_plan_status,
@@ -256,13 +297,17 @@ def build_comprehensive_query():
         
     FROM {DATABASE}.patient_medications pm
     
+    -- ⭐ NEW: Join to medication_request for temporal and clinical context fields
+    LEFT JOIN {DATABASE}.medication_request mr
+        ON pm.medication_request_id = mr.id
+    
     -- Join medication request notes
     LEFT JOIN medication_notes mn
         ON pm.medication_request_id = mn.medication_request_id
     
     -- Join medication request reason codes
-    LEFT JOIN medication_reasons mr
-        ON pm.medication_request_id = mr.medication_request_id
+    LEFT JOIN medication_reasons mrr
+        ON pm.medication_request_id = mrr.medication_request_id
     
     -- Join care plan linkage
     LEFT JOIN {DATABASE}.medication_request_based_on mrb
@@ -324,16 +369,17 @@ def main():
         
         logger.info("")
         logger.info("Query joins:")
-        logger.info("  1. patient_medications (base table)")
-        logger.info("  2. medication_request_note (clinical notes)")
-        logger.info("  3. medication_request_reason_code (indications)")
-        logger.info("  4. medication_request_based_on (care plan links)")
-        logger.info("  5. medication_form_coding (form details)")
-        logger.info("  6. medication_ingredient (ingredient strengths)")
-        logger.info("  7. care_plan (protocol details)")
-        logger.info("  8. care_plan_category (ONCOLOGY TREATMENT)")
-        logger.info("  9. care_plan_addresses (diagnosis linkage)")
-        logger.info(" 10. care_plan_activity (activity status)")
+        logger.info("  1. patient_medications (base table - 10 fields)")
+        logger.info("  2. ⭐ medication_request (temporal + clinical context - 14 NEW fields)")
+        logger.info("  3. medication_request_note (clinical notes)")
+        logger.info("  4. medication_request_reason_code (indications)")
+        logger.info("  5. medication_request_based_on (care plan links)")
+        logger.info("  6. medication_form_coding (form details)")
+        logger.info("  7. medication_ingredient (ingredient strengths)")
+        logger.info("  8. care_plan (protocol details)")
+        logger.info("  9. care_plan_category (ONCOLOGY TREATMENT)")
+        logger.info(" 10. care_plan_addresses (diagnosis linkage)")
+        logger.info(" 11. care_plan_activity (activity status)")
         logger.info("")
         
         # Execute query

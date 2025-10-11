@@ -27,6 +27,58 @@ This directory contains two types of scripts with distinct purposes:
 
 ## Production Extraction Scripts
 
+### extract_all_medications_metadata.py
+
+**Status**: ✅ Production Ready - ENHANCED October 11, 2025
+
+**Purpose**: Extract comprehensive medication data with temporal fields, treatment strategy context, and medication changes
+
+**Documentation**: See `MEDICATION_EXTRACTION_ENHANCEMENT_TEMPORAL_FIELDS.md`
+
+**Key Features**:
+- Direct JOIN to medication_request table for temporal fields (validity_period_end for stop dates)
+- All 10 fields from patient_medications view
+- 14 additional fields from medication_request (course_of_therapy, priority, prior_prescription, etc.)
+- 44 total columns with complete clinical context
+
+**Input**:
+```bash
+python3 scripts/extract_all_medications_metadata.py
+# Currently configured for patient C1277724
+# Output: staging_files/ALL_MEDICATIONS_METADATA_C1277724.csv
+```
+
+**Athena Tables Used**:
+1. `fhir_v2_prd_db.patient_medications` - Base medication view (10 fields)
+2. `fhir_v2_prd_db.medication_request` - ⭐ NEW: Temporal & clinical context (68 fields, 14 selected)
+3. `fhir_v2_prd_db.medication_request_note` - Clinical notes
+4. `fhir_v2_prd_db.medication_request_reason_code` - Indications
+5. `fhir_v2_prd_db.medication_request_based_on` - Care plan linkages
+6. `fhir_v2_prd_db.medication_form_coding` - Form codes
+7. `fhir_v2_prd_db.medication_ingredient` - Ingredient strengths
+8. `fhir_v2_prd_db.care_plan` - Protocol details
+9. `fhir_v2_prd_db.care_plan_category` - Classification
+10. `fhir_v2_prd_db.care_plan_addresses` - Diagnosis linkage
+11. `fhir_v2_prd_db.care_plan_activity` - Activity status
+
+**Output Schema** (44 fields):
+- Patient identifiers (2)
+- Medication core from patient_medications (9)
+- ⭐ Temporal fields from medication_request (6): validity_period_start/end, dispense durations
+- ⭐ Treatment strategy from medication_request (6): course_of_therapy, intent, priority, status
+- ⭐ Treatment changes from medication_request (3): prior_prescription, substitution tracking
+- Clinical context (6): notes, reason codes, care plan linkage
+- Form/ingredient details (3)
+- Care plan protocol (12)
+
+**Coverage**: 1,121 medications for patient C1277724
+- 100% start dates (medication_start_date)
+- 21.5% individual stop dates (validity_period_end)
+- 89.4% treatment strategy (course_of_therapy_type_text)
+- 29.5% medication changes tracked (prior_prescription_display)
+
+---
+
 ### extract_diagnosis.py
 
 **Status**: ✅ Production Ready
