@@ -877,6 +877,137 @@ def extract_procedure_notes(athena_client, patient_id):
     return rad_notes
 
 
+def extract_radiation_oncology_documents(athena_client, patient_id):
+    """
+    Extract radiation oncology DocumentReferences, prioritizing external records.
+    
+    Focus on:
+    - Practice setting = 'Radiation Oncology' 
+    - Non-HTML/RTF formats (PDFs, images) - likely from external institutions
+    - RT keywords in description
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix)
+        
+    Returns:
+        DataFrame with RT-related document references
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING RADIATION ONCOLOGY DOCUMENTS")
+    print("="*80)
+    
+    query = f"""
+    SELECT DISTINCT
+        dr.id as document_id,
+        dr.date as doc_date,
+        dr.status as doc_status,
+        dr.doc_status,
+        dr.type_text as doc_type_text,
+        dr.description as doc_description,
+        dc.content_attachment_content_type as doc_mime_type,
+        dc.content_attachment_url as doc_binary_id,
+        dc.content_attachment_size as doc_size_bytes,
+        dc.content_attachment_title as doc_title,
+        setting.context_practice_setting_coding_display as doc_practice_setting,
+        setting.context_practice_setting_coding_code as doc_practice_code,
+        de.context_encounter_reference as doc_encounter_ref,
+        dt.type_coding_display as doc_type_coding_display
+    FROM {DATABASE}.document_reference dr
+    JOIN {DATABASE}.document_reference_content dc 
+        ON dc.document_reference_id = dr.id
+    LEFT JOIN {DATABASE}.document_reference_context_practice_setting_coding setting 
+        ON setting.document_reference_id = dr.id
+    LEFT JOIN {DATABASE}.document_reference_context_encounter de
+        ON de.document_reference_id = dr.id
+    LEFT JOIN {DATABASE}.document_reference_type_coding dt
+        ON dt.document_reference_id = dr.id
+    WHERE dr.subject_reference = '{patient_id}'
+      AND (
+          -- Primary filter: Radiation Oncology practice setting
+          setting.context_practice_setting_coding_display = 'Radiation Oncology'
+          -- OR: Non-HTML/RTF with oncology-related setting and RT keywords
+          OR (
+              dc.content_attachment_content_type IN (
+                  'application/pdf', 'image/tiff', 'image/jpeg', 'image/png'
+              )
+              AND setting.context_practice_setting_coding_display IN ('Oncology', 'Hematology Oncology', 'Radiology')
+              AND (
+                  LOWER(dr.description) LIKE '%radiation%'
+                  OR LOWER(dr.description) LIKE '%radiotherapy%'
+                  OR LOWER(dr.description) LIKE '%rad onc%'
+                  OR LOWER(dr.description) LIKE '%xrt%'
+                  OR LOWER(dr.description) LIKE '%beam%'
+                  OR LOWER(dr.type_text) LIKE '%radiation%'
+                  OR LOWER(dt.type_coding_display) LIKE '%radiation%'
+              )
+          )
+      )
+    ORDER BY dr.date DESC
+    """
+    
+    print("\nQuerying document_reference tables...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No radiation oncology documents found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total RT-related documents: {len(df)}")
+    
+    if len(df) > 0:
+        # Categorize by MIME type
+        df['doc_format_category'] = 'Other'
+        df.loc[df['doc_mime_type'].str.contains('pdf', case=False, na=False), 'doc_format_category'] = 'PDF'
+        df.loc[df['doc_mime_type'].str.contains('tiff|tif', case=False, na=False, regex=True), 'doc_format_category'] = 'TIFF Image'
+        df.loc[df['doc_mime_type'].str.contains('jpeg|jpg', case=False, na=False, regex=True), 'doc_format_category'] = 'JPEG Image'
+        df.loc[df['doc_mime_type'].str.contains('png', case=False, na=False), 'doc_format_category'] = 'PNG Image'
+        df.loc[df['doc_mime_type'].str.contains('html', case=False, na=False), 'doc_format_category'] = 'HTML'
+        df.loc[df['doc_mime_type'].str.contains('rtf', case=False, na=False), 'doc_format_category'] = 'RTF'
+        
+        # Flag likely external documents (PDFs and images)
+        df['doc_is_likely_external'] = df['doc_format_category'].isin(['PDF', 'TIFF Image', 'JPEG Image', 'PNG Image'])
+        
+        # Priority scoring: PDFs from Radiation Oncology = highest
+        df['doc_priority'] = 'LOW'
+        df.loc[df['doc_practice_setting'] == 'Radiation Oncology', 'doc_priority'] = 'MEDIUM'
+        df.loc[
+            (df['doc_practice_setting'] == 'Radiation Oncology') & 
+            (df['doc_format_category'].isin(['PDF', 'TIFF Image'])),
+            'doc_priority'
+        ] = 'HIGH'
+        
+        print("\n✅ Document Summary:")
+        print(f"\nBy Practice Setting:")
+        setting_counts = df['doc_practice_setting'].value_counts()
+        for setting, count in setting_counts.items():
+            print(f"  {setting:40} {count:3}")
+        
+        print(f"\nBy Format:")
+        format_counts = df['doc_format_category'].value_counts()
+        for fmt, count in format_counts.items():
+            print(f"  {fmt:40} {count:3}")
+        
+        print(f"\nBy Priority:")
+        priority_counts = df['doc_priority'].value_counts()
+        for priority, count in priority_counts.items():
+            print(f"  {priority:40} {count:3}")
+        
+        external_count = df['doc_is_likely_external'].sum()
+        print(f"\nLikely External Documents: {external_count} ({external_count/len(df)*100:.1f}%)")
+    
+    return df
+
+
 def identify_treatment_courses(rad_df):
     """
     Identify distinct radiation treatment courses from appointment data.
@@ -1053,6 +1184,8 @@ def main():
     # NEW: procedure tables
     procedure_rt_codes_df = extract_procedure_rt_codes(athena, patient_id)
     procedure_notes_df = extract_procedure_notes(athena, patient_id)
+    # NEW: document_reference tables (external RT records)
+    documents_df = extract_radiation_oncology_documents(athena, patient_id)
     
     # Identify treatment courses
     courses = identify_treatment_courses(treatments_df)
@@ -1084,6 +1217,17 @@ def main():
     else:
         summary['procedure_notes_with_dose'] = 0
     
+    # Add document summary data
+    summary['num_rt_documents'] = len(documents_df)
+    if len(documents_df) > 0:
+        summary['num_rt_documents_pdf'] = (documents_df['doc_format_category'] == 'PDF').sum()
+        summary['num_rt_documents_external'] = documents_df['doc_is_likely_external'].sum()
+        summary['num_rt_documents_high_priority'] = (documents_df['doc_priority'] == 'HIGH').sum()
+    else:
+        summary['num_rt_documents_pdf'] = 0
+        summary['num_rt_documents_external'] = 0
+        summary['num_rt_documents_high_priority'] = 0
+    
     # Print summary
     print("\n" + "="*80)
     print("EXTRACTION SUMMARY")
@@ -1101,10 +1245,15 @@ def main():
     print(f"Service Request Notes (RT):   {summary['num_service_request_notes']}")
     print(f"Notes with Dose Info (Gy):    {summary['service_request_notes_with_dose']}")
     print(f"RT History Reason Codes:      {summary['num_service_request_rt_history']}")
-    print(f"\n--- Procedure Data (NEW) ---")
+    print(f"\n--- Procedure Data ---")
     print(f"Procedure RT Codes (CPT 77xxx): {summary['num_procedure_rt_codes']}")
     print(f"Procedure Notes (RT keywords):  {summary['num_procedure_notes']}")
     print(f"Notes with Dose Info (Gy):      {summary['procedure_notes_with_dose']}")
+    print(f"\n--- Document Reference Data (NEW) ---")
+    print(f"RT-Related Documents:          {summary['num_rt_documents']}")
+    print(f"PDFs (likely external):        {summary['num_rt_documents_pdf']}")
+    print(f"Likely External Docs:          {summary['num_rt_documents_external']}")
+    print(f"High Priority Docs:            {summary['num_rt_documents_high_priority']}")
     
     if 'treatment_techniques' in summary:
         print(f"\nTreatment Techniques:       {summary['treatment_techniques']}")
@@ -1169,6 +1318,12 @@ def main():
         proc_notes_file = patient_dir / 'procedure_notes.csv'
         procedure_notes_df.to_csv(proc_notes_file, index=False)
         print(f"  ✅ Saved: procedure_notes.csv ({len(procedure_notes_df)} rows)")
+    
+    # Save radiation oncology documents
+    if len(documents_df) > 0:
+        docs_file = patient_dir / 'radiation_oncology_documents.csv'
+        documents_df.to_csv(docs_file, index=False)
+        print(f"  ✅ Saved: radiation_oncology_documents.csv ({len(documents_df)} rows)")
     
     # Save summary
     summary_df = pd.DataFrame([summary])

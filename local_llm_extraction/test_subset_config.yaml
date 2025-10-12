@@ -1,0 +1,8 @@
+patient_fhir_id: e4BwD8ZYDBccepXcJ.Ilo3w3
+person_id: 1277724
+output_dir: /Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/local_llm_extraction/test_output
+
+# Test with just 2 variables and 5 documents
+test_mode: true
+max_documents: 5
+max_variables: 2
