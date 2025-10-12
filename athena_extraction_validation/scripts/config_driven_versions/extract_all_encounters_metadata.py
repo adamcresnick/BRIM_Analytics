@@ -1,34 +1,41 @@
 #!/usr/bin/env python3
 """
-Extract ALL encounters and appointments metadata for patient C1277724
+Extract ALL encounters and appointments metadata from patient configuration
 Purpose: Comprehensive data dump for analysis before implementing filtering logic
 """
 
 import boto3
 import pandas as pd
 import time
+import json
 from datetime import datetime
 from pathlib import Path
 
 class AllEncountersExtractor:
-    def __init__(self, aws_profile: str, database: str):
+    def __init__(self, aws_profile: str, database: str, patient_config: dict):
         """Initialize AWS Athena connection"""
         self.session = boto3.Session(profile_name=aws_profile)
         self.athena = self.session.client('athena', region_name='us-east-1')
         self.database = database
         self.s3_output = 's3://aws-athena-query-results-343218191717-us-east-1/'
         
-        # Patient details
-        self.patient_research_id = "C1277724"
-        self.patient_fhir_id = "e4BwD8ZYDBccepXcJ.Ilo3w3"
-        self.birth_date = datetime.strptime('2005-05-13', '%Y-%m-%d')
+        # Load patient details from config
+        self.patient_fhir_id = patient_config['fhir_id']
+        self.output_dir = Path(patient_config['output_dir'])
+        
+        # Parse birth date if provided (optional)
+        if patient_config.get('birth_date'):
+            self.birth_date = datetime.strptime(patient_config['birth_date'], '%Y-%m-%d')
+        else:
+            self.birth_date = None
         
         print(f"\n{'='*80}")
         print(f"📊 ALL ENCOUNTERS & APPOINTMENTS METADATA EXTRACTOR")
         print(f"{'='*80}")
-        print(f"Patient Research ID: {self.patient_research_id}")
         print(f"Patient FHIR ID: {self.patient_fhir_id}")
-        print(f"Birth Date: {self.birth_date.strftime('%Y-%m-%d')}")
+        if self.birth_date:
+            print(f"Birth Date: {self.birth_date.strftime('%Y-%m-%d')}")
+        print(f"Output Directory: {self.output_dir}")
         print(f"Database: {self.database}")
         print(f"{'='*80}\n")
     
@@ -82,8 +89,8 @@ class AllEncountersExtractor:
             return []
     
     def calculate_age_days(self, date_str: str) -> int:
-        """Calculate age in days from date string"""
-        if not date_str:
+        """Calculate age in days from date string (only if birth_date provided)"""
+        if not date_str or not self.birth_date:
             return None
         try:
             date_obj = datetime.strptime(date_str[:10], '%Y-%m-%d')
@@ -472,17 +479,14 @@ class AllEncountersExtractor:
         
         print(f"✓ Merged encounters: {len(merged)} rows")
         
-        # Export encounters
-        output_dir = Path(__file__).parent.parent / 'reports'
-        output_dir.mkdir(exist_ok=True, parents=True)
-        
-        encounters_file = output_dir / f'ALL_ENCOUNTERS_METADATA_{self.patient_research_id}.csv'
+        # Export encounters to configured output directory
+        encounters_file = self.output_dir / 'encounters.csv'
         merged.to_csv(encounters_file, index=False)
         print(f"✓ Saved: {encounters_file}")
         
         # Export appointments separately
         if not appointments_df.empty:
-            appointments_file = output_dir / f'ALL_APPOINTMENTS_METADATA_{self.patient_research_id}.csv'
+            appointments_file = self.output_dir / 'appointments.csv'
             appointments_df.to_csv(appointments_file, index=False)
             print(f"✓ Saved: {appointments_file}")
         
@@ -512,10 +516,19 @@ class AllEncountersExtractor:
 
 def main():
     """Main execution"""
+    # Load patient configuration
+    config_file = Path(__file__).parent.parent.parent / 'patient_config.json'
+    with open(config_file) as f:
+        config = json.load(f)
+    
     extractor = AllEncountersExtractor(
-        aws_profile='343218191717_AWSAdministratorAccess',
-        database='fhir_v2_prd_db'
+        aws_profile=config['aws_profile'],
+        database=config['database'],
+        patient_config=config
     )
+    
+    # Ensure output directory exists
+    extractor.output_dir.mkdir(parents=True, exist_ok=True)
     
     # Extract all data
     encounters_df = extractor.extract_main_encounters()
@@ -537,9 +550,9 @@ def main():
         print(f"\n{'='*80}")
         print("📁 OUTPUT FILES:")
         print(f"{'='*80}")
-        print(f"1. ALL_ENCOUNTERS_METADATA_C1277724.csv")
-        print(f"2. ALL_APPOINTMENTS_METADATA_C1277724.csv")
-        print(f"\nLocation: athena_extraction_validation/reports/")
+        print(f"1. encounters.csv")
+        print(f"2. appointments.csv")
+        print(f"\nLocation: {extractor.output_dir}/")
         print(f"{'='*80}\n")
     else:
         print("\n❌ No encounters found!")
