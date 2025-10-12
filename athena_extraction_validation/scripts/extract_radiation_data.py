@@ -977,14 +977,31 @@ def extract_radiation_oncology_documents(athena_client, patient_id):
         # Flag likely external documents (PDFs and images)
         df['doc_is_likely_external'] = df['doc_format_category'].isin(['PDF', 'TIFF Image', 'JPEG Image', 'PNG Image'])
         
-        # Priority scoring: PDFs from Radiation Oncology = highest
-        df['doc_priority'] = 'LOW'
-        df.loc[df['doc_practice_setting'] == 'Radiation Oncology', 'doc_priority'] = 'MEDIUM'
+        # Flag documents needing additional binary retrieval in THIS workflow
+        # HTML/RTF are already extracted separately via existing DocumentReference workflow
+        # Only process non-HTML/RTF formats here for RT-specific content extraction
+        df['doc_needs_retrieval'] = ~df['doc_format_category'].isin(['HTML', 'RTF'])
+        
+        # Priority scoring for manual review and retrieval
+        # HIGH: PDFs from Radiation Oncology (external treatment summaries) - NEEDS RETRIEVAL
+        # MEDIUM: Images from Rad Onc or PDFs from related specialties - NEEDS RETRIEVAL  
+        # LOW: HTML/RTF from Rad Onc - ALREADY EXTRACTED SEPARATELY (listed but not retrieved here)
+        df['doc_priority'] = 'LOW'  # Default for HTML/RTF
         df.loc[
             (df['doc_practice_setting'] == 'Radiation Oncology') & 
             (df['doc_format_category'].isin(['PDF', 'TIFF Image'])),
             'doc_priority'
         ] = 'HIGH'
+        df.loc[
+            (df['doc_practice_setting'] == 'Radiation Oncology') & 
+            (df['doc_format_category'].isin(['JPEG Image', 'PNG Image'])),
+            'doc_priority'
+        ] = 'MEDIUM'
+        df.loc[
+            (df['doc_practice_setting'] != 'Radiation Oncology') & 
+            (df['doc_format_category'].isin(['PDF', 'TIFF Image', 'JPEG Image', 'PNG Image'])),
+            'doc_priority'
+        ] = 'MEDIUM'
         
         print("\n✅ Document Summary:")
         print(f"\nBy Practice Setting:")
@@ -1003,7 +1020,10 @@ def extract_radiation_oncology_documents(athena_client, patient_id):
             print(f"  {priority:40} {count:3}")
         
         external_count = df['doc_is_likely_external'].sum()
+        retrieval_count = df['doc_needs_retrieval'].sum()
         print(f"\nLikely External Documents: {external_count} ({external_count/len(df)*100:.1f}%)")
+        print(f"Needs Retrieval (non-HTML/RTF): {retrieval_count} ({retrieval_count/len(df)*100:.1f}%)")
+        print(f"Already Extracted Elsewhere (HTML/RTF): {len(df) - retrieval_count} ({(len(df) - retrieval_count)/len(df)*100:.1f}%)")
     
     return df
 
@@ -1223,10 +1243,12 @@ def main():
         summary['num_rt_documents_pdf'] = (documents_df['doc_format_category'] == 'PDF').sum()
         summary['num_rt_documents_external'] = documents_df['doc_is_likely_external'].sum()
         summary['num_rt_documents_high_priority'] = (documents_df['doc_priority'] == 'HIGH').sum()
+        summary['num_rt_documents_needs_retrieval'] = documents_df['doc_needs_retrieval'].sum()
     else:
         summary['num_rt_documents_pdf'] = 0
         summary['num_rt_documents_external'] = 0
         summary['num_rt_documents_high_priority'] = 0
+        summary['num_rt_documents_needs_retrieval'] = 0
     
     # Print summary
     print("\n" + "="*80)
@@ -1254,6 +1276,8 @@ def main():
     print(f"PDFs (likely external):        {summary['num_rt_documents_pdf']}")
     print(f"Likely External Docs:          {summary['num_rt_documents_external']}")
     print(f"High Priority Docs:            {summary['num_rt_documents_high_priority']}")
+    print(f"Needs Retrieval (non-HTML/RTF): {summary['num_rt_documents_needs_retrieval']}")
+    print(f"Note: HTML/RTF docs are already extracted via separate workflow")
     
     if 'treatment_techniques' in summary:
         print(f"\nTreatment Techniques:       {summary['treatment_techniques']}")
