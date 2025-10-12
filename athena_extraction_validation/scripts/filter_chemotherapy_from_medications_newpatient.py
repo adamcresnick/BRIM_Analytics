@@ -17,7 +17,6 @@ import pandas as pd
 import numpy as np
 import logging
 import re
-import json
 from pathlib import Path
 from datetime import datetime
 
@@ -28,8 +27,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Reference files
+# Paths
+SCRIPT_DIR = Path(__file__).parent
+ATHENA_VALIDATION_DIR = SCRIPT_DIR.parent
+BRIM_ANALYTICS_DIR = ATHENA_VALIDATION_DIR.parent
+STAGING_DIR = BRIM_ANALYTICS_DIR / 'staging_files'
 REFERENCE_DIR = Path('/Users/resnick/Downloads/RADIANT_Portal/RADIANT_PCA/unified_chemo_index')
+
+# Input/Output files
+INPUT_FILE = Path('staging_files/patient_55529723') / 'medications.csv'
+OUTPUT_FILE = Path('staging_files/patient_55529723') / 'chemotherapy.csv'
+
+# Reference files
 DRUGS_REF = REFERENCE_DIR / 'drugs.csv'
 DRUG_ALIAS_REF = REFERENCE_DIR / 'drug_alias.csv'
 RXNORM_MAP_REF = REFERENCE_DIR / 'rxnorm_code_map.csv'
@@ -303,7 +312,7 @@ def consolidate_matches(all_matches, medications_df):
     return chemo_df, matched_indices
 
 
-def generate_summary(chemo_df, matched_indices, medications_df, output_file):
+def generate_summary(chemo_df, matched_indices, medications_df):
     """Generate comprehensive summary statistics"""
     logger.info("\n" + "="*80)
     logger.info("CHEMOTHERAPY EXTRACTION SUMMARY")
@@ -359,22 +368,13 @@ def generate_summary(chemo_df, matched_indices, medications_df, output_file):
         logger.info(f"  Last chemotherapy order: {chemo_df['authored_on'].max()}")
     
     logger.info(f"\n{'='*80}")
-    logger.info(f"Output saved to: {output_file}")
+    logger.info(f"Output saved to: {OUTPUT_FILE}")
     logger.info(f"{'='*80}\n")
 
 
 def main():
     """Main execution"""
     start_time = datetime.now()
-    
-    # Load patient configuration
-    config_file = Path(__file__).parent.parent / 'patient_config.json'
-    with open(config_file) as f:
-        config = json.load(f)
-    
-    output_dir = Path(config['output_dir'])
-    input_file = output_dir / 'medications.csv'
-    output_file = output_dir / 'chemotherapy.csv'
     
     logger.info("="*80)
     logger.info("CHEMOTHERAPY FILTERING - RADIANT Unified Drug Reference Integration")
@@ -389,8 +389,8 @@ def main():
             return 1
     
     # Load input data
-    logger.info(f"Loading medications metadata from: {input_file}")
-    medications_df = pd.read_csv(input_file)
+    logger.info(f"Loading medications metadata from: {INPUT_FILE}")
+    medications_df = pd.read_csv(INPUT_FILE)
     logger.info(f"  Loaded {len(medications_df)} medication records\n")
     
     # Load reference data
@@ -423,11 +423,11 @@ def main():
     chemo_df, matched_indices = consolidate_matches(all_matches, medications_df)
     
     # Save output
-    chemo_df.to_csv(output_file, index=False)
-    logger.info(f"\nSaved {len(chemo_df)} chemotherapy records to {output_file}")
+    chemo_df.to_csv(OUTPUT_FILE, index=False)
+    logger.info(f"\nSaved {len(chemo_df)} chemotherapy records to {OUTPUT_FILE}")
     
     # Generate summary
-    generate_summary(chemo_df, matched_indices, medications_df, output_file)
+    generate_summary(chemo_df, matched_indices, medications_df)
     
     # Execution time
     end_time = datetime.now()
