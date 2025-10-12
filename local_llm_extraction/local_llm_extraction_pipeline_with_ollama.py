@@ -51,10 +51,16 @@ class LocalLLMExtractionPipeline:
             self.config = yaml.safe_load(f)
 
         self.patient_fhir_id = self.config['patient_fhir_id']
-        self.person_id = self.config.get('pseudo_mrn', self.patient_fhir_id)
+        self.person_id = self.config.get('pseudo_mrn', self.config.get('person_id', self.patient_fhir_id))
 
         # Output directory (same as input files)
-        self.output_dir = Path(self.config['output_directory'])
+        self.output_dir = Path(self.config.get('output_dir', self.config.get('output_directory', '.')))
+
+        # Load test mode settings if present
+        self.max_documents = self.config.get('max_documents', None)
+        self.max_variables = self.config.get('max_variables', None)
+        if self.max_documents or self.max_variables:
+            logger.info(f"TEST MODE ENABLED: max_documents={self.max_documents}, max_variables={self.max_variables}")
 
         # Load input files
         self.project_df = None
@@ -117,6 +123,12 @@ class LocalLLMExtractionPipeline:
         if not project_file.exists():
             raise FileNotFoundError(f"Project file not found: {project_file}")
         self.project_df = pd.read_csv(project_file)
+
+        # Apply test mode limits if specified
+        if hasattr(self, 'max_documents') and self.max_documents:
+            self.project_df = self.project_df.head(self.max_documents)
+            logger.info(f"  TEST MODE: Limited to {self.max_documents} documents")
+
         logger.info(f"  Loaded project.csv: {len(self.project_df)} documents")
 
         # Variables file (extraction instructions)
@@ -124,6 +136,12 @@ class LocalLLMExtractionPipeline:
         if not variables_file.exists():
             raise FileNotFoundError(f"Variables file not found: {variables_file}")
         self.variables_df = pd.read_csv(variables_file)
+
+        # Apply test mode limits if specified
+        if hasattr(self, 'max_variables') and self.max_variables:
+            self.variables_df = self.variables_df.head(self.max_variables)
+            logger.info(f"  TEST MODE: Limited to {self.max_variables} variables")
+
         logger.info(f"  Loaded variables.csv: {len(self.variables_df)} variables")
 
         # Decisions file (adjudication instructions)
@@ -313,7 +331,8 @@ ADJUDICATED VALUE:"""
 
         # For each decision
         for dec_idx, decision_row in self.decisions_df.iterrows():
-            decision_name = decision_row['variable_name']
+            # Fixed: decisions CSV uses 'decision_name' not 'variable_name'
+            decision_name = decision_row['decision_name']
             instruction = decision_row['instruction']
 
             logger.info(f"Decision {dec_idx+1}/{len(self.decisions_df)}: {decision_name}")
