@@ -492,15 +492,15 @@ def extract_care_plan_hierarchy(athena_client, patient_id):
     # Check both the title and the part_of_reference fields
     pattern = '|'.join([re.escape(term) for term in RADIATION_SEARCH_TERMS])
     rad_hierarchy = df[
-        (df['care_plan_title'].str.contains(pattern, na=False, case=False, regex=True)) |
-        (df['part_of_reference'].str.contains(pattern, na=False, case=False, regex=True))
+        (df['cp_title'].str.contains(pattern, na=False, case=False, regex=True)) |
+        (df['cppo_part_of_reference'].str.contains(pattern, na=False, case=False, regex=True))
     ].copy()
     
     print(f"\n✅ Found {len(rad_hierarchy)} radiation-related care plan relationships")
     
     if len(rad_hierarchy) > 0:
         # Analyze reference patterns
-        unique_parents = rad_hierarchy['part_of_reference'].nunique()
+        unique_parents = rad_hierarchy['cppo_part_of_reference'].nunique()
         unique_children = rad_hierarchy['care_plan_id'].nunique()
         
         print(f"   → {unique_parents} unique parent plans")
@@ -535,8 +535,7 @@ def extract_service_request_notes(athena_client, patient_id):
         parent.occurrence_period_start as sr_occurrence_period_start,
         parent.occurrence_period_end as sr_occurrence_period_end,
         note.note_text as srn_note_text,
-        note.note_time as srn_note_time,
-        note.note_author_display as srn_author_display
+        note.note_time as srn_note_time
     FROM {DATABASE}.service_request_note note
     JOIN {DATABASE}.service_request parent ON note.service_request_id = parent.id
     WHERE parent.subject_reference = '{patient_id}'
@@ -705,7 +704,7 @@ def extract_service_request_reason_codes(athena_client, patient_id):
     if len(rad_df) > 0:
         # Show most common RT-related codes
         print("\nMost Common RT-Related Codes:")
-        code_counts = rad_df['reason_display'].value_counts().head(5)
+        code_counts = rad_df['srrc_reason_display'].value_counts().head(5)
         for display, count in code_counts.items():
             print(f"  {display[:60]:60} {count:3}")
     
