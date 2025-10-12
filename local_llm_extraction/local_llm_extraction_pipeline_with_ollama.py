@@ -28,10 +28,11 @@ import sys
 import yaml
 import pandas as pd
 import logging
+import pickle
+import json
 import argparse
 from pathlib import Path
 from datetime import datetime
-import json
 from typing import Dict, List, Any, Optional
 
 # Configure logging
@@ -70,6 +71,12 @@ class LocalLLMExtractionPipeline:
         # Storage for extraction results
         self.variable_results = []  # List of dicts with extraction results
         self.decision_results = []  # List of dicts with adjudication results
+
+        # Checkpoint settings
+        self.checkpoint_dir = self.output_dir / "checkpoints"
+        self.checkpoint_dir.mkdir(exist_ok=True)
+        self.checkpoint_file = self.checkpoint_dir / f"extraction_checkpoint_{self.patient_fhir_id}.pkl"
+        self.completed_variables = set()  # Track which variables are done
 
         # Initialize LLM client (Claude or Ollama)
         self.use_ollama = use_ollama
@@ -113,6 +120,50 @@ class LocalLLMExtractionPipeline:
         logger.info(f"Model Provider: {'Ollama (Local)' if use_ollama else 'Claude API (Cloud)'}")
         logger.info(f"Model: {self.model}")
         logger.info("="*80 + "\n")
+
+    def save_checkpoint(self, variable_name: str):
+        """Save current extraction progress to checkpoint file"""
+        checkpoint_data = {
+            'variable_results': self.variable_results,
+            'completed_variables': self.completed_variables,
+            'last_variable': variable_name,
+            'timestamp': datetime.now().isoformat()
+        }
+        with open(self.checkpoint_file, 'wb') as f:
+            pickle.dump(checkpoint_data, f)
+        logger.info(f"  ✓ Checkpoint saved after completing {variable_name}")
+
+    def load_checkpoint(self):
+        """Load checkpoint if it exists"""
+        if self.checkpoint_file.exists():
+            logger.info(f"Found checkpoint file: {self.checkpoint_file}")
+            with open(self.checkpoint_file, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+
+            self.variable_results = checkpoint_data['variable_results']
+            self.completed_variables = checkpoint_data['completed_variables']
+
+            logger.info(f"  Loaded {len(self.variable_results)} extraction results")
+            logger.info(f"  Completed variables: {sorted(self.completed_variables)}")
+            logger.info(f"  Last checkpoint: {checkpoint_data['timestamp']}")
+
+            # Ask user if they want to resume
+            response = input("\nDo you want to resume from this checkpoint? (yes/no): ").lower()
+            if response in ['yes', 'y']:
+                logger.info("  Resuming from checkpoint...")
+                return True
+            else:
+                logger.info("  Starting fresh extraction...")
+                self.variable_results = []
+                self.completed_variables = set()
+                return False
+        return False
+
+    def cleanup_checkpoint(self):
+        """Remove checkpoint file after successful completion"""
+        if self.checkpoint_file.exists():
+            self.checkpoint_file.unlink()
+            logger.info("  ✓ Checkpoint file removed after successful completion")
 
     def load_input_files(self):
         """Load the 3 BRIM input CSV files"""
@@ -241,6 +292,13 @@ EXTRACTED VALUE:"""
             instruction = variable_row['instruction']
             scope = variable_row.get('scope', 'many_per_note')
 
+            # Skip if variable was already completed in a previous run
+            if variable_name in self.completed_variables:
+                logger.info(f"Variable {var_idx+1}/{len(self.variables_df)}: {variable_name} - SKIPPING (already completed)")
+                # Count the extractions we're skipping
+                extraction_count += len(self.project_df)
+                continue
+
             logger.info(f"Variable {var_idx+1}/{len(self.variables_df)}: {variable_name} (scope: {scope})")
 
             # For each document
@@ -274,7 +332,12 @@ EXTRACTED VALUE:"""
                 if extraction_count % 10 == 0:
                     logger.info(f"  Progress: {extraction_count}/{total_extractions} extractions completed")
 
-            logger.info(f"  Completed {variable_name} across {len(self.project_df)} documents\n")
+            logger.info(f"  Completed {variable_name} across {len(self.project_df)} documents")
+
+            # Mark variable as completed and save checkpoint
+            self.completed_variables.add(variable_name)
+            self.save_checkpoint(variable_name)
+            logger.info("")  # Empty line for readability
 
         logger.info(f"✓ Variable extraction completed: {extraction_count} total extractions\n")
 
@@ -414,6 +477,9 @@ ADJUDICATED VALUE:"""
         start_time = datetime.now()
 
         try:
+            # Step 0: Check for checkpoint
+            checkpoint_loaded = self.load_checkpoint()
+
             # Step 1: Load input files
             self.load_input_files()
 
@@ -425,6 +491,9 @@ ADJUDICATED VALUE:"""
 
             # Step 4: Save results
             var_file, dec_file, summary_file = self.save_results()
+
+            # Step 5: Cleanup checkpoint after successful completion
+            self.cleanup_checkpoint()
 
             # Summary
             end_time = datetime.now()
