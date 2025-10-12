@@ -5,11 +5,19 @@ Extract Radiation Oncology Data from Athena FHIR Database
 This script extracts comprehensive radiation therapy data including:
 - Radiation oncology consults (from appointment_service_type)
 - Treatment appointments (simulations, start, end)
+- Care plan notes with dose information (NEW: care_plan_note)
+- Treatment plan hierarchy (NEW: care_plan_part_of)
 - Treatment timeline reconstruction
 - Re-irradiation identification
 
+Data Sources:
+- appointment + appointment_service_type (consults & treatments)
+- care_plan_note (patient instructions, dose info in Gy)
+- care_plan_part_of (treatment plan hierarchy)
+
 Author: Clinical Data Extraction Team
 Date: 2025-10-12
+Updated: 2025-10-12 - Added care_plan table extraction
 """
 
 import boto3
@@ -23,7 +31,7 @@ from pathlib import Path
 # Configuration
 AWS_PROFILE = '343218191717_AWSAdministratorAccess'
 REGION = 'us-east-1'
-DATABASE = 'fhir_v2_prd_db'
+DATABASE = 'fhir_prd_db'  # UPDATED: Using new production database
 S3_OUTPUT = 's3://aws-athena-query-results-343218191717-us-east-1/'
 
 # Output directory
@@ -325,6 +333,161 @@ def extract_radiation_treatment_appointments(athena_client, patient_fhir_id):
     return rad_df
 
 
+def extract_care_plan_notes(athena_client, patient_id):
+    """
+    Extract radiation-related notes from care_plan_note table.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - care_plan uses bare IDs)
+        
+    Returns:
+        DataFrame with radiation-related care plan notes
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING CARE PLAN NOTES")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        child.care_plan_id,
+        child.note_text,
+        parent.status as care_plan_status,
+        parent.intent as care_plan_intent,
+        parent.title as care_plan_title,
+        parent.period_start,
+        parent.period_end
+    FROM {DATABASE}.care_plan_note child
+    JOIN {DATABASE}.care_plan parent ON child.care_plan_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+    ORDER BY parent.period_start
+    """
+    
+    print("\nQuerying care_plan_note...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No care plan notes found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total care plan notes: {len(df)}")
+    
+    # Filter for radiation-related content
+    pattern = '|'.join([re.escape(term) for term in RADIATION_SEARCH_TERMS])
+    rad_notes = df[
+        df['note_text'].str.contains(pattern, na=False, case=False, regex=True)
+    ].copy()
+    
+    print(f"\n✅ Found {len(rad_notes)} radiation-related care plan notes")
+    
+    if len(rad_notes) > 0:
+        # Extract dose information (Gy) if present
+        rad_notes['contains_dose'] = rad_notes['note_text'].str.contains(
+            r'\d+\.?\d*\s*gy', na=False, case=False, regex=True
+        )
+        
+        dose_mentions = rad_notes['contains_dose'].sum()
+        if dose_mentions > 0:
+            print(f"   → {dose_mentions} notes contain dose information (Gy)")
+        
+        # Categorize note types
+        rad_notes['note_type'] = 'General'
+        for idx, row in rad_notes.iterrows():
+            note_lower = str(row['note_text']).lower()
+            if 'instruction' in note_lower:
+                rad_notes.at[idx, 'note_type'] = 'Patient Instructions'
+            elif 'dose' in note_lower or 'gy' in note_lower:
+                rad_notes.at[idx, 'note_type'] = 'Dosage Information'
+            elif 'side effect' in note_lower or 'symptom' in note_lower:
+                rad_notes.at[idx, 'note_type'] = 'Side Effects/Monitoring'
+        
+        print("\nNote Type Breakdown:")
+        type_counts = rad_notes['note_type'].value_counts()
+        for note_type, count in type_counts.items():
+            print(f"  {note_type:30} {count:3}")
+    
+    return rad_notes
+
+
+def extract_care_plan_hierarchy(athena_client, patient_id):
+    """
+    Extract care plan hierarchy from care_plan_part_of table.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - care_plan uses bare IDs)
+        
+    Returns:
+        DataFrame with care plan hierarchy relationships
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING CARE PLAN HIERARCHY")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        child.care_plan_id,
+        child.part_of_reference,
+        parent.status as care_plan_status,
+        parent.intent as care_plan_intent,
+        parent.title as care_plan_title,
+        parent.period_start,
+        parent.period_end
+    FROM {DATABASE}.care_plan_part_of child
+    JOIN {DATABASE}.care_plan parent ON child.care_plan_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+    ORDER BY parent.period_start
+    """
+    
+    print("\nQuerying care_plan_part_of...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No care plan hierarchy found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total care plan relationships: {len(df)}")
+    
+    # Filter for radiation-related references
+    # Check both the title and the part_of_reference fields
+    pattern = '|'.join([re.escape(term) for term in RADIATION_SEARCH_TERMS])
+    rad_hierarchy = df[
+        (df['care_plan_title'].str.contains(pattern, na=False, case=False, regex=True)) |
+        (df['part_of_reference'].str.contains(pattern, na=False, case=False, regex=True))
+    ].copy()
+    
+    print(f"\n✅ Found {len(rad_hierarchy)} radiation-related care plan relationships")
+    
+    if len(rad_hierarchy) > 0:
+        # Analyze reference patterns
+        unique_parents = rad_hierarchy['part_of_reference'].nunique()
+        unique_children = rad_hierarchy['care_plan_id'].nunique()
+        
+        print(f"   → {unique_parents} unique parent plans")
+        print(f"   → {unique_children} unique child plans")
+        print(f"   → Average {len(rad_hierarchy)/unique_parents:.1f} children per parent")
+    
+    return rad_hierarchy
+
+
 def identify_treatment_courses(rad_df):
     """
     Identify distinct radiation treatment courses from appointment data.
@@ -492,12 +655,23 @@ def main():
     # Extract data
     consults_df = extract_radiation_oncology_consults(athena, patient_fhir_id)
     treatments_df = extract_radiation_treatment_appointments(athena, patient_fhir_id)
+    # NOTE: care_plan tables use bare patient_id (no 'Patient/' prefix)
+    care_plan_notes_df = extract_care_plan_notes(athena, patient_id)
+    care_plan_hierarchy_df = extract_care_plan_hierarchy(athena, patient_id)
     
     # Identify treatment courses
     courses = identify_treatment_courses(treatments_df)
     
     # Generate summary
     summary = generate_summary_report(patient_id, consults_df, treatments_df, courses)
+    
+    # Add care plan summary data
+    summary['num_care_plan_notes'] = len(care_plan_notes_df)
+    summary['num_care_plan_hierarchy'] = len(care_plan_hierarchy_df)
+    if len(care_plan_notes_df) > 0:
+        summary['care_plan_notes_with_dose'] = care_plan_notes_df['contains_dose'].sum()
+    else:
+        summary['care_plan_notes_with_dose'] = 0
     
     # Print summary
     print("\n" + "="*80)
@@ -508,9 +682,13 @@ def main():
     print(f"Number of RT Appointments:  {summary['num_radiation_appointments']}")
     print(f"Number of Treatment Courses: {summary['num_treatment_courses']}")
     print(f"Re-irradiation:             {summary['re_irradiation']}")
+    print(f"\n--- NEW: Care Plan Data ---")
+    print(f"Care Plan Notes (RT-related): {summary['num_care_plan_notes']}")
+    print(f"Notes with Dose Info (Gy):    {summary['care_plan_notes_with_dose']}")
+    print(f"Care Plan Hierarchy Links:    {summary['num_care_plan_hierarchy']}")
     
     if 'treatment_techniques' in summary:
-        print(f"Treatment Techniques:       {summary['treatment_techniques']}")
+        print(f"\nTreatment Techniques:       {summary['treatment_techniques']}")
     
     # Save outputs
     patient_dir = OUTPUT_DIR / f'patient_{patient_id}'
@@ -536,6 +714,18 @@ def main():
         courses_file = patient_dir / 'radiation_treatment_courses.csv'
         courses_df.to_csv(courses_file, index=False)
         print(f"  ✅ Saved: radiation_treatment_courses.csv ({len(courses)} rows)")
+    
+    # Save care plan notes
+    if len(care_plan_notes_df) > 0:
+        notes_file = patient_dir / 'radiation_care_plan_notes.csv'
+        care_plan_notes_df.to_csv(notes_file, index=False)
+        print(f"  ✅ Saved: radiation_care_plan_notes.csv ({len(care_plan_notes_df)} rows)")
+    
+    # Save care plan hierarchy
+    if len(care_plan_hierarchy_df) > 0:
+        hierarchy_file = patient_dir / 'radiation_care_plan_hierarchy.csv'
+        care_plan_hierarchy_df.to_csv(hierarchy_file, index=False)
+        print(f"  ✅ Saved: radiation_care_plan_hierarchy.csv ({len(care_plan_hierarchy_df)} rows)")
     
     # Save summary
     summary_df = pd.DataFrame([summary])
