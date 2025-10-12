@@ -5,8 +5,12 @@ Extract Radiation Oncology Data from Athena FHIR Database
 This script extracts comprehensive radiation therapy data including:
 - Radiation oncology consults (from appointment_service_type)
 - Treatment appointments (simulations, start, end)
-- Care plan notes with dose information (NEW: care_plan_note)
-- Treatment plan hierarchy (NEW: care_plan_part_of)
+- Care plan notes with dose information (care_plan_note)
+- Treatment plan hierarchy (care_plan_part_of)
+- Service request notes with coordination details (service_request_note)
+- RT history from service request reasons (service_request_reason_code)
+- Procedure RT codes (CPT 77xxx, includes proton therapy)
+- Procedure notes with RT keywords (dose information)
 - Treatment timeline reconstruction
 - Re-irradiation identification
 
@@ -14,10 +18,19 @@ Data Sources:
 - appointment + appointment_service_type (consults & treatments)
 - care_plan_note (patient instructions, dose info in Gy)
 - care_plan_part_of (treatment plan hierarchy)
+- service_request_note (treatment coordination, 27.5% RT hit rate)
+- service_request_reason_code (RT history tracking, 4.8% RT hit rate)
+- procedure_code_coding (CPT 77xxx codes, 86 RT codes including proton)
+- procedure_note (RT keywords, 1.0% hit rate but high quality)
+
+Column Naming Convention:
+- Resource prefixes: cp_, cpn_, cppo_, sr_, srn_, srrc_, proc_, pcc_, pn_
+- Enables cross-resource joins and clear data provenance
+- See COLUMN_NAMING_CONVENTIONS.md for full reference
 
 Author: Clinical Data Extraction Team
 Date: 2025-10-12
-Updated: 2025-10-12 - Added care_plan table extraction
+Updated: 2025-10-12 - Added procedure table extraction
 """
 
 import boto3
@@ -37,25 +50,34 @@ S3_OUTPUT = 's3://aws-athena-query-results-343218191717-us-east-1/'
 # Output directory
 OUTPUT_DIR = Path(__file__).parent.parent / 'staging_files'
 
-# Search terms for radiation therapy identification
+# RT-SPECIFIC search terms for radiation therapy identification
+# NOTE: These are RT-SPECIFIC keywords, not general oncology terms
 RADIATION_SEARCH_TERMS = [
-    'radiation',
-    'radiotherapy',
-    'rad onc',
-    'imrt',
-    'xrt',
-    'rt simulation',
-    'rt sim',
-    're-irradiation',
-    'reirradiation',
-    'proton',
-    'photon',
-    'intensity modulated',
-    'stereotactic',
-    'sbrt',
-    'srs',
-    'cranial radiation',
-    'csi',  # Craniospinal irradiation
+    # Core RT terms
+    'radiation', 'radiotherapy', 'rad onc', 'rad-onc', 'radonc', 'radiation oncology',
+    # Modalities & abbreviations
+    'xrt', 'imrt', 'vmat', '3d-crt', '3dcrt', 
+    'proton', 'photon', 'electron',
+    'brachytherapy', 'hdr', 'ldr', 'seed implant',
+    # Stereotactic
+    'stereotactic', 'sbrt', 'srs', 'sabr', 'radiosurgery',
+    'gamma knife', 'cyberknife',
+    # Delivery & planning
+    'beam', 'external beam', 'teletherapy', 'conformal',
+    'intensity modulated', 'volumetric modulated',
+    # Treatment phases
+    'rt simulation', 'rt sim', 'simulation',
+    're-irradiation', 'reirradiation', 'boost',
+    # Dosimetry
+    'dose', 'dosage', 'gy', 'gray', 'cgy', 'centigray',
+    'fraction', 'fractions', 'fractionation',
+    # Technical terms
+    'isocenter', 'ptv', 'gtv', 'ctv', 'planning target',
+    'treatment planning', 'port film', 'portal',
+    'linac', 'linear accelerator', 'cyclotron',
+    # Anatomical sites (RT-specific)
+    'cranial radiation', 'csi', 'craniospinal',
+    'whole brain', 'wbrt', 'pci',  # Prophylactic cranial irradiation
 ]
 
 
@@ -351,12 +373,12 @@ def extract_care_plan_notes(athena_client, patient_id):
     query = f"""
     SELECT 
         child.care_plan_id,
-        child.note_text,
-        parent.status as care_plan_status,
-        parent.intent as care_plan_intent,
-        parent.title as care_plan_title,
-        parent.period_start,
-        parent.period_end
+        child.note_text as cpn_note_text,
+        parent.status as cp_status,
+        parent.intent as cp_intent,
+        parent.title as cp_title,
+        parent.period_start as cp_period_start,
+        parent.period_end as cp_period_end
     FROM {DATABASE}.care_plan_note child
     JOIN {DATABASE}.care_plan parent ON child.care_plan_id = parent.id
     WHERE parent.subject_reference = '{patient_id}'
@@ -384,34 +406,34 @@ def extract_care_plan_notes(athena_client, patient_id):
     # Filter for radiation-related content
     pattern = '|'.join([re.escape(term) for term in RADIATION_SEARCH_TERMS])
     rad_notes = df[
-        df['note_text'].str.contains(pattern, na=False, case=False, regex=True)
+        df['cpn_note_text'].str.contains(pattern, na=False, case=False, regex=True)
     ].copy()
     
     print(f"\n✅ Found {len(rad_notes)} radiation-related care plan notes")
     
     if len(rad_notes) > 0:
         # Extract dose information (Gy) if present
-        rad_notes['contains_dose'] = rad_notes['note_text'].str.contains(
+        rad_notes['cpn_contains_dose'] = rad_notes['cpn_note_text'].str.contains(
             r'\d+\.?\d*\s*gy', na=False, case=False, regex=True
         )
         
-        dose_mentions = rad_notes['contains_dose'].sum()
+        dose_mentions = rad_notes['cpn_contains_dose'].sum()
         if dose_mentions > 0:
             print(f"   → {dose_mentions} notes contain dose information (Gy)")
         
         # Categorize note types
-        rad_notes['note_type'] = 'General'
+        rad_notes['cpn_note_type'] = 'General'
         for idx, row in rad_notes.iterrows():
-            note_lower = str(row['note_text']).lower()
+            note_lower = str(row['cpn_note_text']).lower()
             if 'instruction' in note_lower:
-                rad_notes.at[idx, 'note_type'] = 'Patient Instructions'
+                rad_notes.at[idx, 'cpn_note_type'] = 'Patient Instructions'
             elif 'dose' in note_lower or 'gy' in note_lower:
-                rad_notes.at[idx, 'note_type'] = 'Dosage Information'
+                rad_notes.at[idx, 'cpn_note_type'] = 'Dosage Information'
             elif 'side effect' in note_lower or 'symptom' in note_lower:
-                rad_notes.at[idx, 'note_type'] = 'Side Effects/Monitoring'
+                rad_notes.at[idx, 'cpn_note_type'] = 'Side Effects/Monitoring'
         
         print("\nNote Type Breakdown:")
-        type_counts = rad_notes['note_type'].value_counts()
+        type_counts = rad_notes['cpn_note_type'].value_counts()
         for note_type, count in type_counts.items():
             print(f"  {note_type:30} {count:3}")
     
@@ -436,12 +458,12 @@ def extract_care_plan_hierarchy(athena_client, patient_id):
     query = f"""
     SELECT 
         child.care_plan_id,
-        child.part_of_reference,
-        parent.status as care_plan_status,
-        parent.intent as care_plan_intent,
-        parent.title as care_plan_title,
-        parent.period_start,
-        parent.period_end
+        child.part_of_reference as cppo_part_of_reference,
+        parent.status as cp_status,
+        parent.intent as cp_intent,
+        parent.title as cp_title,
+        parent.period_start as cp_period_start,
+        parent.period_end as cp_period_end
     FROM {DATABASE}.care_plan_part_of child
     JOIN {DATABASE}.care_plan parent ON child.care_plan_id = parent.id
     WHERE parent.subject_reference = '{patient_id}'
@@ -486,6 +508,374 @@ def extract_care_plan_hierarchy(athena_client, patient_id):
         print(f"   → Average {len(rad_hierarchy)/unique_parents:.1f} children per parent")
     
     return rad_hierarchy
+
+
+def extract_service_request_notes(athena_client, patient_id):
+    """
+    Extract radiation-related notes from service_request_note table.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - service_request uses bare IDs)
+        
+    Returns:
+        DataFrame with radiation-related service request notes
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING SERVICE REQUEST NOTES")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        parent.id as service_request_id,
+        parent.intent as sr_intent,
+        parent.status as sr_status,
+        parent.authored_on as sr_authored_on,
+        parent.occurrence_date_time as sr_occurrence_date_time,
+        parent.occurrence_period_start as sr_occurrence_period_start,
+        parent.occurrence_period_end as sr_occurrence_period_end,
+        note.note_text as srn_note_text,
+        note.note_time as srn_note_time,
+        note.note_author_display as srn_author_display
+    FROM {DATABASE}.service_request_note note
+    JOIN {DATABASE}.service_request parent ON note.service_request_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+    ORDER BY COALESCE(note.note_time, parent.occurrence_date_time, parent.occurrence_period_start, parent.authored_on)
+    """
+    
+    print("\nQuerying service_request_note...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No service request notes found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total service request notes: {len(df)}")
+    
+    # Filter for radiation-specific content
+    rt_specific_keywords = [
+        'radiation', 'radiotherapy', 'xrt', 'rt ', 'imrt', 'vmat', 'proton',
+        'dose', 'gy', 'gray', 'fraction', 'beam', 'stereotactic', 'sbrt', 'srs'
+    ]
+    pattern = '|'.join([re.escape(term) for term in rt_specific_keywords])
+    
+    rad_notes = df[
+        df['srn_note_text'].str.contains(pattern, na=False, case=False, regex=True)
+    ].copy()
+    
+    print(f"\n✅ Found {len(rad_notes)} radiation-specific service request notes")
+    
+    if len(rad_notes) > 0:
+        # Extract dose information (Gy) if present
+        rad_notes['srn_contains_dose'] = rad_notes['srn_note_text'].str.contains(
+            r'\d+\.?\d*\s*gy', na=False, case=False, regex=True
+        )
+        
+        dose_mentions = rad_notes['srn_contains_dose'].sum()
+        if dose_mentions > 0:
+            print(f"   → {dose_mentions} notes contain dose information (Gy)")
+        
+        # Categorize note types
+        rad_notes['srn_note_type'] = 'General'
+        for idx, row in rad_notes.iterrows():
+            note_lower = str(row['srn_note_text']).lower()
+            if 'coordination' in note_lower or 'schedule' in note_lower:
+                rad_notes.at[idx, 'srn_note_type'] = 'Treatment Coordination'
+            elif 'dose' in note_lower or 'gy' in note_lower:
+                rad_notes.at[idx, 'srn_note_type'] = 'Dosage Information'
+            elif 'team' in note_lower or 'oncology' in note_lower:
+                rad_notes.at[idx, 'srn_note_type'] = 'Team Communication'
+        
+        print("\nNote Type Breakdown:")
+        type_counts = rad_notes['srn_note_type'].value_counts()
+        for note_type, count in type_counts.items():
+            print(f"  {note_type:30} {count:3}")
+    
+    return rad_notes
+
+
+def extract_service_request_reason_codes(athena_client, patient_id):
+    """
+    Extract RT history codes from service_request_reason_code table.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - service_request uses bare IDs)
+        
+    Returns:
+        DataFrame with radiation therapy history codes
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING SERVICE REQUEST REASON CODES (RT HISTORY)")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        parent.id as service_request_id,
+        parent.intent as sr_intent,
+        parent.status as sr_status,
+        parent.authored_on as sr_authored_on,
+        parent.occurrence_date_time as sr_occurrence_date_time,
+        parent.occurrence_period_start as sr_occurrence_period_start,
+        parent.occurrence_period_end as sr_occurrence_period_end,
+        reason.reason_code_coding as srrc_reason_code_coding,
+        reason.reason_code_text as srrc_reason_code_text
+    FROM {DATABASE}.service_request_reason_code reason
+    JOIN {DATABASE}.service_request parent ON reason.service_request_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+    ORDER BY COALESCE(parent.occurrence_date_time, parent.occurrence_period_start, parent.authored_on)
+    """
+    
+    print("\nQuerying service_request_reason_code...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No service request reason codes found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total service request reason codes: {len(df)}")
+    
+    # Parse JSON codings and filter for RT-specific content
+    rt_specific_keywords = [
+        'radiation', 'radiotherapy', 'beam', 'xrt', 'imrt', 'proton',
+        'dose', 'gy', 'stereotactic', 'brachytherapy'
+    ]
+    
+    rt_records = []
+    for idx, row in df.iterrows():
+        coding_json = row['srrc_reason_code_coding']
+        text = row['srrc_reason_code_text']
+        
+        # Parse JSON coding array
+        try:
+            codings = json.loads(coding_json.replace("'", '"')) if coding_json else []
+        except:
+            codings = []
+        
+        # Check text and all coding displays for RT-specific keywords
+        combined_text = (text.lower() if text else '')
+        for coding in codings:
+            if isinstance(coding, dict):
+                combined_text += ' ' + coding.get('display', '').lower()
+                combined_text += ' ' + coding.get('code', '').lower()
+        
+        # Check for RT keywords
+        is_rt_related = any(keyword in combined_text for keyword in rt_specific_keywords)
+        
+        if is_rt_related:
+            # Extract primary coding
+            primary = codings[0] if codings else {}
+            rt_records.append({
+                'service_request_id': row['service_request_id'],
+                'sr_intent': row['sr_intent'],
+                'sr_status': row['sr_status'],
+                'sr_authored_on': row['sr_authored_on'],
+                'sr_occurrence_date_time': row['sr_occurrence_date_time'],
+                'sr_occurrence_period_start': row['sr_occurrence_period_start'],
+                'sr_occurrence_period_end': row['sr_occurrence_period_end'],
+                'srrc_reason_code': primary.get('code', ''),
+                'srrc_reason_display': primary.get('display', ''),
+                'srrc_reason_system': primary.get('system', ''),
+                'srrc_reason_text': text,
+                'srrc_num_codings': len(codings)
+            })
+    
+    rad_df = pd.DataFrame(rt_records)
+    
+    print(f"\n✅ Found {len(rad_df)} RT-specific reason codes")
+    
+    if len(rad_df) > 0:
+        # Show most common RT-related codes
+        print("\nMost Common RT-Related Codes:")
+        code_counts = rad_df['reason_display'].value_counts().head(5)
+        for display, count in code_counts.items():
+            print(f"  {display[:60]:60} {count:3}")
+    
+    return rad_df
+
+
+def extract_procedure_rt_codes(athena_client, patient_id):
+    """
+    Extract RT procedures via CPT codes from procedure_code_coding.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - procedure uses bare IDs)
+        
+    Returns:
+        DataFrame with RT procedure codes
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING PROCEDURE RT CODES (CPT 77xxx)")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        parent.id as procedure_id,
+        parent.performed_date_time as proc_performed_date_time,
+        parent.performed_period_start as proc_performed_period_start,
+        parent.performed_period_end as proc_performed_period_end,
+        parent.status as proc_status,
+        parent.code_text as proc_code_text,
+        parent.category_text as proc_category_text,
+        coding.code_coding_code as pcc_code,
+        coding.code_coding_display as pcc_display,
+        coding.code_coding_system as pcc_system
+    FROM {DATABASE}.procedure_code_coding coding
+    JOIN {DATABASE}.procedure parent ON coding.procedure_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+      AND (
+          coding.code_coding_code LIKE '77%'
+          OR LOWER(coding.code_coding_display) LIKE '%radiation%'
+          OR LOWER(coding.code_coding_display) LIKE '%radiotherapy%'
+          OR LOWER(coding.code_coding_display) LIKE '%brachytherapy%'
+          OR LOWER(coding.code_coding_display) LIKE '%proton%'
+      )
+    ORDER BY parent.performed_date_time
+    """
+    
+    print("\nQuerying procedure_code_coding...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No RT procedure codes found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"\n✅ Found {len(df)} RT procedure codes")
+    
+    if len(df) > 0:
+        # Categorize by CPT code range and display text
+        df['pcc_procedure_type'] = 'Other RT'
+        for idx, row in df.iterrows():
+            code = str(row['pcc_code'])
+            display = str(row['pcc_display']).lower()
+            
+            if 'fluoro' in display or 'venous access' in display or 'picc' in display or 'port' in display:
+                df.at[idx, 'pcc_procedure_type'] = 'IR/Fluoro (not RT)'
+            elif 'proton' in display:
+                df.at[idx, 'pcc_procedure_type'] = 'Proton Therapy'
+            elif code.startswith('770'):
+                df.at[idx, 'pcc_procedure_type'] = 'Consultation/Planning'
+            elif code.startswith('771'):
+                df.at[idx, 'pcc_procedure_type'] = 'Physics/Dosimetry'
+            elif code.startswith('772'):
+                df.at[idx, 'pcc_procedure_type'] = 'Treatment Delivery'
+            elif code.startswith('773'):
+                df.at[idx, 'pcc_procedure_type'] = 'Stereotactic'
+            elif code.startswith('774'):
+                df.at[idx, 'pcc_procedure_type'] = 'Brachytherapy'
+        
+        print("\nProcedure Type Breakdown:")
+        type_counts = df['pcc_procedure_type'].value_counts()
+        for proc_type, count in type_counts.items():
+            print(f"  {proc_type:30} {count:3}")
+    
+    return df
+
+
+def extract_procedure_notes(athena_client, patient_id):
+    """
+    Extract RT-related procedure notes.
+    
+    Args:
+        athena_client: boto3 Athena client
+        patient_id: Patient ID (WITHOUT 'Patient/' prefix - procedure uses bare IDs)
+        
+    Returns:
+        DataFrame with RT-related procedure notes
+    """
+    print("\n" + "="*80)
+    print("EXTRACTING PROCEDURE NOTES (RT-SPECIFIC)")
+    print("="*80)
+    
+    query = f"""
+    SELECT 
+        parent.id as procedure_id,
+        parent.performed_date_time as proc_performed_date_time,
+        parent.performed_period_start as proc_performed_period_start,
+        parent.performed_period_end as proc_performed_period_end,
+        parent.status as proc_status,
+        parent.code_text as proc_code_text,
+        note.note_text as pn_note_text,
+        note.note_time as pn_note_time,
+        note.note_author_reference_display as pn_author_display
+    FROM {DATABASE}.procedure_note note
+    JOIN {DATABASE}.procedure parent ON note.procedure_id = parent.id
+    WHERE parent.subject_reference = '{patient_id}'
+      AND note.note_text IS NOT NULL
+    ORDER BY parent.performed_date_time
+    """
+    
+    print("\nQuerying procedure_note...")
+    results = execute_athena_query(athena_client, query, DATABASE)
+    
+    if not results or len(results['ResultSet']['Rows']) <= 1:
+        print("No procedure notes found.")
+        return pd.DataFrame()
+    
+    # Parse results
+    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
+    data = []
+    
+    for row in results['ResultSet']['Rows'][1:]:
+        data.append([col.get('VarCharValue', '') for col in row['Data']])
+    
+    df = pd.DataFrame(data, columns=columns)
+    
+    print(f"Total procedure notes: {len(df)}")
+    
+    # Filter for RT-specific content
+    rt_keywords = [
+        'radiation', 'radiotherapy', 'xrt', 'rt ', 'imrt', 'vmat', 'proton',
+        'brachytherapy', 'ldr', 'hdr', 'dose', 'gy', 'gray', 'fraction',
+        'stereotactic', 'sbrt', 'srs'
+    ]
+    pattern = '|'.join([re.escape(term) for term in rt_keywords])
+    
+    rad_notes = df[
+        df['pn_note_text'].str.contains(pattern, na=False, case=False, regex=True)
+    ].copy()
+    
+    print(f"\n✅ Found {len(rad_notes)} RT-specific procedure notes")
+    
+    if len(rad_notes) > 0:
+        # Extract dose information (Gy) if present
+        rad_notes['pn_contains_dose'] = rad_notes['pn_note_text'].str.contains(
+            r'\d+\.?\d*\s*gy', na=False, case=False, regex=True
+        )
+        
+        dose_mentions = rad_notes['pn_contains_dose'].sum()
+        if dose_mentions > 0:
+            print(f"   → {dose_mentions} notes contain dose information (Gy)")
+    
+    return rad_notes
 
 
 def identify_treatment_courses(rad_df):
@@ -655,9 +1045,15 @@ def main():
     # Extract data
     consults_df = extract_radiation_oncology_consults(athena, patient_fhir_id)
     treatments_df = extract_radiation_treatment_appointments(athena, patient_fhir_id)
-    # NOTE: care_plan tables use bare patient_id (no 'Patient/' prefix)
+    # NOTE: care_plan and service_request tables use bare patient_id (no 'Patient/' prefix)
     care_plan_notes_df = extract_care_plan_notes(athena, patient_id)
     care_plan_hierarchy_df = extract_care_plan_hierarchy(athena, patient_id)
+    # NEW: service_request tables
+    service_request_notes_df = extract_service_request_notes(athena, patient_id)
+    service_request_reason_df = extract_service_request_reason_codes(athena, patient_id)
+    # NEW: procedure tables
+    procedure_rt_codes_df = extract_procedure_rt_codes(athena, patient_id)
+    procedure_notes_df = extract_procedure_notes(athena, patient_id)
     
     # Identify treatment courses
     courses = identify_treatment_courses(treatments_df)
@@ -669,9 +1065,25 @@ def main():
     summary['num_care_plan_notes'] = len(care_plan_notes_df)
     summary['num_care_plan_hierarchy'] = len(care_plan_hierarchy_df)
     if len(care_plan_notes_df) > 0:
-        summary['care_plan_notes_with_dose'] = care_plan_notes_df['contains_dose'].sum()
+        summary['care_plan_notes_with_dose'] = care_plan_notes_df['cpn_contains_dose'].sum()
     else:
         summary['care_plan_notes_with_dose'] = 0
+    
+    # Add service_request summary data
+    summary['num_service_request_notes'] = len(service_request_notes_df)
+    summary['num_service_request_rt_history'] = len(service_request_reason_df)
+    if len(service_request_notes_df) > 0:
+        summary['service_request_notes_with_dose'] = service_request_notes_df['srn_contains_dose'].sum()
+    else:
+        summary['service_request_notes_with_dose'] = 0
+    
+    # Add procedure summary data
+    summary['num_procedure_rt_codes'] = len(procedure_rt_codes_df)
+    summary['num_procedure_notes'] = len(procedure_notes_df)
+    if len(procedure_notes_df) > 0:
+        summary['procedure_notes_with_dose'] = procedure_notes_df['pn_contains_dose'].sum()
+    else:
+        summary['procedure_notes_with_dose'] = 0
     
     # Print summary
     print("\n" + "="*80)
@@ -682,10 +1094,18 @@ def main():
     print(f"Number of RT Appointments:  {summary['num_radiation_appointments']}")
     print(f"Number of Treatment Courses: {summary['num_treatment_courses']}")
     print(f"Re-irradiation:             {summary['re_irradiation']}")
-    print(f"\n--- NEW: Care Plan Data ---")
+    print(f"\n--- Care Plan Data ---")
     print(f"Care Plan Notes (RT-related): {summary['num_care_plan_notes']}")
     print(f"Notes with Dose Info (Gy):    {summary['care_plan_notes_with_dose']}")
     print(f"Care Plan Hierarchy Links:    {summary['num_care_plan_hierarchy']}")
+    print(f"\n--- Service Request Data ---")
+    print(f"Service Request Notes (RT):   {summary['num_service_request_notes']}")
+    print(f"Notes with Dose Info (Gy):    {summary['service_request_notes_with_dose']}")
+    print(f"RT History Reason Codes:      {summary['num_service_request_rt_history']}")
+    print(f"\n--- Procedure Data (NEW) ---")
+    print(f"Procedure RT Codes (CPT 77xxx): {summary['num_procedure_rt_codes']}")
+    print(f"Procedure Notes (RT keywords):  {summary['num_procedure_notes']}")
+    print(f"Notes with Dose Info (Gy):      {summary['procedure_notes_with_dose']}")
     
     if 'treatment_techniques' in summary:
         print(f"\nTreatment Techniques:       {summary['treatment_techniques']}")
@@ -726,6 +1146,30 @@ def main():
         hierarchy_file = patient_dir / 'radiation_care_plan_hierarchy.csv'
         care_plan_hierarchy_df.to_csv(hierarchy_file, index=False)
         print(f"  ✅ Saved: radiation_care_plan_hierarchy.csv ({len(care_plan_hierarchy_df)} rows)")
+    
+    # Save service request notes
+    if len(service_request_notes_df) > 0:
+        sr_notes_file = patient_dir / 'service_request_notes.csv'
+        service_request_notes_df.to_csv(sr_notes_file, index=False)
+        print(f"  ✅ Saved: service_request_notes.csv ({len(service_request_notes_df)} rows)")
+    
+    # Save service request reason codes (RT history)
+    if len(service_request_reason_df) > 0:
+        sr_reason_file = patient_dir / 'service_request_rt_history.csv'
+        service_request_reason_df.to_csv(sr_reason_file, index=False)
+        print(f"  ✅ Saved: service_request_rt_history.csv ({len(service_request_reason_df)} rows)")
+    
+    # Save procedure RT codes
+    if len(procedure_rt_codes_df) > 0:
+        proc_codes_file = patient_dir / 'procedure_rt_codes.csv'
+        procedure_rt_codes_df.to_csv(proc_codes_file, index=False)
+        print(f"  ✅ Saved: procedure_rt_codes.csv ({len(procedure_rt_codes_df)} rows)")
+    
+    # Save procedure notes
+    if len(procedure_notes_df) > 0:
+        proc_notes_file = patient_dir / 'procedure_notes.csv'
+        procedure_notes_df.to_csv(proc_notes_file, index=False)
+        print(f"  ✅ Saved: procedure_notes.csv ({len(procedure_notes_df)} rows)")
     
     # Save summary
     summary_df = pd.DataFrame([summary])
