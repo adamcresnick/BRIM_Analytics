@@ -292,24 +292,14 @@ class AllEncountersExtractor:
         
         # Use appointment_participant pathway (CORRECT approach)
         # This query uses a simple JOIN that Athena supports
+        # NOTE: Athena does NOT support OR clauses in this context
+        # NOTE: Athena does NOT support column aliasing with JOINs in this context - must use SELECT a.*
+        # Data uses 'Patient/{fhir_id}' format in participant_actor_reference
         query = f"""
-        SELECT DISTINCT
-            a.id as appointment_fhir_id,
-            a.status as appointment_status,
-            a.appointment_type_text,
-            a.description,
-            a.start,
-            a.end,
-            a.minutes_duration,
-            a.created,
-            a.comment,
-            a.patient_instruction,
-            a.cancelation_reason_text,
-            a.priority
+        SELECT DISTINCT a.*
         FROM {self.database}.appointment a
         JOIN {self.database}.appointment_participant ap ON a.id = ap.appointment_id
-        WHERE ap.participant_actor_reference = '{self.patient_fhir_id}'
-           OR ap.participant_actor_reference = 'Patient/{self.patient_fhir_id}'
+        WHERE ap.participant_actor_reference = 'Patient/{self.patient_fhir_id}'
         ORDER BY a.start
         """
         
@@ -320,18 +310,26 @@ class AllEncountersExtractor:
         
         df = pd.DataFrame(appointments)
         
+        # Rename columns to match expected format (since we use SELECT a.*)
+        df = df.rename(columns={
+            'id': 'appointment_fhir_id',
+            'status': 'appointment_status'
+        })
+        
         # Calculate age in days
         df['age_at_appointment_days'] = df['start'].apply(self.calculate_age_days)
         
         # Calculate appointment date
         df['appointment_date'] = df['start'].str[:10]
         
-        # Reorder columns
+        # Reorder columns - use only columns that exist
         cols = ['appointment_fhir_id', 'appointment_date', 'age_at_appointment_days', 
                 'appointment_status', 'appointment_type_text', 'description', 'start', 'end',
                 'minutes_duration', 'created', 'comment', 'patient_instruction',
                 'cancelation_reason_text', 'priority']
         
+        # Only include columns that exist in the dataframe
+        cols = [c for c in cols if c in df.columns]
         df = df[cols]
         
         print(f"\n📊 Summary:")
