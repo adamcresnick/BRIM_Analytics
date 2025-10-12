@@ -1345,27 +1345,27 @@ def main():
     
     # Save service request notes
     if len(service_request_notes_df) > 0:
-        sr_notes_file = output_dir / 'service_request_notes.csv'
+        sr_notes_file = output_dir / 'radiation_service_request_notes.csv'
         service_request_notes_df.to_csv(sr_notes_file, index=False)
-        print(f"  ✅ Saved: service_request_notes.csv ({len(service_request_notes_df)} rows)")
+        print(f"  ✅ Saved: radiation_service_request_notes.csv ({len(service_request_notes_df)} rows)")
     
     # Save service request reason codes (RT history)
     if len(service_request_reason_df) > 0:
-        sr_reason_file = output_dir / 'service_request_rt_history.csv'
+        sr_reason_file = output_dir / 'radiation_service_request_rt_history.csv'
         service_request_reason_df.to_csv(sr_reason_file, index=False)
-        print(f"  ✅ Saved: service_request_rt_history.csv ({len(service_request_reason_df)} rows)")
+        print(f"  ✅ Saved: radiation_service_request_rt_history.csv ({len(service_request_reason_df)} rows)")
     
     # Save procedure RT codes
     if len(procedure_rt_codes_df) > 0:
-        proc_codes_file = output_dir / 'procedure_rt_codes.csv'
+        proc_codes_file = output_dir / 'radiation_procedure_rt_codes.csv'
         procedure_rt_codes_df.to_csv(proc_codes_file, index=False)
-        print(f"  ✅ Saved: procedure_rt_codes.csv ({len(procedure_rt_codes_df)} rows)")
+        print(f"  ✅ Saved: radiation_procedure_rt_codes.csv ({len(procedure_rt_codes_df)} rows)")
     
     # Save procedure notes
     if len(procedure_notes_df) > 0:
-        proc_notes_file = output_dir / 'procedure_notes.csv'
+        proc_notes_file = output_dir / 'radiation_procedure_notes.csv'
         procedure_notes_df.to_csv(proc_notes_file, index=False)
-        print(f"  ✅ Saved: procedure_notes.csv ({len(procedure_notes_df)} rows)")
+        print(f"  ✅ Saved: radiation_procedure_notes.csv ({len(procedure_notes_df)} rows)")
     
     # Save radiation oncology documents
     if len(documents_df) > 0:

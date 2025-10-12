@@ -59,9 +59,17 @@ class BinaryFilesExtractor:
         self.output_bucket = 'radiant-prd-343218191717-us-east-1-prd-ehr-pipeline'
         self.work_group = 'primary'
         
-        # Initialize AWS clients
-        self.athena_client = boto3.client('athena', region_name='us-east-1')
-        self.s3_client = boto3.client('s3', region_name='us-east-1')
+        # Get AWS profile from config (if provided)
+        self.aws_profile = patient_config.get('aws_profile')
+        
+        # Initialize AWS clients with profile
+        session_kwargs = {'region_name': 'us-east-1'}
+        if self.aws_profile:
+            session_kwargs['profile_name'] = self.aws_profile
+        session = boto3.Session(**session_kwargs)
+        
+        self.athena_client = session.client('athena')
+        self.s3_client = session.client('s3')
         
         logger.info("=" * 100)
         logger.info("📄 BINARY FILES METADATA EXTRACTOR")
