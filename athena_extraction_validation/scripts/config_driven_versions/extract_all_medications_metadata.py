@@ -276,6 +276,7 @@ def build_comprehensive_query(database, patient_id):
         cp.title as cp_title,
         cp.status as cp_status,  -- ⭐ CLARIFIED: care_plan status (not medication_request status)
         cp.intent as cp_intent,  -- ⭐ CLARIFIED: care_plan intent (not medication_request intent)
+        cp.created as cp_created,  -- ⭐ ADDED: When care plan was created (validated in DATE_FIELDS_VALIDATION.md)
         cp.period_start as cp_period_start,  -- ⭐ CLARIFIED: care_plan period (not medication validity period)
         cp.period_end as cp_period_end,
         cp.author_display as cp_author_display,

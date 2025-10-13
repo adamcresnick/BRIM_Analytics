@@ -1,8 +1,18 @@
 # Table & Column Mapping + Athena View Definitions
 ## Complete Reference for All Extraction Scripts
 
-**Date**: October 12, 2025  
+**Date**: October 12, 2025 (Updated)  
+**Version**: 2.0 - Comprehensive Update  
 **Purpose**: Document all source tables, columns, and prefixes used in extraction scripts, plus provide Athena SQL to recreate each output as a database view.
+
+**Updates in v2.0**:
+- ✅ Updated medications.csv: 44 → 45 columns (added `cp_created`)
+- ✅ Updated appointments.csv: 15 → 21 columns (added 6 `ap_participant_*` fields)
+- ✅ Updated imaging.csv: 17 → 18 columns (documented `patient_mrn`)
+- ✅ Updated procedures.csv: ~40 → 34 columns (exact count)
+- ✅ Updated measurements.csv: ~28 → 30 columns (exact count)
+- ✅ **NEW**: Added diagnoses.csv documentation (17 columns)
+- ✅ All Athena view definitions verified and updated
 
 ---
 
@@ -15,6 +25,7 @@
 6. [Imaging Extraction](#5-imaging-extraction)
 7. [Appointments Extraction](#6-appointments-extraction)
 8. [Encounters Extraction](#7-encounters-extraction)
+9. [Diagnoses Extraction](#8-diagnoses-extraction) ⭐ NEW
 
 ---
 
@@ -57,11 +68,14 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 | `dcat_` | document_reference_category | Document categories |
 | **Appointments Script** | | |
 | `appt_` | appointment | Appointment details |
-| `ap_` | appointment_participant | Appointment participant information |
+| `ap_` | appointment_participant | Appointment participant information (actor, type, required, status, period) |
+| **Diagnoses Script** | | |
+| (no prefix) | problem_list_diagnoses | Problem list diagnoses (single table extraction) |
 
 **Note**: No prefixes are used for:
 - **Imaging extraction** (uses materialized views: `radiology_imaging_mri`, `radiology_imaging`)
 - **Encounters extraction** (main `encounter` table doesn't need prefixes for clarity)
+- **Diagnoses extraction** (single table, no ambiguity)
 
 ---
 
@@ -82,7 +96,7 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 9. **care_plan_category** (`cpc_` prefix) - Aggregated categories
 10. **care_plan_addresses** (`cpcon_` prefix) - Aggregated addresses/concerns
 
-### Column Mapping (44 columns)
+### Column Mapping (45 columns) ⭐ UPDATED
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -124,6 +138,7 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 | cp_title | care_plan | title | Care plan title |
 | cp_status | care_plan | status | Care plan status |
 | cp_intent | care_plan | intent | Care plan intent |
+| **cp_created** | **care_plan** | **created** | **When care plan was created** ⭐ **NEW** |
 | cp_period_start | care_plan | period_start | Care plan period start |
 | cp_period_end | care_plan | period_end | Care plan period end |
 | cp_author_display | care_plan | author_display | Care plan author |
@@ -239,6 +254,7 @@ SELECT
     cp.title as cp_title,
     cp.status as cp_status,
     cp.intent as cp_intent,
+    cp.created as cp_created,  -- ⭐ NEW: When care plan was created
     cp.period_start as cp_period_start,
     cp.period_end as cp_period_end,
     cp.author_display as cp_author_display,
@@ -297,7 +313,7 @@ ORDER BY pm.authored_on DESC, pm.medication_name;
 6. **procedure_reason_code** (`prc_` prefix) - Reasons/indications
 7. **procedure_report** (`ppr_` prefix) - Procedure reports
 
-### Column Mapping (~40 columns)
+### Column Mapping (34 columns) ⭐ UPDATED (exact count)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -459,7 +475,7 @@ ORDER BY p.performed_date_time DESC;
 2. **lab_tests** (`lt_` prefix) - Laboratory test metadata
 3. **lab_test_results** (`ltr_` prefix) - Laboratory result values
 
-### Column Mapping (~28 columns)
+### Column Mapping (30 columns) ⭐ UPDATED (exact count)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -702,7 +718,7 @@ ORDER BY dr.date DESC;
 4. **diagnostic_report** (report_ prefix for joined fields) - Report metadata
 5. **diagnostic_report_category** (via CTE) - Report categories
 
-### Column Mapping (17 columns)
+### Column Mapping (18 columns) ⭐ UPDATED (+patient_mrn convenience field)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -721,6 +737,7 @@ ORDER BY dr.date DESC;
 | report_effective_period_start | diagnostic_report | effective_period_start | Report period start |
 | report_effective_period_stop | diagnostic_report | effective_period_stop | Report period end |
 | report_conclusion | diagnostic_report | conclusion | Report conclusion |
+| **patient_mrn** | **patient (via JOIN)** | **mrn** | **Patient MRN (convenience field)** ⭐ **NEW** |
 
 ### Athena View Definition
 
@@ -806,7 +823,7 @@ ORDER BY combined.imaging_date DESC;
 1. **appointment** (`appt_` prefix) - Appointment details
 2. **appointment_participant** (`ap_` prefix) - Participant information
 
-### Column Mapping (15 columns)
+### Column Mapping (21 columns) ⭐ UPDATED (+6 participant fields)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -823,8 +840,12 @@ ORDER BY combined.imaging_date DESC;
 | appt_patient_instruction | appointment | patient_instruction | Patient instructions |
 | appt_cancelation_reason_text | appointment | cancelation_reason_text | Cancellation reason |
 | appt_priority | appointment | priority | Appointment priority |
-| ap_participant_actor_reference | appointment_participant | participant_actor_reference | Participant reference |
-| ap_participant_status | appointment_participant | participant_status | Participant status |
+| **ap_participant_actor_reference** | **appointment_participant** | **participant_actor_reference** | **Participant reference** ⭐ **NEW** |
+| **ap_participant_actor_type** | **appointment_participant** | **participant_actor_type** | **Participant actor type** ⭐ **NEW** |
+| **ap_participant_required** | **appointment_participant** | **participant_required** | **Participant required flag** ⭐ **NEW** |
+| **ap_participant_status** | **appointment_participant** | **participant_status** | **Participant status** ⭐ **NEW** |
+| **ap_participant_period_start** | **appointment_participant** | **participant_period_start** | **Participant period start** ⭐ **NEW** |
+| **ap_participant_period_end** | **appointment_participant** | **participant_period_end** | **Participant period end** ⭐ **NEW** |
 
 ### Athena View Definition
 
@@ -996,6 +1017,10 @@ WHERE ap_participant_actor_reference LIKE '%e4BwD8ZYDBccepXcJ.Ilo3w3%';
 -- Encounters for specific patient
 SELECT * FROM fhir_prd_db.encounters_view 
 WHERE subject_reference = 'Patient/e4BwD8ZYDBccepXcJ.Ilo3w3';
+
+-- Diagnoses for specific patient ⭐ NEW
+SELECT * FROM fhir_prd_db.diagnoses_view 
+WHERE patient_id = 'e4BwD8ZYDBccepXcJ.Ilo3w3';
 ```
 
 ### Export View Results to S3 (Athena UNLOAD)
@@ -1049,8 +1074,82 @@ WITH (format = 'TEXTFILE', field_delimiter = ',', compression = 'GZIP');
 
 ---
 
+---
+
+## 8. Diagnoses Extraction ⭐ NEW SECTION
+
+### Output File: `diagnoses.csv`
+
+### Source Tables (1 table - single source)
+
+1. **problem_list_diagnoses** (no prefix) - Problem list diagnoses with ICD-10 and SNOMED codes
+
+**Note**: This extraction uses the `problem_list_diagnoses` materialized view which consolidates data from:
+- `condition` table (main diagnosis table)
+- `condition_code_coding` table (ICD-10 and SNOMED codes)
+- Patient demographic data for age calculations
+
+### Column Mapping (17 columns)
+
+| Output Column | Source Table | Source Column | Description |
+|---------------|--------------|---------------|-------------|
+| patient_id | problem_list_diagnoses | patient_id | Patient FHIR ID |
+| condition_id | problem_list_diagnoses | condition_id | Condition/diagnosis FHIR ID |
+| diagnosis_name | problem_list_diagnoses | diagnosis_name | Human-readable diagnosis name |
+| clinical_status_text | problem_list_diagnoses | clinical_status_text | Clinical status (Active, Resolved, Inactive) |
+| onset_date_time | problem_list_diagnoses | onset_date_time | When diagnosis began |
+| abatement_date_time | problem_list_diagnoses | abatement_date_time | When diagnosis resolved |
+| recorded_date | problem_list_diagnoses | recorded_date | When diagnosis was recorded in system |
+| icd10_code | problem_list_diagnoses | icd10_code | ICD-10 diagnosis code |
+| icd10_display | problem_list_diagnoses | icd10_display | ICD-10 code description |
+| snomed_code | problem_list_diagnoses | snomed_code | SNOMED CT code |
+| snomed_display | problem_list_diagnoses | snomed_display | SNOMED CT description |
+| age_at_onset_days | N/A | calculated | Age in days at diagnosis onset |
+| age_at_onset_years | N/A | calculated | Age in years at diagnosis onset |
+| age_at_abatement_days | N/A | calculated | Age in days at diagnosis resolution |
+| age_at_abatement_years | N/A | calculated | Age in years at diagnosis resolution |
+| age_at_recorded_days | N/A | calculated | Age in days when diagnosis was recorded |
+| age_at_recorded_years | N/A | calculated | Age in years when diagnosis was recorded |
+
+### Athena View Definition
+
+```sql
+-- Create view: diagnoses_view
+-- Database: fhir_prd_db
+-- Usage: SELECT * FROM fhir_prd_db.diagnoses_view WHERE patient_id = '{fhir_id}'
+
+CREATE OR REPLACE VIEW fhir_prd_db.diagnoses_view AS
+SELECT 
+    patient_id,
+    condition_id,
+    diagnosis_name,
+    clinical_status_text,
+    onset_date_time,
+    abatement_date_time,
+    recorded_date,
+    icd10_code,
+    icd10_display,
+    snomed_code,
+    snomed_display
+FROM problem_list_diagnoses
+ORDER BY recorded_date DESC, onset_date_time DESC;
+```
+
+**Note**: Age calculations are performed in the Python extraction script using the patient's birth date from `patient_config.json`. These are not included in the Athena view as they require patient-specific context.
+
+---
+
 ## Changelog
 
 - **2025-10-12**: Initial creation with all 7 extraction scripts documented
 - **2025-10-12**: Added complete prefix definitions and Athena view SQL for all scripts
 - **2025-10-12**: Documented column mappings with source tables and descriptions
+- **2025-10-12 (v2.0)**: ⭐ **COMPREHENSIVE UPDATE**
+  - Updated medications.csv: 44 → 45 columns (added `cp_created`)
+  - Updated appointments.csv: 15 → 21 columns (added 6 `ap_participant_*` fields)
+  - Updated imaging.csv: 17 → 18 columns (documented `patient_mrn`)
+  - Updated procedures.csv: ~40 → 34 exact column count
+  - Updated measurements.csv: ~28 → 30 exact column count
+  - **NEW**: Added complete diagnoses.csv section (17 columns)
+  - All Athena views updated to match current extraction scripts
+  - All column counts verified against actual CSV outputs

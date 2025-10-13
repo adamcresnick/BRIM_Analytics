@@ -292,10 +292,12 @@ class AllEncountersExtractor:
         
         # Use appointment_participant pathway (CORRECT approach)
         # NOTE: Athena does NOT support column aliasing with JOINs in this context
-        # Must use SELECT a.* and rename columns in pandas for table prefixes
+        # Must use SELECT a.*, ap.* and rename columns in pandas for table prefixes
         # Data uses 'Patient/{fhir_id}' format in participant_actor_reference
         query = f"""
-        SELECT DISTINCT a.*
+        SELECT DISTINCT a.*, ap.participant_actor_reference, ap.participant_actor_type, 
+               ap.participant_required, ap.participant_status, 
+               ap.participant_period_start, ap.participant_period_end
         FROM {self.database}.appointment a
         JOIN {self.database}.appointment_participant ap ON a.id = ap.appointment_id
         WHERE ap.participant_actor_reference = 'Patient/{self.patient_fhir_id}'
@@ -309,7 +311,7 @@ class AllEncountersExtractor:
         
         df = pd.DataFrame(appointments)
         
-        # Rename columns to add appt_ prefix for provenance tracking
+        # Rename columns to add appt_ and ap_ prefixes for provenance tracking
         df = df.rename(columns={
             'id': 'appt_id',
             'status': 'appt_status',
@@ -322,7 +324,14 @@ class AllEncountersExtractor:
             'comment': 'appt_comment',
             'patient_instruction': 'appt_patient_instruction',
             'cancelation_reason_text': 'appt_cancelation_reason_text',
-            'priority': 'appt_priority'
+            'priority': 'appt_priority',
+            # Appointment participant fields (ap_ prefix)
+            'participant_actor_reference': 'ap_participant_actor_reference',
+            'participant_actor_type': 'ap_participant_actor_type',
+            'participant_required': 'ap_participant_required',
+            'participant_status': 'ap_participant_status',
+            'participant_period_start': 'ap_participant_period_start',
+            'participant_period_end': 'ap_participant_period_end'
         })
         
         # Add convenience columns
