@@ -204,6 +204,7 @@ def build_comprehensive_query(database, patient_id):
         
         -- ========================================
         -- ALL FIELDS FROM patient_medications VIEW (10 fields)
+        -- Note: pm_ prefix not added to maintain backward compatibility with existing column names
         -- ========================================
         pm.medication_request_id,
         pm.medication_id,
@@ -216,76 +217,77 @@ def build_comprehensive_query(database, patient_id):
         pm.encounter_display,
         
         -- ========================================
-        -- TEMPORAL FIELDS FROM medication_request TABLE
+        -- TEMPORAL FIELDS FROM medication_request TABLE (mr_ prefix)
         -- ========================================
-        mr.dispense_request_validity_period_start as validity_period_start,
-        mr.dispense_request_validity_period_end as validity_period_end,  -- ⭐ CRITICAL: Individual medication stop date
-        
-        -- ========================================
-        -- STATUS & PRIORITY FROM medication_request TABLE
-        -- ========================================
-        mr.status_reason_text,
-        mr.priority,
-        mr.intent as medication_intent,
-        mr.do_not_perform,
+        mr.dispense_request_validity_period_start as mr_validity_period_start,
+        mr.dispense_request_validity_period_end as mr_validity_period_end,  -- ⭐ CRITICAL: Individual medication stop date
+        mr.authored_on as mr_authored_on,  -- ⭐ When medication was prescribed/authored
         
         -- ========================================
-        -- TREATMENT STRATEGY CONTEXT FROM medication_request TABLE
+        -- STATUS & PRIORITY FROM medication_request TABLE (mr_ prefix)
         -- ========================================
-        mr.course_of_therapy_type_text,  -- e.g., "continuous", "acute", "seasonal"
-        mr.dispense_request_initial_fill_duration_value,
-        mr.dispense_request_initial_fill_duration_unit,
-        mr.dispense_request_expected_supply_duration_value,
-        mr.dispense_request_expected_supply_duration_unit,
-        mr.dispense_request_number_of_repeats_allowed,
-        
-        -- ========================================
-        -- TREATMENT CHANGES FROM medication_request TABLE
-        -- ========================================
-        mr.substitution_allowed_boolean,
-        mr.substitution_reason_text,
-        mr.prior_prescription_display,  -- Tracks medication changes/switches
+        mr.status as mr_status,  -- ⭐ CLARIFIED: medication_request status (not care_plan status)
+        mr.status_reason_text as mr_status_reason_text,
+        mr.priority as mr_priority,
+        mr.intent as mr_intent,  -- ⭐ CLARIFIED: medication_request intent (not care_plan intent)
+        mr.do_not_perform as mr_do_not_perform,
         
         -- ========================================
-        -- AGGREGATED METADATA FROM CHILD TABLES
+        -- TREATMENT STRATEGY CONTEXT FROM medication_request TABLE (mr_ prefix)
         -- ========================================
-        -- Aggregated notes (dose adjustments, clinical trial status)
-        mn.note_text_aggregated as clinical_notes,
-        
-        -- Aggregated reason codes (chemotherapy encounter, indications)
-        mrr.reason_code_text_aggregated as reason_codes,
-        
-        -- Care plan linkage
-        mrb.based_on_reference as care_plan_reference,
-        mrb.based_on_display as care_plan_display,
-        
-        -- Form coding details (via medication_id)
-        mf.form_coding_codes,
-        mf.form_coding_displays,
-        
-        -- Ingredient details (via medication_id)
-        mi.ingredient_strengths,
+        mr.course_of_therapy_type_text as mr_course_of_therapy_type_text,  -- e.g., "continuous", "acute", "seasonal"
+        mr.dispense_request_initial_fill_duration_value as mr_dispense_initial_fill_duration_value,
+        mr.dispense_request_initial_fill_duration_unit as mr_dispense_initial_fill_duration_unit,
+        mr.dispense_request_expected_supply_duration_value as mr_dispense_expected_supply_duration_value,
+        mr.dispense_request_expected_supply_duration_unit as mr_dispense_expected_supply_duration_unit,
+        mr.dispense_request_number_of_repeats_allowed as mr_dispense_number_of_repeats_allowed,
         
         -- ========================================
-        -- CARE PLAN PROTOCOL DETAILS
+        -- TREATMENT CHANGES FROM medication_request TABLE (mr_ prefix)
         -- ========================================
-        cp.id as care_plan_id,
-        cp.title as care_plan_title,
-        cp.status as care_plan_status,
-        cp.intent as care_plan_intent,
-        cp.period_start as care_plan_period_start,
-        cp.period_end as care_plan_period_end,
-        cp.created as care_plan_created,
-        cp.author_display as care_plan_author,
+        mr.substitution_allowed_boolean as mr_substitution_allowed_boolean,
+        mr.substitution_reason_text as mr_substitution_reason_text,
+        mr.prior_prescription_display as mr_prior_prescription_display,  -- Tracks medication changes/switches
         
-        -- Care plan categories (ONCOLOGY TREATMENT classification)
-        cpc.categories_aggregated as care_plan_categories,
+        -- ========================================
+        -- AGGREGATED METADATA FROM CHILD TABLES (with prefixes)
+        -- ========================================
+        -- Aggregated notes (dose adjustments, clinical trial status) - mrn_ prefix
+        mn.note_text_aggregated as mrn_note_text_aggregated,
         
-        -- Care plan conditions (diagnosis linkage)
-        cpcon.addresses_aggregated as care_plan_diagnoses,
+        -- Aggregated reason codes (chemotherapy encounter, indications) - mrr_ prefix
+        mrr.reason_code_text_aggregated as mrr_reason_code_text_aggregated,
         
-        -- Care plan activity status
-        cpa.activity_detail_status as care_plan_activity_status
+        -- Care plan linkage - mrb_ prefix (medication_request_based_on)
+        mrb.based_on_reference as mrb_care_plan_reference,
+        mrb.based_on_display as mrb_care_plan_display,
+        
+        -- Form coding details (via medication_id) - mf_ prefix
+        mf.form_coding_codes as mf_form_coding_codes,
+        mf.form_coding_displays as mf_form_coding_displays,
+        
+        -- Ingredient details (via medication_id) - mi_ prefix
+        mi.ingredient_strengths as mi_ingredient_strengths,
+        
+        -- ========================================
+        -- CARE PLAN PROTOCOL DETAILS (cp_ prefix)
+        -- ========================================
+        cp.id as cp_id,
+        cp.title as cp_title,
+        cp.status as cp_status,  -- ⭐ CLARIFIED: care_plan status (not medication_request status)
+        cp.intent as cp_intent,  -- ⭐ CLARIFIED: care_plan intent (not medication_request intent)
+        cp.period_start as cp_period_start,  -- ⭐ CLARIFIED: care_plan period (not medication validity period)
+        cp.period_end as cp_period_end,
+        cp.author_display as cp_author_display,
+        
+        -- Care plan categories (ONCOLOGY TREATMENT classification) - cpc_ prefix
+        cpc.categories_aggregated as cpc_categories_aggregated,
+        
+        -- Care plan conditions (diagnosis linkage) - cpcon_ prefix
+        cpcon.addresses_aggregated as cpcon_addresses_aggregated,
+        
+        -- Care plan activity status - cpa_ prefix
+        cpa.activity_detail_status as cpa_activity_detail_status
         
     FROM {database}.patient_medications pm
     
@@ -414,20 +416,27 @@ def main():
         
         # Count medications with different metadata types
         logger.info("Metadata Coverage:")
-        logger.info(f"  With clinical notes: {df['clinical_notes'].notna().sum()} ({df['clinical_notes'].notna().sum() / len(df) * 100:.1f}%)")
-        logger.info(f"  With reason codes: {df['reason_codes'].notna().sum()} ({df['reason_codes'].notna().sum() / len(df) * 100:.1f}%)")
-        logger.info(f"  With care plan linkage: {df['care_plan_id'].notna().sum()} ({df['care_plan_id'].notna().sum() / len(df) * 100:.1f}%)")
-        logger.info(f"  With form coding: {df['form_coding_codes'].notna().sum()} ({df['form_coding_codes'].notna().sum() / len(df) * 100:.1f}%)")
-        logger.info(f"  With ingredient strengths: {df['ingredient_strengths'].notna().sum()} ({df['ingredient_strengths'].notna().sum() / len(df) * 100:.1f}%)")
+        # Check which columns exist before reporting
+        if 'clinical_notes' in df.columns:
+            logger.info(f"  With clinical notes: {df['clinical_notes'].notna().sum()} ({df['clinical_notes'].notna().sum() / len(df) * 100:.1f}%)")
+        if 'reason_codes' in df.columns:
+            logger.info(f"  With reason codes: {df['reason_codes'].notna().sum()} ({df['reason_codes'].notna().sum() / len(df) * 100:.1f}%)")
+        if 'care_plan_id' in df.columns:
+            logger.info(f"  With care plan linkage: {df['care_plan_id'].notna().sum()} ({df['care_plan_id'].notna().sum() / len(df) * 100:.1f}%)")
+        if 'form_coding_codes' in df.columns:
+            logger.info(f"  With form coding: {df['form_coding_codes'].notna().sum()} ({df['form_coding_codes'].notna().sum() / len(df) * 100:.1f}%)")
+        if 'ingredient_strengths' in df.columns:
+            logger.info(f"  With ingredient strengths: {df['ingredient_strengths'].notna().sum()} ({df['ingredient_strengths'].notna().sum() / len(df) * 100:.1f}%)")
         logger.info("")
         
         # Care plan statistics
-        care_plan_count = df['care_plan_id'].nunique()
-        logger.info(f"Unique care plans: {care_plan_count}")
-        if care_plan_count > 0:
-            logger.info("Care plan distribution:")
-            for title, count in df[df['care_plan_title'].notna()]['care_plan_title'].value_counts().items():
-                logger.info(f"  '{title}': {count} medications")
+        if 'care_plan_id' in df.columns:
+            care_plan_count = df['care_plan_id'].nunique()
+            logger.info(f"Unique care plans: {care_plan_count}")
+            if care_plan_count > 0 and 'care_plan_title' in df.columns:
+                logger.info("Care plan distribution:")
+                for title, count in df[df['care_plan_title'].notna()]['care_plan_title'].value_counts().items():
+                    logger.info(f"  '{title}': {count} medications")
         logger.info("")
         
         # Top medications

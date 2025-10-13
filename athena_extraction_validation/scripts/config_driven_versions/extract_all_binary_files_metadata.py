@@ -194,42 +194,42 @@ class BinaryFilesExtractor:
         """
         query = f"""
         SELECT 
-            -- Document Reference Info
-            dr.id as document_reference_id,
-            dr.type_text as document_type,
-            dr.date as document_date,
-            dr.description,
-            dr.status,
-            dr.doc_status,
+            -- Document Reference Info (dr_ prefix = document_reference)
+            dr.id as dr_id,
+            dr.type_text as dr_type_text,
+            dr.date as dr_date,
+            dr.description as dr_description,
+            dr.status as dr_status,
+            dr.doc_status as dr_doc_status,
             
-            -- Binary Content Info
-            dc.content_attachment_url as binary_id,
-            dc.content_attachment_content_type as content_type,
-            dc.content_attachment_size as content_size_bytes,
-            dc.content_attachment_title as content_title,
-            dc.content_format_display as content_format,
+            -- Binary Content Info (dc_ prefix = document_reference_content)
+            dc.content_attachment_url as dc_binary_url,
+            dc.content_attachment_content_type as dc_content_type,
+            dc.content_attachment_size as dc_content_size_bytes,
+            dc.content_attachment_title as dc_content_title,
+            dc.content_format_display as dc_content_format,
             
-            -- Encounter Reference (USER REQUESTED)
-            de.context_encounter_reference as encounter_reference,
-            de.context_encounter_display as encounter_display,
+            -- Encounter Reference (de_ prefix = document_reference_context_encounter)
+            de.context_encounter_reference as de_encounter_reference,
+            de.context_encounter_display as de_encounter_display,
             
-            -- Type Coding
-            dt.type_coding_system as type_coding_system,
-            dt.type_coding_code as type_coding_code,
-            dt.type_coding_display as type_coding_display,
+            -- Type Coding (dt_ prefix = document_reference_type_coding)
+            dt.type_coding_system as dt_type_coding_system,
+            dt.type_coding_code as dt_type_coding_code,
+            dt.type_coding_display as dt_type_coding_display,
             
-            -- Category
-            dcat.category_text,
+            -- Category (dcat_ prefix = document_reference_category)
+            dcat.category_text as dcat_category_text,
             
-            -- Context Period
-            dr.context_period_start,
-            dr.context_period_end,
-            dr.context_facility_type_text,
-            dr.context_practice_setting_text,
+            -- Context Period (dr_ prefix = document_reference)
+            dr.context_period_start as dr_context_period_start,
+            dr.context_period_end as dr_context_period_end,
+            dr.context_facility_type_text as dr_context_facility_type_text,
+            dr.context_practice_setting_text as dr_context_practice_setting_text,
             
-            -- Authenticator/Custodian
-            dr.authenticator_display,
-            dr.custodian_display
+            -- Authenticator/Custodian (dr_ prefix = document_reference)
+            dr.authenticator_display as dr_authenticator_display,
+            dr.custodian_display as dr_custodian_display
             
         FROM {self.database}.document_reference dr
         
@@ -261,7 +261,7 @@ class BinaryFilesExtractor:
         Calculate age at document date.
         
         Args:
-            df: DataFrame with document_date column
+            df: DataFrame with dr_date column
             
         Returns:
             DataFrame with added age columns
@@ -271,19 +271,19 @@ class BinaryFilesExtractor:
         
         logger.info("\n🎂 Calculating age at document date...")
         
-        # Convert document_date to datetime
-        df['document_date'] = pd.to_datetime(df['document_date'], errors='coerce')
+        # Convert dr_date to datetime (NEW column name)
+        df['dr_date'] = pd.to_datetime(df['dr_date'], errors='coerce')
         
         # Remove timezone info for arithmetic (both should be tz-naive)
-        df['document_date_naive'] = df['document_date'].dt.tz_localize(None)
+        df['dr_date_naive'] = df['dr_date'].dt.tz_localize(None)
         birth_date_naive = self.birth_date.tz_localize(None) if self.birth_date.tz else self.birth_date
         
         # Calculate age in days and years
-        df['age_at_document_days'] = (df['document_date_naive'] - birth_date_naive).dt.days
+        df['age_at_document_days'] = (df['dr_date_naive'] - birth_date_naive).dt.days
         df['age_at_document_years'] = df['age_at_document_days'] / 365.25
         
         # Drop temporary column
-        df.drop('document_date_naive', axis=1, inplace=True)
+        df.drop('dr_date_naive', axis=1, inplace=True)
         
         # Round age_at_document_years to 1 decimal place
         df['age_at_document_years'] = df['age_at_document_years'].round(1)
@@ -301,18 +301,18 @@ class BinaryFilesExtractor:
         We want just: fbEmTjtK9koEXazjN4eKcmu-tRJaXuAhc7DDwchpOqfQ4
         
         Args:
-            df: DataFrame with binary_id column
+            df: DataFrame with dc_binary_url column
             
         Returns:
-            DataFrame with cleaned binary_id
+            DataFrame with cleaned dc_binary_id
         """
-        if df.empty or 'binary_id' not in df.columns:
+        if df.empty or 'dc_binary_url' not in df.columns:
             return df
         
         logger.info("\n🧹 Cleaning Binary IDs...")
         
-        # Extract Binary ID after 'Binary/' prefix
-        df['binary_id'] = df['binary_id'].str.replace('Binary/', '', regex=False)
+        # Extract Binary ID after 'Binary/' prefix (NEW column name)
+        df['dc_binary_id'] = df['dc_binary_url'].str.replace('Binary/', '', regex=False)
         
         logger.info(f"  ✅ Binary IDs cleaned")
         
@@ -333,11 +333,11 @@ class BinaryFilesExtractor:
             logger.warning("⚠️  No data to summarize")
             return
         
-        # Overall counts
+        # Overall counts (NEW column names: dc_binary_id, de_encounter_reference)
         logger.info(f"\n📋 Overall Counts:")
         logger.info(f"  Total DocumentReferences: {len(df)}")
-        logger.info(f"  DocumentReferences with Binary IDs: {df['binary_id'].notna().sum()}")
-        logger.info(f"  DocumentReferences with Encounter References: {df['encounter_reference'].notna().sum()}")
+        logger.info(f"  DocumentReferences with Binary IDs: {df['dc_binary_id'].notna().sum()}")
+        logger.info(f"  DocumentReferences with Encounter References: {df['de_encounter_reference'].notna().sum()}")
         
         # Document types
         if 'document_type' in df.columns and df['document_type'].notna().any():
@@ -347,51 +347,51 @@ class BinaryFilesExtractor:
                 pct = count / len(df) * 100
                 logger.info(f"  {doc_type}: {count} ({pct:.1f}%)")
         
-        # Type coding display
-        if 'type_coding_display' in df.columns and df['type_coding_display'].notna().any():
+        # Type coding display (NEW column name: dt_type_coding_display)
+        if 'dt_type_coding_display' in df.columns and df['dt_type_coding_display'].notna().any():
             logger.info(f"\n🏷️  Type Coding Display (Top 10):")
-            type_codings = df['type_coding_display'].value_counts().head(10)
+            type_codings = df['dt_type_coding_display'].value_counts().head(10)
             for coding, count in type_codings.items():
                 pct = count / len(df) * 100
                 logger.info(f"  {coding}: {count} ({pct:.1f}%)")
         
-        # Categories
-        if 'category_text' in df.columns and df['category_text'].notna().any():
+        # Categories (NEW column name: dcat_category_text)
+        if 'dcat_category_text' in df.columns and df['dcat_category_text'].notna().any():
             logger.info(f"\n📂 Categories:")
-            categories = df['category_text'].value_counts()
+            categories = df['dcat_category_text'].value_counts()
             for category, count in categories.items():
                 pct = count / len(df) * 100
                 logger.info(f"  {category}: {count} ({pct:.1f}%)")
         
-        # Content types
-        if 'content_type' in df.columns and df['content_type'].notna().any():
+        # Content types (NEW column name: dc_content_type)
+        if 'dc_content_type' in df.columns and df['dc_content_type'].notna().any():
             logger.info(f"\n📎 Content Types:")
-            content_types = df['content_type'].value_counts()
+            content_types = df['dc_content_type'].value_counts()
             for content_type, count in content_types.items():
                 pct = count / len(df) * 100
                 logger.info(f"  {content_type}: {count} ({pct:.1f}%)")
         
-        # Status
-        if 'status' in df.columns and df['status'].notna().any():
+        # Status (NEW column name: dr_status)
+        if 'dr_status' in df.columns and df['dr_status'].notna().any():
             logger.info(f"\n✅ Status:")
-            statuses = df['status'].value_counts()
+            statuses = df['dr_status'].value_counts()
             for status, count in statuses.items():
                 pct = count / len(df) * 100
                 logger.info(f"  {status}: {count} ({pct:.1f}%)")
         
-        # Temporal coverage
-        if 'document_date' in df.columns and df['document_date'].notna().any():
+        # Temporal coverage (NEW column name: dr_date)
+        if 'dr_date' in df.columns and df['dr_date'].notna().any():
             logger.info(f"\n📅 Temporal Coverage:")
-            logger.info(f"  Earliest document: {df['document_date'].min()}")
-            logger.info(f"  Latest document: {df['document_date'].max()}")
+            logger.info(f"  Earliest document: {df['dr_date'].min()}")
+            logger.info(f"  Latest document: {df['dr_date'].max()}")
             logger.info(f"  Age range: {df['age_at_document_years'].min():.1f} - {df['age_at_document_years'].max():.1f} years")
         
-        # Encounter linkage
-        if 'encounter_reference' in df.columns:
-            unique_encounters = df['encounter_reference'].nunique()
+        # Encounter linkage (NEW column name: de_encounter_reference)
+        if 'de_encounter_reference' in df.columns:
+            unique_encounters = df['de_encounter_reference'].nunique()
             logger.info(f"\n🏥 Encounter Linkage:")
             logger.info(f"  Unique encounters: {unique_encounters}")
-            logger.info(f"  Documents with encounters: {df['encounter_reference'].notna().sum()} ({df['encounter_reference'].notna().sum() / len(df) * 100:.1f}%)")
+            logger.info(f"  Documents with encounters: {df['de_encounter_reference'].notna().sum()} ({df['de_encounter_reference'].notna().sum() / len(df) * 100:.1f}%)")
         
         logger.info("\n" + "=" * 100)
     

@@ -107,26 +107,28 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             p.id as procedure_fhir_id,
-            p.status,
-            p.performed_date_time,
-            p.performed_period_start,
-            p.performed_period_end,
-            p.performed_string,
-            p.performed_age_value,
-            p.performed_age_unit,
-            p.code_text,
-            p.category_text,
-            p.subject_reference,
-            p.encounter_reference,
-            p.encounter_display,
-            p.location_reference,
-            p.location_display,
-            p.outcome_text,
-            p.recorder_reference,
-            p.recorder_display,
-            p.asserter_reference,
-            p.asserter_display,
-            p.status_reason_text
+            
+            -- procedure table (proc_ prefix)
+            p.status as proc_status,
+            p.performed_date_time as proc_performed_date_time,
+            p.performed_period_start as proc_performed_period_start,
+            p.performed_period_end as proc_performed_period_end,
+            p.performed_string as proc_performed_string,
+            p.performed_age_value as proc_performed_age_value,
+            p.performed_age_unit as proc_performed_age_unit,
+            p.code_text as proc_code_text,
+            p.category_text as proc_category_text,
+            p.subject_reference as proc_subject_reference,
+            p.encounter_reference as proc_encounter_reference,
+            p.encounter_display as proc_encounter_display,
+            p.location_reference as proc_location_reference,
+            p.location_display as proc_location_display,
+            p.outcome_text as proc_outcome_text,
+            p.recorder_reference as proc_recorder_reference,
+            p.recorder_display as proc_recorder_display,
+            p.asserter_reference as proc_asserter_reference,
+            p.asserter_display as proc_asserter_display,
+            p.status_reason_text as proc_status_reason_text
         FROM {self.database}.procedure p
         WHERE p.subject_reference = '{self.patient_fhir_id}'
         ORDER BY p.performed_date_time
@@ -136,13 +138,13 @@ class AllProceduresExtractor:
         
         if not df.empty:
             print(f"  📊 Procedure Status Breakdown:")
-            print(df['status'].value_counts().to_string(index=True))
+            print(df['proc_status'].value_counts().to_string(index=True))
             print()
             
             # Date range
-            df_with_dates = df[df['performed_date_time'].notna()]
+            df_with_dates = df[df['proc_performed_date_time'].notna()]
             if not df_with_dates.empty:
-                print(f"  📅 Date Range: {df_with_dates['performed_date_time'].min()} to {df_with_dates['performed_date_time'].max()}")
+                print(f"  📅 Date Range: {df_with_dates['proc_performed_date_time'].min()} to {df_with_dates['proc_performed_date_time'].max()}")
                 print()
         
         return df
@@ -152,9 +154,11 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             pcc.procedure_id as procedure_fhir_id,
-            pcc.code_coding_system,
-            pcc.code_coding_code,
-            pcc.code_coding_display
+            
+            -- procedure_code_coding table (pcc_ prefix)
+            pcc.code_coding_system as pcc_code_coding_system,
+            pcc.code_coding_code as pcc_code_coding_code,
+            pcc.code_coding_display as pcc_code_coding_display
         FROM {self.database}.procedure_code_coding pcc
         JOIN {self.database}.procedure p ON pcc.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -165,13 +169,13 @@ class AllProceduresExtractor:
         
         if not df.empty:
             print(f"  📊 Code System Breakdown:")
-            print(df['code_coding_system'].value_counts().to_string(index=True))
+            print(df['pcc_code_coding_system'].value_counts().to_string(index=True))
             print()
             
             # Check for surgical keywords
             surgical_keywords = ['craniotomy', 'craniectomy', 'resection', 'excision', 'biopsy', 
                                'surgery', 'surgical', 'anesthesia', 'anes', 'oper']
-            df['is_surgical_keyword'] = df['code_coding_display'].str.lower().str.contains(
+            df['is_surgical_keyword'] = df['pcc_code_coding_display'].str.lower().str.contains(
                 '|'.join(surgical_keywords), na=False
             )
             surgical_count = df['is_surgical_keyword'].sum()
@@ -185,9 +189,11 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             pcat.procedure_id as procedure_fhir_id,
-            pcat.category_coding_system,
-            pcat.category_coding_code,
-            pcat.category_coding_display
+            
+            -- procedure_category_coding table (pcat_ prefix)
+            pcat.category_coding_system as pcat_category_coding_system,
+            pcat.category_coding_code as pcat_category_coding_code,
+            pcat.category_coding_display as pcat_category_coding_display
         FROM {self.database}.procedure_category_coding pcat
         JOIN {self.database}.procedure p ON pcat.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -200,8 +206,10 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             pbs.procedure_id as procedure_fhir_id,
-            pbs.body_site_coding,
-            pbs.body_site_text
+            
+            -- procedure_body_site table (pbs_ prefix)
+            pbs.body_site_coding as pbs_body_site_coding,
+            pbs.body_site_text as pbs_body_site_text
         FROM {self.database}.procedure_body_site pbs
         JOIN {self.database}.procedure p ON pbs.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -214,12 +222,14 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             pp.procedure_id as procedure_fhir_id,
-            pp.performer_function_text,
-            pp.performer_actor_reference,
-            pp.performer_actor_type,
-            pp.performer_actor_display,
-            pp.performer_on_behalf_of_reference,
-            pp.performer_on_behalf_of_display
+            
+            -- procedure_performer table (pp_ prefix)
+            pp.performer_function_text as pp_performer_function_text,
+            pp.performer_actor_reference as pp_performer_actor_reference,
+            pp.performer_actor_type as pp_performer_actor_type,
+            pp.performer_actor_display as pp_performer_actor_display,
+            pp.performer_on_behalf_of_reference as pp_performer_on_behalf_of_reference,
+            pp.performer_on_behalf_of_display as pp_performer_on_behalf_of_display
         FROM {self.database}.procedure_performer pp
         JOIN {self.database}.procedure p ON pp.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -229,7 +239,7 @@ class AllProceduresExtractor:
         
         if not df.empty:
             print(f"  👨‍⚕️ Performer Types:")
-            print(df['performer_actor_type'].value_counts().to_string(index=True))
+            print(df['pp_performer_actor_type'].value_counts().to_string(index=True))
             print()
         
         return df
@@ -239,8 +249,10 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             prc.procedure_id as procedure_fhir_id,
-            prc.reason_code_coding,
-            prc.reason_code_text
+            
+            -- procedure_reason_code table (prc_ prefix)
+            prc.reason_code_coding as prc_reason_code_coding,
+            prc.reason_code_text as prc_reason_code_text
         FROM {self.database}.procedure_reason_code prc
         JOIN {self.database}.procedure p ON prc.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -253,9 +265,11 @@ class AllProceduresExtractor:
         query = f"""
         SELECT 
             pr.procedure_id as procedure_fhir_id,
-            pr.report_reference,
-            pr.report_type,
-            pr.report_display
+            
+            -- procedure_report table (ppr_ prefix)
+            pr.report_reference as ppr_report_reference,
+            pr.report_type as ppr_report_type,
+            pr.report_display as ppr_report_display
         FROM {self.database}.procedure_report pr
         JOIN {self.database}.procedure p ON pr.procedure_id = p.id
         WHERE p.subject_reference = '{self.patient_fhir_id}'
@@ -265,8 +279,8 @@ class AllProceduresExtractor:
     
     def calculate_age_at_procedure(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate age in days at time of procedure"""
-        if 'performed_date_time' in df.columns:
-            df['procedure_date'] = pd.to_datetime(df['performed_date_time'], errors='coerce').dt.date
+        if 'proc_performed_date_time' in df.columns:
+            df['procedure_date'] = pd.to_datetime(df['proc_performed_date_time'], errors='coerce').dt.date
             df['age_at_procedure_days'] = df['procedure_date'].apply(
                 lambda x: (x - self.birth_date.date()).days if pd.notna(x) else None
             )
@@ -291,9 +305,9 @@ class AllProceduresExtractor:
         if not codes_df.empty:
             # Aggregate multiple codes into pipe-separated lists
             codes_agg = codes_df.groupby('procedure_fhir_id').agg({
-                'code_coding_system': lambda x: ' | '.join(x.astype(str).unique()),
-                'code_coding_code': lambda x: ' | '.join(x.astype(str).unique()),
-                'code_coding_display': lambda x: ' | '.join(x.astype(str).unique()),
+                'pcc_code_coding_system': lambda x: ' | '.join(x.astype(str).unique()),
+                'pcc_code_coding_code': lambda x: ' | '.join(x.astype(str).unique()),
+                'pcc_code_coding_display': lambda x: ' | '.join(x.astype(str).unique()),
                 'is_surgical_keyword': 'max'  # True if ANY code has surgical keyword
             }).reset_index()
             
@@ -303,7 +317,7 @@ class AllProceduresExtractor:
         # Merge categories
         if not categories_df.empty:
             categories_agg = categories_df.groupby('procedure_fhir_id').agg({
-                'category_coding_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
+                'pcat_category_coding_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
             }).reset_index()
             merged = merged.merge(categories_agg, on='procedure_fhir_id', how='left', suffixes=('', '_cat'))
             print(f"  ✓ Merged categories: {len(categories_agg)} procedures with categories")
@@ -311,7 +325,7 @@ class AllProceduresExtractor:
         # Merge body sites
         if not body_sites_df.empty:
             body_sites_agg = body_sites_df.groupby('procedure_fhir_id').agg({
-                'body_site_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
+                'pbs_body_site_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
             }).reset_index()
             merged = merged.merge(body_sites_agg, on='procedure_fhir_id', how='left')
             print(f"  ✓ Merged body sites: {len(body_sites_agg)} procedures with body sites")
@@ -319,8 +333,8 @@ class AllProceduresExtractor:
         # Merge performers
         if not performers_df.empty:
             performers_agg = performers_df.groupby('procedure_fhir_id').agg({
-                'performer_actor_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None,
-                'performer_function_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
+                'pp_performer_actor_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None,
+                'pp_performer_function_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
             }).reset_index()
             merged = merged.merge(performers_agg, on='procedure_fhir_id', how='left')
             print(f"  ✓ Merged performers: {len(performers_agg)} procedures with performers")
@@ -328,7 +342,7 @@ class AllProceduresExtractor:
         # Merge reasons
         if not reasons_df.empty:
             reasons_agg = reasons_df.groupby('procedure_fhir_id').agg({
-                'reason_code_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
+                'prc_reason_code_text': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
             }).reset_index()
             merged = merged.merge(reasons_agg, on='procedure_fhir_id', how='left')
             print(f"  ✓ Merged reasons: {len(reasons_agg)} procedures with reasons")
@@ -336,8 +350,8 @@ class AllProceduresExtractor:
         # Merge reports
         if not reports_df.empty:
             reports_agg = reports_df.groupby('procedure_fhir_id').agg({
-                'report_reference': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None,
-                'report_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
+                'ppr_report_reference': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None,
+                'ppr_report_display': lambda x: ' | '.join(x.dropna().astype(str).unique()) if len(x.dropna()) > 0 else None
             }).reset_index()
             merged = merged.merge(reports_agg, on='procedure_fhir_id', how='left')
             print(f"  ✓ Merged reports: {len(reports_agg)} procedures with operative reports")

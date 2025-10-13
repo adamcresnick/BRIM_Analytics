@@ -116,13 +116,19 @@ def create_patient_config(demographics):
         demographics: dict with id, birth_date, gender
     """
     # Extract short ID for directory name
-    short_id = demographics['id'].split('-')[0] if '-' in demographics['id'] else demographics['id'][:22]
+    # Use the full ID if no hyphen, don't truncate based on character count
+    short_id = demographics['id'].split('-')[0] if '-' in demographics['id'] else demographics['id']
+    
+    # Get absolute path to staging_files directory
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent  # athena_extraction_validation directory
+    staging_dir = project_root / 'staging_files' / f'patient_{short_id}'
     
     config = {
         "fhir_id": demographics['id'],
         "birth_date": demographics['birth_date'],
         "gender": demographics['gender'],
-        "output_dir": f"staging_files/patient_{short_id}",
+        "output_dir": str(staging_dir),  # Use absolute path
         "database": DATABASE,
         "aws_profile": AWS_PROFILE,
         "s3_output": S3_OUTPUT

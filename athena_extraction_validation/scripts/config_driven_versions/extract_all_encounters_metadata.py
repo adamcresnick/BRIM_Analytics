@@ -291,9 +291,8 @@ class AllEncountersExtractor:
         print(f"{'='*80}\n")
         
         # Use appointment_participant pathway (CORRECT approach)
-        # This query uses a simple JOIN that Athena supports
-        # NOTE: Athena does NOT support OR clauses in this context
-        # NOTE: Athena does NOT support column aliasing with JOINs in this context - must use SELECT a.*
+        # NOTE: Athena does NOT support column aliasing with JOINs in this context
+        # Must use SELECT a.* and rename columns in pandas for table prefixes
         # Data uses 'Patient/{fhir_id}' format in participant_actor_reference
         query = f"""
         SELECT DISTINCT a.*
@@ -310,23 +309,38 @@ class AllEncountersExtractor:
         
         df = pd.DataFrame(appointments)
         
-        # Rename columns to match expected format (since we use SELECT a.*)
+        # Rename columns to add appt_ prefix for provenance tracking
         df = df.rename(columns={
-            'id': 'appointment_fhir_id',
-            'status': 'appointment_status'
+            'id': 'appt_id',
+            'status': 'appt_status',
+            'appointment_type_text': 'appt_appointment_type_text',
+            'description': 'appt_description',
+            'start': 'appt_start',
+            'end': 'appt_end',
+            'minutes_duration': 'appt_minutes_duration',
+            'created': 'appt_created',
+            'comment': 'appt_comment',
+            'patient_instruction': 'appt_patient_instruction',
+            'cancelation_reason_text': 'appt_cancelation_reason_text',
+            'priority': 'appt_priority'
         })
         
+        # Add convenience columns
+        df['appointment_fhir_id'] = df['appt_id']
+        
         # Calculate age in days
-        df['age_at_appointment_days'] = df['start'].apply(self.calculate_age_days)
+        df['age_at_appointment_days'] = df['appt_start'].apply(self.calculate_age_days)
         
         # Calculate appointment date
-        df['appointment_date'] = df['start'].str[:10]
+        df['appointment_date'] = df['appt_start'].str[:10]
         
-        # Reorder columns - use only columns that exist
-        cols = ['appointment_fhir_id', 'appointment_date', 'age_at_appointment_days', 
-                'appointment_status', 'appointment_type_text', 'description', 'start', 'end',
-                'minutes_duration', 'created', 'comment', 'patient_instruction',
-                'cancelation_reason_text', 'priority']
+        # Reorder columns - prefixed columns come first for provenance clarity
+        cols = ['appointment_fhir_id', 'appointment_date', 'age_at_appointment_days',
+                'appt_id', 'appt_status', 'appt_appointment_type_text', 'appt_description', 
+                'appt_start', 'appt_end', 'appt_minutes_duration', 'appt_created', 
+                'appt_comment', 'appt_patient_instruction', 'appt_cancelation_reason_text', 'appt_priority',
+                'ap_participant_actor_reference', 'ap_participant_actor_type', 'ap_participant_required',
+                'ap_participant_status', 'ap_participant_period_start', 'ap_participant_period_end']
         
         # Only include columns that exist in the dataframe
         cols = [c for c in cols if c in df.columns]
@@ -337,9 +351,9 @@ class AllEncountersExtractor:
         if not df.empty:
             print(f"  Date range: {df['appointment_date'].min()} to {df['appointment_date'].max()}")
             print(f"  Age range: {df['age_at_appointment_days'].min()} to {df['age_at_appointment_days'].max()} days")
-            if 'appointment_type_text' in df.columns:
+            if 'appt_appointment_type_text' in df.columns:
                 print(f"\n  Appointment type breakdown:")
-                print(df['appointment_type_text'].value_counts().to_string())
+                print(df['appt_appointment_type_text'].value_counts().to_string())
         
         return df
     

@@ -241,17 +241,27 @@ class ImagingExtractor:
         logger.info("-" * 80)
         
         query = f"""
+        WITH report_categories AS (
+            SELECT 
+                diagnostic_report_id,
+                LISTAGG(DISTINCT category_text, ' | ') WITHIN GROUP (ORDER BY category_text) as category_text
+            FROM {self.database}.diagnostic_report_category
+            GROUP BY diagnostic_report_id
+        )
         SELECT DISTINCT
             dr.id as diagnostic_report_id,
             dr.status as report_status,
-            dr.category_text,
+            rc.category_text,
             dr.code_text as report_type,
             dr.subject_reference,
             dr.encounter_reference,
             dr.effective_date_time as report_date,
-            dr.issued,
+            dr.issued as report_issued,
+            dr.effective_period_start as report_effective_period_start,
+            dr.effective_period_stop as report_effective_period_stop,
             dr.conclusion as report_conclusion
-        FROM diagnostic_report dr
+        FROM {self.database}.diagnostic_report dr
+        LEFT JOIN report_categories rc ON dr.id = rc.diagnostic_report_id
         WHERE dr.id IN (
             SELECT DISTINCT result_diagnostic_report_id 
             FROM radiology_imaging_mri 
@@ -306,15 +316,16 @@ class ImagingExtractor:
             logger.error("  ❌ No imaging data to merge!")
             return pd.DataFrame()
         
-        # Merge diagnostic reports
+        # Merge diagnostic reports (including new date fields)
         if not reports_df.empty:
             merged_df = merged_df.merge(
-                reports_df[['diagnostic_report_id', 'report_status', 'report_conclusion']],
+                reports_df[['diagnostic_report_id', 'report_status', 'report_conclusion', 
+                           'report_issued', 'report_effective_period_start', 'report_effective_period_stop']],
                 left_on='result_diagnostic_report_id',
                 right_on='diagnostic_report_id',
                 how='left'
             )
-            logger.info(f"  ✅ Merged diagnostic reports ({len(reports_df)} reports)")
+            logger.info(f"  ✅ Merged diagnostic reports ({len(reports_df)} reports with date fields)")
         
         # Calculate age at imaging
         try:

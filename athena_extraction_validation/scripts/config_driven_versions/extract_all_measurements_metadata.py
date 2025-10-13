@@ -138,13 +138,16 @@ class MeasurementsExtractor:
         query = f"""
         SELECT 
             subject_reference as patient_id,
-            id as observation_id,
-            code_text as measurement_type,
-            value_quantity_value as measurement_value,
-            value_quantity_unit as measurement_unit,
-            effective_datetime as measurement_date,
-            status,
-            encounter_reference,
+            
+            -- observation table (obs_ prefix)
+            id as obs_observation_id,
+            code_text as obs_measurement_type,
+            value_quantity_value as obs_measurement_value,
+            value_quantity_unit as obs_measurement_unit,
+            effective_datetime as obs_measurement_date,
+            issued as obs_issued,
+            status as obs_status,
+            encounter_reference as obs_encounter_reference,
             'observation' as source_table
         FROM observation
         WHERE subject_reference = '{self.patient_fhir_id}'
@@ -178,12 +181,14 @@ class MeasurementsExtractor:
         query = f"""
         SELECT 
             patient_id,
-            test_id,
-            lab_test_name as measurement_type,
-            result_datetime as measurement_date,
-            lab_test_status as status,
-            result_diagnostic_report_id,
-            lab_test_requester,
+            
+            -- lab_tests table (lt_ prefix)
+            test_id as lt_test_id,
+            lab_test_name as lt_measurement_type,
+            result_datetime as lt_measurement_date,
+            lab_test_status as lt_status,
+            result_diagnostic_report_id as lt_result_diagnostic_report_id,
+            lab_test_requester as lt_lab_test_requester,
             'lab_tests' as source_table
         FROM lab_tests
         WHERE patient_id = '{self.patient_fhir_id}'
@@ -205,18 +210,20 @@ class MeasurementsExtractor:
         
         query = f"""
         SELECT 
-            ltr.test_id,
-            ltr.test_component,
-            ltr.value_string,
-            ltr.value_quantity_value as measurement_value,
-            ltr.value_quantity_unit as measurement_unit,
-            ltr.value_codeable_concept_text,
-            ltr.value_range_low_value,
-            ltr.value_range_low_unit,
-            ltr.value_range_high_value,
-            ltr.value_range_high_unit,
-            ltr.value_boolean,
-            ltr.value_integer
+            ltr.test_id as lt_test_id,
+            
+            -- lab_test_results table (ltr_ prefix)
+            ltr.test_component as ltr_test_component,
+            ltr.value_string as ltr_value_string,
+            ltr.value_quantity_value as ltr_measurement_value,
+            ltr.value_quantity_unit as ltr_measurement_unit,
+            ltr.value_codeable_concept_text as ltr_value_codeable_concept_text,
+            ltr.value_range_low_value as ltr_value_range_low_value,
+            ltr.value_range_low_unit as ltr_value_range_low_unit,
+            ltr.value_range_high_value as ltr_value_range_high_value,
+            ltr.value_range_high_unit as ltr_value_range_high_unit,
+            ltr.value_boolean as ltr_value_boolean,
+            ltr.value_integer as ltr_value_integer
         FROM lab_test_results ltr
         WHERE ltr.test_id IN (
             SELECT test_id 
@@ -237,14 +244,14 @@ class MeasurementsExtractor:
         if not lab_tests_df.empty and not lab_results_df.empty:
             lab_merged = lab_tests_df.merge(
                 lab_results_df,
-                on='test_id',
+                on='lt_test_id',
                 how='left'
             )
             logger.info(f"  ✅ Merged lab results ({len(lab_merged)} lab test records)")
             
             # For labs, use measurement values from results where available
-            lab_merged['measurement_value'] = lab_merged['measurement_value'].fillna('')
-            lab_merged['measurement_unit'] = lab_merged['measurement_unit'].fillna('')
+            lab_merged['ltr_measurement_value'] = lab_merged['ltr_measurement_value'].fillna('')
+            lab_merged['ltr_measurement_unit'] = lab_merged['ltr_measurement_unit'].fillna('')
         else:
             lab_merged = lab_tests_df.copy() if not lab_tests_df.empty else pd.DataFrame()
         
@@ -271,9 +278,15 @@ class MeasurementsExtractor:
             return pd.DataFrame()
         
         # Calculate age at measurement if birth_date provided
+        # Use combined date field from either obs_measurement_date or lt_measurement_date
         if self.birth_date:
             try:
                 birth_dt = pd.to_datetime(self.birth_date).tz_localize(None)
+                
+                # Combine date fields from both sources
+                merged_df['measurement_date'] = merged_df.get('obs_measurement_date', '').fillna('') + merged_df.get('lt_measurement_date', '').fillna('')
+                merged_df['measurement_date'] = merged_df['measurement_date'].replace('', pd.NA)
+                
                 merged_df['measurement_date_dt'] = pd.to_datetime(merged_df['measurement_date'], errors='coerce').dt.tz_localize(None)
                 merged_df['age_at_measurement_days'] = (merged_df['measurement_date_dt'] - birth_dt).dt.days
                 merged_df['age_at_measurement_years'] = merged_df['age_at_measurement_days'] / 365.25
@@ -282,8 +295,9 @@ class MeasurementsExtractor:
             except Exception as e:
                 logger.warning(f"  ⚠️  Could not calculate age: {str(e)}")
         
-        # Sort by date
-        merged_df = merged_df.sort_values('measurement_date', ascending=False)
+        # Sort by combined measurement date
+        if 'measurement_date' in merged_df.columns:
+            merged_df = merged_df.sort_values('measurement_date', ascending=False)
         
         return merged_df
     
@@ -302,17 +316,35 @@ class MeasurementsExtractor:
                 for source, count in df['source_table'].value_counts().items():
                     logger.info(f"  {source}: {count}")
             
-            # Measurement type breakdown (top 20)
-            if 'measurement_type' in df.columns:
-                logger.info("\nTop 20 Measurement Types:")
-                for mtype, count in df['measurement_type'].value_counts().head(20).items():
-                    logger.info(f"  {mtype}: {count}")
+            # Measurement type breakdown (top 20) - check both sources
+            logger.info("\nTop 20 Measurement Types:")
+            if 'obs_measurement_type' in df.columns:
+                obs_types = df[df['obs_measurement_type'].notna()]['obs_measurement_type'].value_counts().head(10)
+                if not obs_types.empty:
+                    logger.info("  From observations:")
+                    for mtype, count in obs_types.items():
+                        logger.info(f"    {mtype}: {count}")
+            if 'lt_measurement_type' in df.columns:
+                lt_types = df[df['lt_measurement_type'].notna()]['lt_measurement_type'].value_counts().head(10)
+                if not lt_types.empty:
+                    logger.info("  From lab tests:")
+                    for mtype, count in lt_types.items():
+                        logger.info(f"    {mtype}: {count}")
             
-            # Status breakdown
-            if 'status' in df.columns:
-                logger.info("\nMeasurement Status:")
-                for status, count in df['status'].value_counts().items():
-                    logger.info(f"  {status}: {count}")
+            # Status breakdown - check both sources
+            logger.info("\nMeasurement Status:")
+            if 'obs_status' in df.columns:
+                obs_status = df[df['obs_status'].notna()]['obs_status'].value_counts()
+                if not obs_status.empty:
+                    logger.info("  From observations:")
+                    for status, count in obs_status.items():
+                        logger.info(f"    {status}: {count}")
+            if 'lt_status' in df.columns:
+                lt_status = df[df['lt_status'].notna()]['lt_status'].value_counts()
+                if not lt_status.empty:
+                    logger.info("  From lab tests:")
+                    for status, count in lt_status.items():
+                        logger.info(f"    {status}: {count}")
             
             # Date range
             if 'measurement_date' in df.columns:
