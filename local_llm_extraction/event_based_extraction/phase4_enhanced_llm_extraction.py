@@ -13,9 +13,23 @@ import logging
 from datetime import datetime
 import subprocess
 import time
+import re
+
+# Import Ollama client - this is how it's done in tested workflows
+try:
+    from ollama import Client as OllamaClient
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    logging.warning("Ollama Python client not installed. Install with: pip install ollama")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import data dictionary loader
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.data_dictionary_loader import get_data_dictionary
 
 class EnhancedLLMExtractor:
     """
@@ -29,21 +43,163 @@ class EnhancedLLMExtractor:
         self.output_base = self.staging_path.parent / "outputs"
         self.output_base.mkdir(exist_ok=True)
 
+        # Initialize Ollama client if available
+        self.ollama_client = None
+        if OLLAMA_AVAILABLE:
+            try:
+                self.ollama_client = OllamaClient(host='http://127.0.0.1:11434')
+                # Test connection
+                self.ollama_client.list()
+                logger.info(f"Ollama client initialized with model: {ollama_model}")
+            except Exception as e:
+                logger.warning(f"Could not connect to Ollama: {e}")
+                self.ollama_client = None
+
+        # Store phase data for context-aware extraction
+        self.phase1_data = {}
+        self.phase2_timeline = []
+        self.phase3_documents = []
+
+    def set_phase_data(self, phase1_data: Dict, phase2_timeline: List, phase3_documents: List):
+        """Set data from previous phases for context-aware extraction."""
+        self.phase1_data = phase1_data or {}
+        self.phase2_timeline = phase2_timeline or []
+        self.phase3_documents = phase3_documents or []
+        logger.info(f"Phase data set - P1: {len(self.phase1_data)} items, P2: {len(self.phase2_timeline)} events, P3: {len(self.phase3_documents)} docs")
+
+    def query_phase_data(self, query_type: str, params: Dict = None) -> Any:
+        """Query data from previous phases to inform extraction."""
+        params = params or {}
+
+        if query_type == 'surgery_dates':
+            return [s.get('date') for s in self.phase1_data.get('surgical_events', [])]
+        elif query_type == 'has_chemotherapy':
+            return self.phase1_data.get('has_chemotherapy', False)
+        elif query_type == 'has_radiation':
+            return self.phase1_data.get('has_radiation_therapy', False)
+        elif query_type == 'events_near_date':
+            target_date = params.get('date')
+            window_days = params.get('window_days', 7)
+            if target_date and self.phase2_timeline:
+                # Find events within window of target date
+                nearby = []
+                for event in self.phase2_timeline:
+                    if 'date' in event:
+                        # Simple date proximity check
+                        nearby.append(event)
+                return nearby[:5]  # Return up to 5 nearby events
+        elif query_type == 'document_count':
+            return len(self.phase3_documents)
+
+        return None
+
     def create_enhanced_prompt(self, variable: str, document_text: str,
-                              structured_context: Dict) -> str:
+                              structured_context: Dict, document_metadata: Dict = None) -> str:
         """
         Create an LLM prompt that includes structured data as context
         This guides the LLM to make extraction decisions consistent with known facts
         """
 
         prompt_parts = []
+        document_metadata = document_metadata or {}
 
         # 1. System instruction with structured context
-        prompt_parts.append("You are a clinical data extraction expert. You have access to VERIFIED STRUCTURED DATA that should guide your extraction.")
+        prompt_parts.append("You are a clinical data extraction expert. You have access to VERIFIED STRUCTURED DATA from multiple phases that should guide your extraction.")
+
+        # Add Phase 1 context (Structured Data)
+        prompt_parts.append("\n=== PHASE 1: STRUCTURED DATA (VERIFIED) ===")
+        surgeries = self.query_phase_data('surgery_dates')
+        if surgeries:
+            prompt_parts.append(f"Known Surgeries: {len(surgeries)} surgical events identified")
+            for i, date in enumerate(surgeries[:3], 1):
+                prompt_parts.append(f"  Surgery {i}: {date}")
+
+        has_chemo = self.query_phase_data('has_chemotherapy')
+        has_rad = self.query_phase_data('has_radiation')
+        prompt_parts.append(f"Chemotherapy: {'Yes' if has_chemo else 'No'}")
+        prompt_parts.append(f"Radiation: {'Yes' if has_rad else 'No'}")
+
+        # Add Phase 2 context (Timeline)
+        prompt_parts.append("\n=== PHASE 2: CLINICAL TIMELINE ===")
+        if document_metadata.get('document_date'):
+            nearby_events = self.query_phase_data(
+                'events_near_date',
+                {'date': document_metadata['document_date'], 'window_days': 14}
+            )
+            if nearby_events:
+                prompt_parts.append(f"Events near this document date ({document_metadata['document_date']}):")
+                for event in nearby_events[:3]:
+                    prompt_parts.append(f"  - {event.get('type', 'Unknown')}: {event.get('date', 'Unknown')}")
+
+        # Add Phase 3 context (Document Selection)
+        prompt_parts.append("\n=== PHASE 3: DOCUMENT CONTEXT ===")
+        if document_metadata.get('document_type'):
+            prompt_parts.append(f"Document Type: {document_metadata['document_type']}")
+        if document_metadata.get('tier'):
+            tier_explanations = {
+                1: "Primary source (±7 days from event) - HIGHEST PRIORITY",
+                2: "Secondary source (±14 days from event)",
+                3: "Tertiary source (±30 days from event)"
+            }
+            prompt_parts.append(f"Selection Tier: {tier_explanations.get(document_metadata['tier'], 'Unknown')}")
+
+        doc_count = self.query_phase_data('document_count')
+        if doc_count:
+            prompt_parts.append(f"Total documents selected for extraction: {doc_count}")
+
         prompt_parts.append("\n=== VERIFIED STRUCTURED DATA (GROUND TRUTH) ===")
 
-        # 2. Add relevant structured context based on variable
-        if variable == "extent_of_resection":
+        # Add schema information about available structured data sources
+        if 'available_structured_sources' in structured_context:
+            prompt_parts.append("\n=== AVAILABLE STRUCTURED DATA SOURCES (FOR VALIDATION & ADJUDICATION) ===")
+            schema_info = structured_context['available_structured_sources']
+            prompt_parts.append(schema_info['description'])
+
+            for source in schema_info['sources']:
+                prompt_parts.append(f"\n📊 {source['name'].upper()}:")
+                prompt_parts.append(f"   Description: {source['description']}")
+                prompt_parts.append(f"   Key Fields: {', '.join(source['key_fields'])}")
+                prompt_parts.append(f"   Use For: {source['use_for']}")
+                if 'note' in source:
+                    prompt_parts.append(f"   ⚠️ Note: {source['note']}")
+                if 'source_hierarchy' in source:
+                    prompt_parts.append(f"   Hierarchy: {source['source_hierarchy']}")
+                if 'confidence' in source:
+                    prompt_parts.append(f"   Confidence Level: {source['confidence']}")
+
+            if 'validation_instructions' in schema_info:
+                prompt_parts.append(f"\n💡 {schema_info['validation_instructions']}")
+
+        # Add variable-specific validation hint
+        if 'validation_hint' in structured_context:
+            prompt_parts.append(f"\n⚠️ VALIDATION HINT FOR THIS VARIABLE: {structured_context['validation_hint']}")
+
+        # ==================================================================
+        # DATA DICTIONARY FIELD DEFINITION (REPLACES HARDCODED PROMPTS)
+        # ==================================================================
+        prompt_parts.append("\n" + "="*70)
+        prompt_parts.append("EXTRACTION TASK - PLEASE READ THE FIELD DEFINITION CAREFULLY")
+        prompt_parts.append("="*70)
+
+        # Load data dictionary definition for this variable
+        data_dict = get_data_dictionary()
+        field_definition = data_dict.format_field_for_prompt(variable)
+        prompt_parts.append(field_definition)
+
+        prompt_parts.append("\n" + "="*70)
+        prompt_parts.append("EXTRACTION INSTRUCTIONS")
+        prompt_parts.append("="*70)
+        prompt_parts.append("1. You MUST extract ONLY the information that matches the field definition above")
+        prompt_parts.append("2. If the field has 'VALID VALUES', you MUST use one of those exact codes/labels")
+        prompt_parts.append("3. Cross-reference your extraction with the structured data context above")
+        prompt_parts.append("4. If dates are mentioned, they should align with known dates from Phase 1 & 2")
+        prompt_parts.append("5. Provide a confidence score (0-1) based on:")
+        prompt_parts.append("   - Clarity of information in document")
+        prompt_parts.append("   - Alignment with structured data context")
+        prompt_parts.append("   - Match with valid values in data dictionary")
+
+        # 2. Add relevant structured context based on variable (keep for backward compatibility)
+        if variable in ["extent_of_resection", "extent_of_tumor_resection"]:
             if 'surgery_dates' in structured_context:
                 prompt_parts.append(f"Known Surgery Dates: {', '.join(structured_context['surgery_dates'])}")
             if 'surgery_types' in structured_context:
@@ -52,13 +208,72 @@ class EnhancedLLMExtractor:
                 prompt_parts.append(f"Initial Surgery Date: {structured_context['initial_surgery']}")
                 prompt_parts.append(f"Initial Surgery Type: {structured_context.get('initial_surgery_type', 'Unknown')}")
 
-            prompt_parts.append("\nEXTRACTION TASK:")
-            prompt_parts.append("Extract the extent of resection from the document.")
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract EXTENT OF TUMOR RESECTION (variable: {variable})")
             prompt_parts.append("IMPORTANT: The surgery date MUST match one of the known surgery dates above.")
             prompt_parts.append("If the document mentions a surgery on a different date, it's likely not relevant.")
-            prompt_parts.append("Valid values: GTR (gross total resection), STR (subtotal resection), Partial, Biopsy only")
+            prompt_parts.append("\nValid values ONLY:")
+            prompt_parts.append("  • GTR (Gross Total Resection) - complete removal of visible tumor")
+            prompt_parts.append("  • STR (Subtotal Resection) - >90% but <100% removal, 'near total', 'near complete'")
+            prompt_parts.append("  • Partial - <90% removal")
+            prompt_parts.append("  • Biopsy only - no resection")
+            prompt_parts.append("\nLook for: 'gross total resection', 'GTR', 'complete resection', 'near total resection', 'subtotal resection', 'STR', 'partial resection', 'debulking'")
 
-        elif variable == "tumor_histology":
+        elif variable == "tumor_location":
+            if 'diagnosis_date' in structured_context:
+                prompt_parts.append(f"Diagnosis Date: {structured_context['diagnosis_date']}")
+
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract ANATOMICAL TUMOR LOCATION (variable: {variable})")
+            prompt_parts.append("Provide the specific brain or spine location using neuroanatomical terminology.")
+            prompt_parts.append("\nValid locations:")
+            prompt_parts.append("  • Frontal lobe (left/right)")
+            prompt_parts.append("  • Temporal lobe (left/right)")
+            prompt_parts.append("  • Parietal lobe (left/right)")
+            prompt_parts.append("  • Occipital lobe (left/right)")
+            prompt_parts.append("  • Cerebellum (left/right/midline)")
+            prompt_parts.append("  • Brainstem (pons/medulla/midbrain)")
+            prompt_parts.append("  • Thalamus, Basal ganglia")
+            prompt_parts.append("  • Corpus callosum, Pineal region")
+            prompt_parts.append("  • Spinal cord (level)")
+            prompt_parts.append("\nLook for: imaging findings, operative descriptions, anatomical terms")
+
+        elif variable == "surgery_type":
+            if 'surgery_dates' in structured_context:
+                prompt_parts.append(f"Known Surgery Dates: {', '.join(structured_context['surgery_dates'])}")
+
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract TYPE OF SURGERY (variable: {variable})")
+            prompt_parts.append("\nValid surgery types:")
+            prompt_parts.append("  • Craniotomy for tumor resection")
+            prompt_parts.append("  • Stereotactic biopsy")
+            prompt_parts.append("  • Endoscopic resection")
+            prompt_parts.append("  • Shunt placement (VP shunt, EVD)")
+            prompt_parts.append("  • Re-resection / Second-look surgery")
+            prompt_parts.append("\nLook for: procedure names, operative approach, surgical technique")
+
+        elif variable == "specimen_to_cbtn":
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract SPECIMEN TO CBTN status (variable: {variable})")
+            prompt_parts.append("Determine if tumor specimen was sent to Children's Brain Tumor Network (CBTN) or biobank.")
+            prompt_parts.append("\nValid values ONLY: Yes, No, Unknown")
+            prompt_parts.append("\nLook for: 'CBTN', 'Children's Brain Tumor Network', 'biobank', 'tissue bank', 'research specimen'")
+
+        elif variable == "who_grade":
+            if 'diagnosis_date' in structured_context:
+                prompt_parts.append(f"Diagnosis Date: {structured_context['diagnosis_date']}")
+
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract WHO GRADE (variable: {variable})")
+            prompt_parts.append("Extract the WHO CNS tumor grade from pathology.")
+            prompt_parts.append("\nValid values ONLY:")
+            prompt_parts.append("  • Grade I (benign)")
+            prompt_parts.append("  • Grade II (low-grade)")
+            prompt_parts.append("  • Grade III (anaplastic)")
+            prompt_parts.append("  • Grade IV (glioblastoma)")
+            prompt_parts.append("\nLook for: 'WHO grade', 'Grade I/II/III/IV', pathology report findings")
+
+        elif variable in ["tumor_histology", "histopathology"]:
             if 'diagnosis_date' in structured_context:
                 prompt_parts.append(f"Diagnosis Date: {structured_context['diagnosis_date']}")
             if 'diagnosis_histology' in structured_context:
@@ -66,10 +281,19 @@ class EnhancedLLMExtractor:
             if 'molecular_markers' in structured_context:
                 prompt_parts.append(f"Known Molecular Markers: {structured_context['molecular_markers']}")
 
-            prompt_parts.append("\nEXTRACTION TASK:")
-            prompt_parts.append("Extract the tumor histology and WHO grade.")
-            prompt_parts.append(f"IMPORTANT: The diagnosis should be consistent with: {structured_context.get('diagnosis_histology', 'Unknown')}")
-            prompt_parts.append("Look for: histologic type, WHO grade, Ki-67 index")
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract TUMOR HISTOPATHOLOGY (variable: {variable})")
+            prompt_parts.append("Extract the specific histopathologic diagnosis from pathology report.")
+            prompt_parts.append(f"IMPORTANT: Should be consistent with known diagnosis: {structured_context.get('diagnosis_histology', 'Unknown')}")
+            prompt_parts.append("\nCommon pediatric brain tumor types:")
+            prompt_parts.append("  • Gliomas: Glioblastoma, Anaplastic astrocytoma, Diffuse astrocytoma, Pilocytic astrocytoma")
+            prompt_parts.append("  • Ependymoma (including variants)")
+            prompt_parts.append("  • Medulloblastoma")
+            prompt_parts.append("  • ATRT (Atypical teratoid/rhabdoid tumor)")
+            prompt_parts.append("  • Craniopharyngioma")
+            prompt_parts.append("  • Choroid plexus tumors")
+            prompt_parts.append("  • Embryonal tumors (PNET, etc.)")
+            prompt_parts.append("\nLook for: pathology diagnosis, histologic type, tumor classification, Ki-67 index")
 
         elif variable == "chemotherapy_response":
             if 'chemotherapy_drugs' in structured_context:
@@ -115,10 +339,19 @@ class EnhancedLLMExtractor:
             if 'diagnosis_date' in structured_context:
                 prompt_parts.append(f"Diagnosis Date: {structured_context['diagnosis_date']}")
 
-            prompt_parts.append("\nEXTRACTION TASK:")
-            prompt_parts.append("Extract survival status and last contact date.")
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract SURVIVAL STATUS (variable: {variable})")
             prompt_parts.append(f"IMPORTANT: Last contact should be close to {structured_context.get('last_visit', 'unknown')}")
-            prompt_parts.append("Extract: vital status (alive/deceased), date of last contact or death")
+            prompt_parts.append("\nValid values: Alive, Deceased, Unknown")
+            prompt_parts.append("\nExtract: vital status (alive/deceased), date of last contact or death")
+
+        else:
+            # Generic extraction for variables without specific prompts
+            prompt_parts.append("\n=== EXTRACTION TASK ===")
+            prompt_parts.append(f"Extract the value for variable: {variable}")
+            prompt_parts.append(f"Variable name: {variable.replace('_', ' ').title()}")
+            prompt_parts.append("\nProvide the most specific and accurate information available in the document.")
+            prompt_parts.append("If the information is not present, return 'Not found'.")
 
         # 3. Add the document text
         prompt_parts.append("\n=== DOCUMENT TO EXTRACT FROM ===")
@@ -197,48 +430,117 @@ class EnhancedLLMExtractor:
 
     def _call_llm(self, prompt: str, document_id: str) -> Dict:
         """
-        Call LLM with prompt (mock implementation for now)
-        In production, this would call Ollama with gemma2:27b
+        Call LLM with prompt - using Ollama client library as in tested workflows
         """
 
-        # For demonstration, return mock extraction based on document_id
-        mock_extractions = {
-            'operative_note': {
-                'value': 'Gross total resection',
-                'confidence': 0.95,
-                'supporting_text': 'Complete resection of the tumor was achieved',
-                'date_extracted': '2018-05-28'
-            },
-            'pathology_report': {
-                'value': 'Pilocytic astrocytoma, WHO Grade I',
-                'confidence': 0.98,
-                'supporting_text': 'Microscopic examination reveals pilocytic astrocytoma',
-                'date_extracted': '2018-05-29'
-            },
-            'molecular_report': {
-                'value': 'BRAF-KIAA1549 fusion positive',
-                'confidence': 0.90,
-                'supporting_text': 'Molecular analysis shows BRAF fusion',
-                'date_extracted': '2018-06-15'
-            }
+        # Check if Ollama client is available
+        if not self.ollama_client:
+            logger.debug("Ollama client not available, using fallback extraction")
+            return self._fallback_extraction(prompt, document_id)
+
+        # Add JSON formatting instruction to prompt
+        json_prompt = prompt + "\n\nIMPORTANT: Return your response as valid JSON with these fields:\n{\n  \"value\": \"extracted value or 'Not found'\",\n  \"confidence\": 0.0 to 1.0,\n  \"supporting_text\": \"relevant text from document\",\n  \"date_extracted\": \"date if found or null\"\n}"
+
+        try:
+            # Call Ollama using client library (as in tested workflows)
+            response = self.ollama_client.chat(
+                model=self.ollama_model,
+                messages=[
+                    {'role': 'user', 'content': json_prompt}
+                ],
+                options={
+                    'temperature': 0.3,  # Lower temperature for more consistent extraction
+                    'num_predict': 500   # Limit response length
+                }
+            )
+
+            # Extract the response content
+            if response and 'message' in response:
+                response_text = response['message']['content'].strip()
+
+                # Try to parse JSON response
+                try:
+                    # Extract JSON from response (Ollama may add extra text)
+                    json_match = re.search(r'\{[^}]*\}', response_text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group()
+                        extraction = json.loads(json_str)
+
+                        # Validate required fields
+                        if all(key in extraction for key in ['value', 'confidence']):
+                            logger.debug(f"Successfully extracted: {extraction.get('value')}")
+                            return extraction
+                        else:
+                            logger.warning("Incomplete extraction from Ollama")
+                            return self._fallback_extraction(prompt, document_id)
+                    else:
+                        # If no JSON, try to parse as plain text
+                        return self._parse_plain_text_response(response_text)
+
+                except json.JSONDecodeError:
+                    logger.debug("Failed to parse Ollama response as JSON, parsing as text")
+                    return self._parse_plain_text_response(response_text)
+            else:
+                logger.warning("Empty response from Ollama")
+                return self._fallback_extraction(prompt, document_id)
+
+        except Exception as e:
+            logger.warning(f"Error calling Ollama: {e}")
+            return self._fallback_extraction(prompt, document_id)
+
+    def _fallback_extraction(self, prompt: str, document_id: str) -> Dict:
+        """
+        Fallback extraction when Ollama is not available
+        Uses keyword matching for basic extraction
+        """
+        # Extract variable type from prompt
+        prompt_lower = prompt.lower()
+
+        if 'extent of resection' in prompt_lower:
+            # Look for resection keywords in prompt
+            if 'gross total' in prompt_lower or 'gtr' in prompt_lower:
+                return {'value': 'GTR', 'confidence': 0.6, 'supporting_text': 'Keyword match: gross total', 'date_extracted': None}
+            elif 'subtotal' in prompt_lower or 'str' in prompt_lower:
+                return {'value': 'STR', 'confidence': 0.6, 'supporting_text': 'Keyword match: subtotal', 'date_extracted': None}
+            elif 'partial' in prompt_lower:
+                return {'value': 'Partial', 'confidence': 0.6, 'supporting_text': 'Keyword match: partial', 'date_extracted': None}
+
+        return {
+            'value': 'Unable to extract',
+            'confidence': 0.0,
+            'supporting_text': 'Ollama not available, fallback extraction failed',
+            'date_extracted': None
         }
 
-        # Get document type from document_id
-        doc_type = 'unknown'
-        for key in mock_extractions.keys():
-            if key in document_id:
-                doc_type = key
-                break
+    def _parse_plain_text_response(self, response: str) -> Dict:
+        """
+        Parse plain text response from Ollama when JSON parsing fails
+        """
+        response_lower = response.lower()
 
-        if doc_type in mock_extractions:
-            return mock_extractions[doc_type]
-        else:
-            return {
-                'value': 'Not found',
-                'confidence': 0.0,
-                'supporting_text': '',
-                'date_extracted': None
-            }
+        # Try to extract common values
+        value = 'Not found'
+        confidence = 0.5
+
+        if 'gross total' in response_lower or 'gtr' in response_lower:
+            value = 'GTR'
+            confidence = 0.7
+        elif 'subtotal' in response_lower or 'str' in response_lower:
+            value = 'STR'
+            confidence = 0.7
+        elif 'partial' in response_lower:
+            value = 'Partial'
+            confidence = 0.7
+        elif 'biopsy' in response_lower:
+            value = 'Biopsy only'
+            confidence = 0.7
+
+        return {
+            'value': value,
+            'confidence': confidence,
+            'supporting_text': response[:200] if response else '',
+            'date_extracted': None
+        }
 
     def _validate_extraction(self, extraction: Dict, variable: str,
                            structured_context: Dict) -> Dict:

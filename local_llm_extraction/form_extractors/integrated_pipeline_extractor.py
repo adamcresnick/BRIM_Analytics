@@ -32,18 +32,19 @@ sys.path.append(str(Path(__file__).parent.parent))
 # Set up logger before using it
 logger = logging.getLogger(__name__)
 
-from event_based_extraction.phase1_structured_harvester import StructuredDataHarvester
+from event_based_extraction.phase1_enhanced_structured_harvester import EnhancedStructuredDataHarvester
 from event_based_extraction.phase2_timeline_builder import ClinicalTimelineBuilder, ClinicalEvent
 from event_based_extraction.phase3_intelligent_document_selector import IntelligentDocumentSelector
-from event_based_extraction.phase4_enhanced_llm_extraction import EnhancedLLMExtractor
+from event_based_extraction.phase4_iterative_llm_extraction import IterativeLLMExtractor
 from event_based_extraction.phase5_cross_source_validation import CrossSourceValidator
 from event_based_extraction.enhanced_extraction_with_fallback import StrategicDocumentRetriever
+from event_based_extraction.real_document_extraction import RealDocumentRetriever
 
 # Import MISSING critical components for complete integration
 try:
     from event_based_extraction.molecular_diagnosis_integration import MolecularDiagnosisIntegration
     from event_based_extraction.problem_list_analyzer import ProblemListAnalyzer
-    from event_based_extraction.comprehensive_chemotherapy_identifier import ChemotherapyIdentifier
+    from event_based_extraction.comprehensive_chemotherapy_identifier import ComprehensiveChemotherapyIdentifier as ChemotherapyIdentifier
     from event_based_extraction.tumor_surgery_classifier import TumorSurgeryClassifier
 except ImportError as e:
     logger.warning(f"Some components not available: {e}")
@@ -107,19 +108,22 @@ class IntegratedPipelineExtractor:
         self.data_dictionary_path = data_dictionary_path
         self.ollama_model = ollama_model
 
-        # Initialize all 5 phases
-        self.phase1_harvester = StructuredDataHarvester(self.staging_base_path)
+        # Initialize all 5 phases - Using enhanced Phase 1 that creates event waypoints
+        self.phase1_harvester = EnhancedStructuredDataHarvester(self.staging_base_path)
         self.phase2_timeline_builder = None  # Initialized per patient
         self.phase3_document_selector = IntelligentDocumentSelector(
             self.staging_base_path, self.binary_files_path
         )
-        self.phase4_llm_extractor = EnhancedLLMExtractor(
+        self.phase4_llm_extractor = IterativeLLMExtractor(
             self.staging_base_path, ollama_model
         )
-        self.phase5_validator = CrossSourceValidator()
+        self.phase5_validator = CrossSourceValidator(staging_path=staging_base_path)
 
         # Initialize strategic fallback retriever
         self.fallback_retriever = StrategicDocumentRetriever(self.staging_base_path)
+
+        # Initialize real document retriever for S3 access
+        self.document_retriever = RealDocumentRetriever(staging_base_path, use_s3=True)
 
         # Initialize terminology mapper
         self.terminology_mapper = REDCapTerminologyMapper(data_dictionary_path)
@@ -131,7 +135,7 @@ class IntegratedPipelineExtractor:
         self.molecular_integrator = MolecularDiagnosisIntegration(self.staging_base_path) if MolecularDiagnosisIntegration else None
         self.problem_list_analyzer = ProblemListAnalyzer(self.staging_base_path) if ProblemListAnalyzer else None
         self.chemo_identifier = ChemotherapyIdentifier() if ChemotherapyIdentifier else None
-        self.surgery_classifier = TumorSurgeryClassifier() if TumorSurgeryClassifier else None
+        self.surgery_classifier = TumorSurgeryClassifier(staging_base_path) if TumorSurgeryClassifier else None
 
         # Initialize form-specific extractors (will be refactored to use pipeline)
         self.form_extractors = {
@@ -149,7 +153,8 @@ class IntegratedPipelineExtractor:
             'fallback_triggered': 0,
             'imaging_validations': 0,
             'discrepancies_found': 0,
-            'confidence_scores': []
+            'confidence_scores': [],
+            'variables_completed': 0
         }
 
     def extract_patient_comprehensive(self,
@@ -184,23 +189,35 @@ class IntegratedPipelineExtractor:
         logger.info(f"Staging files validation: {sum(staging_validation.values())}/{len(staging_validation)} available")
 
         # =================================================================
-        # PHASE 1: COMPREHENSIVE STRUCTURED DATA HARVESTING
-        # Load all materialized views from Athena + Missing Components
+        # PHASE 1: COMPREHENSIVE STRUCTURED DATA HARVESTING WITH EVENT WAYPOINTS
+        # Load all materialized views from Athena + Create date-anchored waypoints
         # =================================================================
         logger.info("\n" + "=" * 60)
-        logger.info("PHASE 1: COMPREHENSIVE STRUCTURED DATA HARVESTING")
+        logger.info("PHASE 1: COMPREHENSIVE STRUCTURED DATA HARVESTING WITH EVENT WAYPOINTS")
         logger.info("=" * 60)
 
-        structured_features = self.phase1_harvester.harvest_for_patient(
+        phase1_result = self.phase1_harvester.harvest_for_patient(
             patient_id, birth_date
         )
+
+        # Extract components from enhanced Phase 1
+        structured_features = phase1_result.get('structured_features', {})
+        event_waypoints = phase1_result.get('event_waypoints', [])
+        surgical_events = phase1_result.get('surgical_events', [])
+        diagnostic_cascade = phase1_result.get('diagnostic_cascade', {})
 
         # ENRICH with missing critical components
         structured_features = self._enrich_structured_features(
             structured_features, patient_id, birth_date
         )
 
+        # Add waypoint data to structured features
+        structured_features['event_waypoints'] = event_waypoints
+        structured_features['surgical_events'] = surgical_events
+        structured_features['diagnostic_cascade'] = diagnostic_cascade
+
         logger.info(f"✓ Harvested {len(structured_features)} structured features")
+        logger.info(f"✓ Created {len(event_waypoints)} event waypoints")
         logger.info(f"  - Total surgeries: {structured_features.get('total_surgeries', 0)}")
         logger.info(f"  - Has chemotherapy: {structured_features.get('has_chemotherapy', 'No')}")
         logger.info(f"  - Has radiation: {structured_features.get('has_radiation', 'No')}")
@@ -209,17 +226,19 @@ class IntegratedPipelineExtractor:
         logger.info(f"  - Service requests: {len(structured_features.get('diagnostic_cascade', {}))}")
 
         # =================================================================
-        # PHASE 2: CLINICAL TIMELINE CONSTRUCTION
-        # Build longitudinal patient feature layers
+        # PHASE 2: CLINICAL TIMELINE CONSTRUCTION FROM EVENT WAYPOINTS
+        # Build longitudinal patient feature layers from Phase 1 waypoints
         # =================================================================
         logger.info("\n" + "=" * 60)
-        logger.info("PHASE 2: CLINICAL TIMELINE CONSTRUCTION")
+        logger.info("PHASE 2: CLINICAL TIMELINE CONSTRUCTION FROM EVENT WAYPOINTS")
         logger.info("=" * 60)
 
+        # Phase 2 now builds from waypoints created in Phase 1
         self.phase2_timeline_builder = ClinicalTimelineBuilder(
             self.staging_base_path, structured_features
         )
 
+        # Build timeline (Phase 2 will use waypoints from structured_features if available)
         clinical_timeline = self.phase2_timeline_builder.build_timeline(
             patient_id, birth_date
         )
@@ -227,13 +246,33 @@ class IntegratedPipelineExtractor:
         logger.info(f"✓ Built clinical timeline with {len(clinical_timeline)} events")
 
         # Group events by type
-        surgical_events = [e for e in clinical_timeline if e.event_type == 'surgery']
+        surgical_events = [e for e in clinical_timeline if e.event_type in ['surgery', 'surgical']]
         diagnosis_events = [e for e in clinical_timeline if e.event_type == 'initial_diagnosis']
         progression_events = [e for e in clinical_timeline if e.event_type == 'progression']
 
         logger.info(f"  - Surgical events: {len(surgical_events)}")
+        if surgical_events:
+            # Show event classifications from waypoints
+            for idx, event in enumerate(surgical_events[:5], 1):  # Show first 5
+                event_type = getattr(event, 'event_classification', 'Unknown')
+                logger.info(f"    Surgery {idx}: {event.event_date.date()} - Type {event_type}")
         logger.info(f"  - Diagnosis events: {len(diagnosis_events)}")
         logger.info(f"  - Progression events: {len(progression_events)}")
+
+        # =================================================================
+        # SET PHASE DATA FOR ITERATIVE LLM EXTRACTION
+        # =================================================================
+        # Pass Phase 1-3 data to the iterative LLM extractor for context-aware prompting
+        # Also pass data sources for structured data interrogation (Pass 2)
+        # Get data sources from Phase 1 harvester
+        data_sources = self.phase1_harvester.data_sources
+
+        self.phase4_llm_extractor.set_phase_data(
+            structured_features,  # Phase 1 data
+            clinical_timeline,    # Phase 2 timeline
+            data_sources          # Data sources for Pass 2 structured interrogation
+        )
+        logger.info("✓ Phase 4 iterative extractor initialized with Phases 1-3 and data sources")
 
         # =================================================================
         # PROCESS EACH CLINICAL EVENT
@@ -342,22 +381,44 @@ class IntegratedPipelineExtractor:
             if count > 0:
                 logger.info(f"  - {category}: {count} documents")
 
+        # Update Phase 3 documents in the LLM extractor for this event
+        self.phase4_llm_extractor.phase3_documents = priority_documents
+
         # =================================================================
         # PHASE 4: ENHANCED LLM EXTRACTION
         # =================================================================
         logger.info("\nPHASE 4: ENHANCED LLM EXTRACTION")
 
         # Define variables to extract based on event type
-        if event.event_type == 'surgery':
-            target_variables = [
-                'extent_of_tumor_resection',
-                'tumor_location',
-                'surgery_type',
-                'specimen_to_cbtn',
-                'histopathology',
-                'who_grade',
-                'molecular_testing'
-            ]
+        if event.event_type == 'surgery' or event.event_type == 'surgical':
+            # Check surgery classification to skip inappropriate extractions
+            surgery_type = getattr(event, 'surgery_type', None)
+
+            if surgery_type == 'csf_diversion':
+                # CSF diversion procedures (shunts, ETV) - no tumor extent to extract
+                logger.info(f"  ⚠ Surgery classified as CSF DIVERSION - skipping extent/tumor extraction")
+                target_variables = []  # No tumor-related variables to extract
+            elif surgery_type == 'biopsy':
+                # Biopsy only - extent is already known
+                logger.info(f"  ℹ Surgery classified as BIOPSY - extent pre-defined")
+                target_variables = [
+                    'tumor_location',
+                    'specimen_to_cbtn',
+                    'histopathology',
+                    'who_grade',
+                    'molecular_testing'
+                ]
+            else:
+                # Tumor resection or other neurosurgical procedures
+                target_variables = [
+                    'extent_of_tumor_resection',
+                    'tumor_location',
+                    'surgery_type',
+                    'specimen_to_cbtn',
+                    'histopathology',
+                    'who_grade',
+                    'molecular_testing'
+                ]
         else:
             target_variables = [
                 'tumor_status',
@@ -375,13 +436,23 @@ class IntegratedPipelineExtractor:
                 variable, priority_documents
             )
 
-            # Extract with structured context
-            result = self.phase4_llm_extractor.extract_with_structured_context(
-                patient_id,
-                variable,
-                variable_docs,
-                timeline_context
+            # Retrieve actual content from S3 for selected documents
+            docs_with_content = self._retrieve_document_contents(variable_docs)
+
+            # Extract with iterative 4-pass framework
+            result = self.phase4_llm_extractor.extract_from_documents(
+                variable=variable,
+                documents=docs_with_content,
+                patient_id=patient_id,
+                event_date=event.event_date.isoformat(),
+                patient_age_days=event.age_at_event_days
             )
+
+            # Check for early termination if variable already confirmed
+            if self._is_variable_confirmed(result, variable):
+                logger.info(f"    ✓ {variable} already confirmed by multiple sources, skipping fallback")
+                self.stats['variables_completed'] += 1
+                continue
 
             # Strategic Fallback Mechanism (78% recovery rate documented)
             if self._needs_fallback(result, variable):
@@ -411,10 +482,14 @@ class IntegratedPipelineExtractor:
         logger.info("\nPHASE 5: CROSS-SOURCE VALIDATION")
 
         # Validate extractions across sources
-        validated_results = self.phase5_validator.validate_extractions(
-            extraction_results,
-            priority_documents
+        validation_report = self.phase5_validator.validate_extraction_results(
+            patient_id=patient_id,
+            brim_results={'variables': extraction_results},
+            clinical_timeline={'events': timeline, 'current_event': event.__dict__}
         )
+
+        # Store validation report separately
+        validated_results = extraction_results  # Keep the actual extraction results
 
         # CRITICAL: Post-operative imaging validation for extent (24-72 hours window)
         if 'extent_of_tumor_resection' in validated_results and event.event_type == 'surgery':
@@ -472,7 +547,11 @@ class IntegratedPipelineExtractor:
 
         # Update statistics
         for result in validated_results.values():
-            self.stats['confidence_scores'].append(result.get('confidence', 0))
+            if isinstance(result, dict):
+                self.stats['confidence_scores'].append(result.get('confidence', 0))
+            else:
+                # Handle cases where result might be a string or other type
+                self.stats['confidence_scores'].append(0.0)
 
         self.stats['successful'] += 1
 
@@ -490,10 +569,103 @@ class IntegratedPipelineExtractor:
                 'fallback_triggered': any(
                     r.get('fallback_used', False)
                     for r in validated_results.values()
+                    if isinstance(r, dict)
                 ),
-                'imaging_validation': 'extent_of_tumor_resection' in validated_results
+                'imaging_validation': 'extent_of_tumor_resection' in validated_results,
+                'validation_accuracy': validation_report.get('metrics', {}).get('accuracy', 0)
             }
         }
+
+    def _classify_document_type(self, filename: str, type_text: str = None) -> str:
+        """Classify document type from filename and type_text."""
+        filename_lower = str(filename).lower() if filename else ''
+        type_text_lower = str(type_text).lower() if type_text else ''
+        combined_text = f"{filename_lower} {type_text_lower}"
+
+        type_patterns = {
+            'operative_note': ['operative', 'operation', 'surgery', 'op note'],
+            'pathology_report': ['pathology', 'path report', 'histology'],
+            'radiology_report': ['radiology', 'imaging', 'mri', 'ct'],
+            'discharge_summary': ['discharge', 'summary'],
+            'oncology_note': ['oncology', 'chemotherapy', 'tumor board'],
+            'progress_note': ['progress', 'note'],
+            'consultation': ['consult', 'consultation'],
+            'anesthesia_note': ['anesthesia', 'anes note'],
+            'preoperative_eval': ['preoperative', 'pre-op eval']
+        }
+
+        for doc_type, patterns in type_patterns.items():
+            for pattern in patterns:
+                if pattern in combined_text:
+                    return doc_type
+
+        return 'clinical_note'
+
+    def _categorize_document_priority(self, doc_type: str, type_text: str = None) -> str:
+        """
+        Categorize document priority for LLM review based on document type.
+        Categories:
+        - Category 1: Pathology (highest priority for tumor details)
+        - Category 2: Surgery (operative notes, anesthesia)
+        - Category 3: Treatment (discharge, consults, H&P)
+        - Category 4: Monitoring (imaging, radiology)
+        - Category 5: Other
+        """
+        type_text_lower = str(type_text).lower() if type_text else ''
+
+        if 'pathology' in doc_type or 'pathology' in type_text_lower:
+            return 'Category 1: Pathology'
+        elif doc_type in ['operative_note', 'anesthesia_note', 'preoperative_eval']:
+            return 'Category 2: Surgery'
+        elif 'op note' in type_text_lower or 'anesthesia' in type_text_lower:
+            return 'Category 2: Surgery'
+        elif doc_type in ['discharge_summary', 'consultation', 'oncology_note']:
+            return 'Category 3: Treatment'
+        elif 'consult' in type_text_lower or 'discharge' in type_text_lower or 'h&p' in type_text_lower:
+            return 'Category 3: Treatment'
+        elif doc_type == 'radiology_report' or 'imaging' in type_text_lower:
+            return 'Category 4: Monitoring'
+        elif doc_type == 'progress_note':
+            return 'Category 3/4: Treatment/Status'
+        else:
+            return 'Category 5: Other'
+
+    def _calculate_document_priority_score(self, category: str, row: pd.Series, event_date: datetime) -> float:
+        """
+        Calculate priority score for document based on category and temporal proximity.
+        Higher scores = higher priority for LLM review.
+        """
+        # Category-based base scores
+        category_scores = {
+            'Category 1: Pathology': 100,
+            'Category 2: Surgery': 90,
+            'Category 3: Treatment': 70,
+            'Category 3/4: Treatment/Status': 60,
+            'Category 4: Monitoring': 50,
+            'Category 5: Other': 10
+        }
+
+        base_score = category_scores.get(category, 10)
+
+        # Add temporal proximity bonus (closer to event = higher score)
+        if 'dr_date' in row and pd.notna(row['dr_date']):
+            doc_date = pd.to_datetime(row['dr_date'])
+            days_diff = abs((doc_date - event_date).days)
+
+            if days_diff <= 1:
+                temporal_bonus = 20
+            elif days_diff <= 3:
+                temporal_bonus = 15
+            elif days_diff <= 7:
+                temporal_bonus = 10
+            elif days_diff <= 14:
+                temporal_bonus = 5
+            else:
+                temporal_bonus = 0
+
+            return base_score + temporal_bonus
+
+        return base_score
 
     def _extract_demographics_integrated(self,
                                         patient_id: str,
@@ -827,19 +999,99 @@ class IntegratedPipelineExtractor:
                                 event_date: datetime,
                                 window: timedelta,
                                 document_types: List[str]) -> List[Dict]:
-        """Get documents within specified time window."""
+        """Get documents within specified time window from binary files and S3."""
         start_date = event_date - window
         end_date = event_date + window
 
-        # This would normally query the document store
-        # For now, using the phase3 selector with date filtering
+        # Use the correct staging files path from config_driven_versions
+        # Handle truncated patient IDs (e.g., e4BwD8ZYDBccepXcJ.Ilo3w3 -> e4BwD8ZYDBccepXcJ.Ilo3)
+        # Try full ID first
+        config_staging_path = self.staging_base_path / 'athena_extraction_validation' / 'scripts' / 'config_driven_versions' / 'staging_files' / f"patient_{patient_id}"
+        binary_file = config_staging_path / "binary_files.csv"
+
+        if not binary_file.exists():
+            # Try truncated ID (handle cases like e4BwD8ZYDBccepXcJ.Ilo3w3 -> e4BwD8ZYDBccepXcJ.Ilo3)
+            if 'w3' in patient_id and patient_id.endswith('w3'):
+                truncated_id = patient_id[:-2]  # Remove 'w3' suffix
+                config_staging_path = self.staging_base_path / 'athena_extraction_validation' / 'scripts' / 'config_driven_versions' / 'staging_files' / f"patient_{truncated_id}"
+                binary_file = config_staging_path / "binary_files.csv"
+
+        if not binary_file.exists():
+            # Fallback to original location
+            patient_path = self.staging_base_path / f"patient_{patient_id}"
+            binary_file = patient_path / "binary_files.csv"
+
+        if not binary_file.exists():
+            logger.warning(f"No binary files found for patient {patient_id}")
+            return []
+
+        # Load and filter binary files
+        df = pd.read_csv(binary_file)
+
+        # Parse dates with timezone awareness
+        date_columns = ['document_date', 'dr_date', 'created_date']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce', utc=True)
+
+        # Get the first available date column
+        date_col = None
+        for col in date_columns:
+            if col in df.columns and df[col].notna().any():
+                date_col = col
+                break
+
+        if date_col is None:
+            logger.warning("No valid date column found in binary files")
+            return []
+
+        # Filter by date window
+        mask = (df[date_col] >= start_date) & (df[date_col] <= end_date)
+        filtered_docs = df[mask].copy()
+
+        # Filter by document type if specified
+        if document_types:
+            type_mask = pd.Series([False] * len(filtered_docs), index=filtered_docs.index)
+            for doc_type in document_types:
+                # Check file_name and description for document type
+                if 'file_name' in filtered_docs.columns:
+                    type_mask |= filtered_docs['file_name'].str.lower().str.contains(doc_type.replace('_', ' '), na=False)
+                if 'document_type' in filtered_docs.columns:
+                    type_mask |= filtered_docs['document_type'].str.lower().str.contains(doc_type.replace('_', ' '), na=False)
+                if 'description' in filtered_docs.columns:
+                    type_mask |= filtered_docs['description'].str.lower().str.contains(doc_type.replace('_', ' '), na=False)
+
+            filtered_docs = filtered_docs[type_mask]
+
+        # Convert to list of dictionaries with document metadata and categorization
         docs = []
+        for _, row in filtered_docs.iterrows():
+            # Use type_text field if available for better classification
+            type_text = row.get('dr_type_text', row.get('type_text', ''))
+            file_name = str(row.get('file_name', row.get('dc_content_title', '')))
 
-        # Mock implementation - replace with actual document retrieval
-        for doc_type in document_types:
-            # This would query binary_files.csv and S3
-            pass
+            # Classify document type using both filename and type_text
+            doc_type = self._classify_document_type(file_name, type_text)
 
+            # Categorize for LLM priority
+            doc_category = self._categorize_document_priority(doc_type, type_text)
+
+            doc = {
+                'document_id': row.get('dc_binary_id', row.get('binary_id', row.get('dr_id', ''))),
+                'document_type': doc_type,
+                'document_category': doc_category,  # For LLM prioritization
+                'document_date': row[date_col].isoformat() if pd.notna(row[date_col]) else None,
+                'file_name': file_name,
+                'type_text': type_text,  # Original type from Athena
+                'binary_id': row.get('dc_binary_id', row.get('binary_id', '')),
+                's3_path': row.get('dc_binary_url', row.get('s3_path', '')),
+                'description': row.get('dr_description', ''),
+                'has_content': False,  # Will be set to True when content is retrieved
+                'priority_score': self._calculate_document_priority_score(doc_category, row, event_date)
+            }
+            docs.append(doc)
+
+        logger.info(f"    Found {len(docs)} documents in window for types: {document_types}")
         return docs
 
     def _get_postop_imaging_documents(self,
@@ -855,11 +1107,45 @@ class IntegratedPipelineExtractor:
 
         return postop_docs
 
+    def _is_variable_confirmed(self, result: Dict, variable: str) -> bool:
+        """
+        Check if variable is already confirmed by multiple consistent sources.
+        Implements early termination logic to avoid processing excess documents.
+        Handles both old format (value/confidence) and new iterative format (final_value/final_confidence).
+        """
+        # Handle both result formats
+        confidence = result.get('final_confidence', result.get('confidence', 0))
+        value = result.get('final_value', result.get('value'))
+
+        # If no valid value, not confirmed
+        if not value or value in ['Not found', 'No confident extractions', 'Unavailable']:
+            return False
+
+        # Special handling for extent of resection
+        if variable == 'extent_of_tumor_resection':
+            # Must have both operative note AND imaging for confirmation
+            sources = result.get('sources', [])
+            # Also check all_candidates for sources
+            if 'all_candidates' in result:
+                sources.extend([c.get('source', '') for c in result['all_candidates']])
+
+            has_op_note = any('operative' in s.lower() for s in sources if s)
+            has_imaging = any('imaging' in s.lower() for s in sources if s)
+            if has_op_note and has_imaging:
+                return True
+
+        # For other variables, check if we have 3+ consistent sources
+        source_count = result.get('source_count', len(result.get('all_candidates', [])))
+        if source_count >= 3 and confidence >= 0.8:
+            return True
+
+        return False
+
     def _needs_fallback(self, result: Dict, variable: str) -> bool:
         """
         Determine if strategic fallback is needed based on result quality.
-
-        Critical variables require minimum 2 sources and confidence >= 0.7
+        Critical variables require minimum 2 sources and confidence >= 0.7.
+        Handles both old format (value/confidence) and new iterative format (final_value/final_confidence).
         """
         critical_variables = [
             'extent_of_tumor_resection',
@@ -869,15 +1155,18 @@ class IntegratedPipelineExtractor:
             'metastasis_presence'
         ]
 
-        # Check if unavailable or low confidence
-        if result.get('value') == 'Unavailable':
-            return True
+        # Handle both result formats
+        value = result.get('final_value', result.get('value'))
+        confidence = result.get('final_confidence', result.get('confidence', 0))
 
-        confidence = result.get('confidence', 0)
+        # Check if unavailable or low confidence
+        if value in ['Unavailable', 'Not found', 'No confident extractions']:
+            return True
 
         # Critical variables need higher confidence and multiple sources
         if variable in critical_variables:
-            source_count = len(result.get('sources', []))
+            # Get source count from either format
+            source_count = len(result.get('all_candidates', result.get('sources', [])))
             if confidence < 0.7 or source_count < 2:
                 return True
         else:
@@ -919,12 +1208,14 @@ class IntegratedPipelineExtractor:
             )
 
             if fallback_docs:
-                # Try extraction with fallback documents
-                result = self.phase4_llm_extractor.extract_with_structured_context(
-                    patient_id,
-                    variable,
-                    fallback_docs,
-                    timeline_context
+                # Try extraction with fallback documents using iterative framework
+                # Note: event_date and patient_age_days need to be passed from timeline_context
+                result = self.phase4_llm_extractor.extract_from_documents(
+                    variable=variable,
+                    documents=fallback_docs,
+                    patient_id=patient_id,
+                    event_date=event_date.isoformat() if hasattr(event_date, 'isoformat') else str(event_date),
+                    patient_age_days=timeline_context.get('age_at_event')
                 )
 
                 # Calculate confidence with proper formula
@@ -985,6 +1276,19 @@ class IntegratedPipelineExtractor:
         for doc in new_docs:
             doc['is_fallback'] = True
             doc['fallback_window'] = window_days
+
+        # CRITICAL: Limit fallback documents to prevent processing thousands
+        # Based on validated workflow that limited to 3-20 docs for performance
+        max_fallback_docs = 20
+        if len(new_docs) > max_fallback_docs:
+            logger.info(f"      Limiting fallback from {len(new_docs)} to {max_fallback_docs} documents")
+            # Prioritize by document type relevance
+            prioritized = sorted(new_docs,
+                               key=lambda x: ('operative' in x.get('type', '').lower(),
+                                            'imaging' in x.get('type', '').lower(),
+                                            'pathology' in x.get('type', '').lower()),
+                               reverse=True)
+            return prioritized[:max_fallback_docs]
 
         return new_docs
 
@@ -1176,6 +1480,43 @@ class IntegratedPipelineExtractor:
             return patterns
         except:
             return {}
+
+    def _retrieve_document_contents(self, documents: List[Dict]) -> List[Dict]:
+        """
+        Retrieve actual document content from S3 or local storage
+
+        Args:
+            documents: List of document metadata dicts
+
+        Returns:
+            List of documents with 'content' field added
+        """
+        docs_with_content = []
+
+        for doc in documents:
+            doc_copy = doc.copy()
+
+            # Check if S3 key is available
+            if doc.get('s3_key') or doc.get('s3_path'):
+                try:
+                    # Use the real document retriever for S3 access
+                    s3_key = doc.get('s3_key') or doc.get('s3_path')
+                    content = self.document_retriever.retrieve_document_content(s3_key)
+                    doc_copy['content'] = content
+                    doc_copy['has_content'] = True
+                    logger.info(f"    Retrieved content for document: {doc.get('document_id', 'unknown')[:20]}")
+                except Exception as e:
+                    logger.warning(f"    Failed to retrieve S3 content: {e}")
+                    doc_copy['content'] = f"[Document metadata only - content retrieval failed: {e}]"
+                    doc_copy['has_content'] = False
+            else:
+                # No S3 key, use metadata only
+                doc_copy['content'] = f"[Document metadata: {doc.get('document_type', 'Unknown type')} from {doc.get('document_date', 'Unknown date')}]"
+                doc_copy['has_content'] = False
+
+            docs_with_content.append(doc_copy)
+
+        return docs_with_content
 
     def _calculate_quality_metrics(self) -> Dict:
         """Calculate extraction quality metrics."""

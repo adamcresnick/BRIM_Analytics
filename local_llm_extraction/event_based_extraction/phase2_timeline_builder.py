@@ -32,6 +32,9 @@ class ClinicalEvent:
     procedure_codes: List[str] = field(default_factory=list)
     diagnosis_codes: List[str] = field(default_factory=list)
 
+    # Surgery classification (NEW - prevents false extractions for non-tumor procedures)
+    surgery_type: Optional[str] = None  # 'tumor_resection', 'csf_diversion', 'biopsy', 'other'
+
     # Associated documents
     binary_references: List[str] = field(default_factory=list)
     imaging_references: List[str] = field(default_factory=list)
@@ -118,6 +121,49 @@ class ClinicalTimelineBuilder:
         # Use patient ID as-is, preserving dots
         return self.staging_path / f"patient_{patient_id}"
 
+    def _classify_surgery_type(self, procedure_texts: List[str]) -> str:
+        """
+        Classify surgery as tumor_resection, csf_diversion, biopsy, or other
+        This prevents false extractions for non-tumor procedures (shunts, ETV, etc.)
+
+        Args:
+            procedure_texts: List of procedure descriptions
+
+        Returns:
+            'tumor_resection', 'csf_diversion', 'biopsy', or 'other'
+        """
+        combined_text = ' '.join([str(t).lower() for t in procedure_texts])
+
+        # Priority 1: CSF diversion - NO extent extraction needed
+        csf_keywords = [
+            'ventriculostomy', 'shunt', 'vps', 'ventriculoperitoneal',
+            'evd', 'third ventriculostomy', 'etv', 'external ventricular drain',
+            'ventriculo-peritoneal', 'csf diversion'
+        ]
+        if any(kw in combined_text for kw in csf_keywords):
+            logger.info(f"  Classified as CSF DIVERSION (no extent extraction)")
+            return 'csf_diversion'
+
+        # Priority 2: Biopsy only (extent = "Biopsy only")
+        if 'biopsy' in combined_text and not any(kw in combined_text for kw in ['resection', 'excision', 'debulking']):
+            logger.info(f"  Classified as BIOPSY")
+            return 'biopsy'
+
+        # Priority 3: Tumor resection
+        resection_keywords = ['craniotomy', 'craniectomy', 'resection', 'excision', 'debulking', 'removal']
+        tumor_keywords = ['tumor', 'mass', 'lesion', 'neoplasm', 'glioma', 'astrocytoma']
+
+        has_resection = any(kw in combined_text for kw in resection_keywords)
+        has_tumor = any(kw in combined_text for kw in tumor_keywords)
+
+        if has_resection and has_tumor:
+            logger.info(f"  Classified as TUMOR RESECTION")
+            return 'tumor_resection'
+
+        # Default: Other neurosurgical procedure
+        logger.info(f"  Classified as OTHER neurosurgical procedure")
+        return 'other'
+
     def _load_data_sources(self):
         """Load all necessary data sources"""
         logger.info("Loading data sources for timeline construction...")
@@ -148,7 +194,36 @@ class ClinicalTimelineBuilder:
         """Extract surgical events from procedures and operative notes"""
         events = []
 
-        # Get procedures
+        # First check for validated surgical events from Phase 1 waypoints
+        if 'surgical_events' in self.structured_features and self.structured_features['surgical_events']:
+            logger.info("  Using validated surgical events from Phase 1 waypoints")
+            for surgery in self.structured_features['surgical_events']:
+                # Convert surgery date to timezone-aware
+                surgery_date = pd.to_datetime(surgery.get('surgery_date'), utc=True)
+                age_days = surgery.get('age_at_surgery_days', 0)
+
+                # Create ClinicalEvent from validated Phase 1 waypoint data
+                event = ClinicalEvent(
+                    event_id=f"surgery_{surgery.get('event_number', '')}_{surgery_date.strftime('%Y%m%d')}",
+                    event_type='surgery',
+                    event_date=surgery_date,
+                    age_at_event_days=age_days,
+                    description=f"Event {surgery.get('event_number')}: {surgery.get('event_type_label')} - {surgery.get('code_text', '')}",
+                    procedure_codes=[surgery.get('procedure_fhir_id', '')],
+                    binary_references=[surgery.get('op_note_id', '')] if surgery.get('op_note_linked') else [],
+                    metadata={
+                        'event_type_code': surgery.get('event_type'),
+                        'event_type_label': surgery.get('event_type_label'),
+                        'event_number': surgery.get('event_number'),
+                        's3_key': surgery.get('s3_key', ''),
+                        'op_note_linked': surgery.get('op_note_linked', False),
+                        'from_validated_staging': True
+                    }
+                )
+                events.append(event)
+            return events
+
+        # Fallback to procedures if no validated events
         if 'procedures' in self.data_sources and not self.data_sources['procedures'].empty:
             procs_df = self.data_sources['procedures']
 
@@ -181,48 +256,71 @@ class ClinicalTimelineBuilder:
                         event_date = pd.Timestamp(date, tz='UTC')
                         age_days = (event_date - self.birth_date).days
 
+                        # Classify surgery type (NEW - prevents false extractions)
+                        procedure_texts = group['proc_code_text'].tolist()
+                        surgery_type = self._classify_surgery_type(procedure_texts)
+
                         # Create event
                         event = ClinicalEvent(
                             event_id=f"surgery_{date.strftime('%Y%m%d')}",
-                            event_type='surgery',
+                            event_type='surgical',  # Changed from 'surgery' to 'surgical' for consistency
                             event_date=event_date,
                             age_at_event_days=age_days,
-                            description=f"Surgical procedures: {', '.join(group['proc_code_text'].tolist())}",
+                            description=f"Surgical procedures: {', '.join(procedure_texts)}",
                             encounter_id=group['proc_encounter_reference'].iloc[0] if 'proc_encounter_reference' in group else None,
                             procedure_codes=group['pcc_code_coding_code'].tolist() if 'pcc_code_coding_code' in group else [],
                             binary_references=binary_refs,
+                            surgery_type=surgery_type,  # NEW field
                             metadata={
                                 'procedure_count': len(group),
-                                'procedure_types': group['proc_code_text'].tolist()
+                                'procedure_types': procedure_texts
                             }
                         )
                         events.append(event)
 
         # Also check for operative notes without matching procedures
         if 'binary_files' in self.data_sources and not self.data_sources['binary_files'].empty:
-            op_notes = self.data_sources['binary_files'][
-                self.data_sources['binary_files']['dr_type_text'].str.contains(
-                    'OP Note|Operative', case=False, na=False
-                )
-            ]
+            # Check which column name exists for document type
+            type_col = 'document_type' if 'document_type' in self.data_sources['binary_files'].columns else 'dr_type_text'
+            date_col = 'document_date' if 'document_date' in self.data_sources['binary_files'].columns else 'dr_date'
 
-            if not op_notes.empty and 'dr_date' in op_notes.columns:
+            if type_col in self.data_sources['binary_files'].columns:
+                op_notes = self.data_sources['binary_files'][
+                    self.data_sources['binary_files'][type_col].str.contains(
+                        'OP Note|Operative', case=False, na=False
+                    )
+                ]
+            else:
+                op_notes = pd.DataFrame()
+
+            if not op_notes.empty and date_col in op_notes.columns:
                 # Group by date
-                op_notes['dr_date'] = pd.to_datetime(op_notes['dr_date'], utc=True)
-                for date, notes_group in op_notes.groupby(op_notes['dr_date'].dt.date):
+                op_notes[date_col] = pd.to_datetime(op_notes[date_col], utc=True)
+                for date, notes_group in op_notes.groupby(op_notes[date_col].dt.date):
                     # Check if we already have a surgical event for this date
                     existing_dates = [e.event_date.date() for e in events]
                     if date not in existing_dates:
                         event_date = pd.Timestamp(date, tz='UTC')
                         age_days = (event_date - self.birth_date).days
 
+                        # Try to extract procedure text from note titles/descriptions for classification
+                        procedure_texts = []
+                        if 'document_type' in notes_group.columns:
+                            procedure_texts.extend(notes_group['document_type'].tolist())
+                        if 'dr_type_text' in notes_group.columns:
+                            procedure_texts.extend(notes_group['dr_type_text'].tolist())
+
+                        # Classify surgery type (NEW - prevents false extractions)
+                        surgery_type = self._classify_surgery_type(procedure_texts) if procedure_texts else 'other'
+
                         event = ClinicalEvent(
                             event_id=f"surgery_{date.strftime('%Y%m%d')}",
-                            event_type='surgery',
+                            event_type='surgical',  # Changed from 'surgery' to 'surgical' for consistency
                             event_date=event_date,
                             age_at_event_days=age_days,
                             description=f"Surgical event from {len(notes_group)} operative notes",
                             binary_references=notes_group['dr_id'].tolist() if 'dr_id' in notes_group else [],
+                            surgery_type=surgery_type,  # NEW field
                             metadata={
                                 'source': 'operative_notes_only',
                                 'note_count': len(notes_group)
