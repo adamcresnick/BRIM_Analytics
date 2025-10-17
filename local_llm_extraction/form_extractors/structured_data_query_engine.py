@@ -329,6 +329,12 @@ class StructuredDataQueryEngine:
                     break
 
             if img_date:
+                # Ensure both dates are timezone-naive for comparison
+                if surgery.tzinfo is not None and img_date.tzinfo is None:
+                    img_date = img_date.replace(tzinfo=surgery.tzinfo)
+                elif surgery.tzinfo is None and img_date.tzinfo is not None:
+                    img_date = img_date.replace(tzinfo=None)
+
                 time_diff = img_date - surgery
                 if timedelta(0) <= time_diff <= postop_window:
                     # Check for MRI specifically

@@ -1,0 +1,124 @@
+2025-10-11 16:37:43,844 - INFO - ================================================================================
+2025-10-11 16:37:43,844 - INFO - COMPREHENSIVE EXTRACTION FOR PATIENT 55529723
+2025-10-11 16:37:43,844 - INFO - ================================================================================
+2025-10-11 16:37:43,844 - INFO - FHIR ID: eXdoUrDdY4gkdnZEs6uTeq-MEZEFJsVmSduLKRoTdXmE3
+2025-10-11 16:37:43,844 - INFO - Birth Date: 2012-06-24
+2025-10-11 16:37:43,844 - INFO - Gender: female
+2025-10-11 16:37:43,844 - INFO - Output Directory: staging_files/patient_55529723
+2025-10-11 16:37:43,844 - INFO - ================================================================================
+2025-10-11 16:37:44,141 - INFO - 
+================================================================================
+2025-10-11 16:37:44,142 - INFO - EXTRACTION 1/8: MEDICATIONS
+2025-10-11 16:37:44,142 - INFO - ================================================================================
+2025-10-11 16:37:44,142 - INFO - ⚠️  For medications extraction, please run extract_all_medications_metadata.py separately
+2025-10-11 16:37:44,142 - INFO -     with PATIENT_ID and PATIENT_MRN updated to new values
+2025-10-11 16:37:44,142 - INFO - 
+================================================================================
+2025-10-11 16:37:44,142 - INFO - EXTRACTION 2/8: ENCOUNTERS
+2025-10-11 16:37:44,142 - INFO - ================================================================================
+2025-10-11 16:37:44,142 - INFO - Executing: Encounters extraction
+2025-10-11 16:37:44,241 - INFO - Loading cached SSO token for radiant
+2025-10-11 16:37:47,382 - ERROR - ❌ Encounters extraction - Query failed: COLUMN_NOT_FOUND: line 7:9: Column 'e.type_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:37:47,383 - INFO - 
+================================================================================
+2025-10-11 16:37:47,383 - INFO - EXTRACTION 3/8: PROCEDURES
+2025-10-11 16:37:47,383 - INFO - ================================================================================
+2025-10-11 16:37:47,383 - INFO - Executing: Procedures extraction
+2025-10-11 16:37:49,554 - ERROR - ❌ Procedures extraction - Query failed: COLUMN_NOT_FOUND: line 4:30: Column 'code_code' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:37:49,554 - INFO - 
+================================================================================
+2025-10-11 16:37:49,554 - INFO - EXTRACTION 4/8: IMAGING/DIAGNOSTIC REPORTS
+2025-10-11 16:37:49,554 - INFO - ================================================================================
+2025-10-11 16:37:49,554 - INFO - Executing: Imaging extraction
+2025-10-11 16:37:51,727 - ERROR - ❌ Imaging extraction - Query failed: COLUMN_NOT_FOUND: line 14:13: Column 'dr.category_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:37:51,728 - INFO - 
+================================================================================
+2025-10-11 16:37:51,728 - INFO - EXTRACTION 5/8: MEASUREMENTS
+2025-10-11 16:37:51,728 - INFO - ================================================================================
+2025-10-11 16:37:51,728 - INFO - Executing: Measurements extraction
+2025-10-11 16:37:53,907 - ERROR - ❌ Measurements extraction - Query failed: COLUMN_NOT_FOUND: line 5:9: Column 'o.category_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:37:53,907 - INFO - 
+================================================================================
+2025-10-11 16:37:53,908 - INFO - EXTRACTION 6/8: DIAGNOSES
+2025-10-11 16:37:53,908 - INFO - ================================================================================
+2025-10-11 16:37:53,908 - INFO - Executing: Diagnoses extraction
+2025-10-11 16:37:56,094 - ERROR - ❌ Diagnoses extraction - Query failed: COLUMN_NOT_FOUND: line 4:30: Column 'code_code' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:37:56,096 - INFO - 
+================================================================================
+2025-10-11 16:37:56,096 - INFO - EXTRACTION 7/8: BINARY FILES (DOCUMENT REFERENCES)
+2025-10-11 16:37:56,096 - INFO - ================================================================================
+2025-10-11 16:37:56,225 - INFO - Executing: Binary files extraction
+2025-10-11 16:37:58,287 - ERROR - ❌ Binary files extraction - Query failed: TABLE_NOT_FOUND: line 15:14: Table 'awsdatacatalog.fhir_prd_db.document_reference_content_attachment' does not exist
+2025-10-11 16:37:58,287 - INFO - 
+================================================================================
+2025-10-11 16:37:58,287 - INFO - EXTRACTION COMPLETE
+2025-10-11 16:37:58,287 - INFO - ================================================================================
+2025-10-11 16:37:58,287 - INFO - Duration: 14.1 seconds
+2025-10-11 16:37:58,287 - INFO - Output directory: staging_files/patient_55529723
+2025-10-11 16:37:58,287 - INFO - ================================================================================
+2025-10-11 16:37:58,287 - INFO - 
+⚠️  NOTE: For medications extraction with full metadata (44 fields),
+2025-10-11 16:37:58,287 - INFO - please update and run extract_all_medications_metadata.py separately
+2025-10-11 16:37:58,287 - INFO - with the new patient ID and MRN.
+2025-10-11 16:38:43,147 - INFO - ================================================================================
+2025-10-11 16:38:43,148 - INFO - COMPREHENSIVE EXTRACTION FOR PATIENT 55529723
+2025-10-11 16:38:43,148 - INFO - ================================================================================
+2025-10-11 16:38:43,148 - INFO - FHIR ID: eXdoUrDdY4gkdnZEs6uTeq-MEZEFJsVmSduLKRoTdXmE3
+2025-10-11 16:38:43,148 - INFO - Birth Date: 2012-06-24
+2025-10-11 16:38:43,148 - INFO - Gender: female
+2025-10-11 16:38:43,148 - INFO - Output Directory: staging_files/patient_55529723
+2025-10-11 16:38:43,148 - INFO - ================================================================================
+2025-10-11 16:38:43,341 - INFO - 
+================================================================================
+2025-10-11 16:38:43,341 - INFO - EXTRACTION 1/8: MEDICATIONS
+2025-10-11 16:38:43,341 - INFO - ================================================================================
+2025-10-11 16:38:43,341 - INFO - ⚠️  For medications extraction, please run extract_all_medications_metadata.py separately
+2025-10-11 16:38:43,341 - INFO -     with PATIENT_ID and PATIENT_MRN updated to new values
+2025-10-11 16:38:43,341 - INFO - 
+================================================================================
+2025-10-11 16:38:43,341 - INFO - EXTRACTION 2/8: ENCOUNTERS
+2025-10-11 16:38:43,341 - INFO - ================================================================================
+2025-10-11 16:38:43,341 - INFO - Executing: Encounters extraction
+2025-10-11 16:38:43,347 - INFO - Loading cached SSO token for radiant
+2025-10-11 16:38:46,526 - ERROR - ❌ Encounters extraction - Query failed: COLUMN_NOT_FOUND: line 7:9: Column 'e.type_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:38:46,526 - INFO - 
+================================================================================
+2025-10-11 16:38:46,526 - INFO - EXTRACTION 3/8: PROCEDURES
+2025-10-11 16:38:46,526 - INFO - ================================================================================
+2025-10-11 16:38:46,526 - INFO - Executing: Procedures extraction
+2025-10-11 16:38:48,698 - ERROR - ❌ Procedures extraction - Query failed: COLUMN_NOT_FOUND: line 4:30: Column 'code_code' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:38:48,698 - INFO - 
+================================================================================
+2025-10-11 16:38:48,698 - INFO - EXTRACTION 4/8: IMAGING/DIAGNOSTIC REPORTS
+2025-10-11 16:38:48,698 - INFO - ================================================================================
+2025-10-11 16:38:48,698 - INFO - Executing: Imaging extraction
+2025-10-11 16:38:50,891 - ERROR - ❌ Imaging extraction - Query failed: COLUMN_NOT_FOUND: line 14:13: Column 'dr.category_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:38:50,891 - INFO - 
+================================================================================
+2025-10-11 16:38:50,891 - INFO - EXTRACTION 5/8: MEASUREMENTS
+2025-10-11 16:38:50,891 - INFO - ================================================================================
+2025-10-11 16:38:50,891 - INFO - Executing: Measurements extraction
+2025-10-11 16:38:53,056 - ERROR - ❌ Measurements extraction - Query failed: COLUMN_NOT_FOUND: line 5:9: Column 'o.category_text' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:38:53,056 - INFO - 
+================================================================================
+2025-10-11 16:38:53,056 - INFO - EXTRACTION 6/8: DIAGNOSES
+2025-10-11 16:38:53,056 - INFO - ================================================================================
+2025-10-11 16:38:53,056 - INFO - Executing: Diagnoses extraction
+2025-10-11 16:38:55,223 - ERROR - ❌ Diagnoses extraction - Query failed: COLUMN_NOT_FOUND: line 4:30: Column 'code_code' cannot be resolved or requester is not authorized to access requested resources
+2025-10-11 16:38:55,223 - INFO - 
+================================================================================
+2025-10-11 16:38:55,223 - INFO - EXTRACTION 7/8: BINARY FILES (DOCUMENT REFERENCES)
+2025-10-11 16:38:55,223 - INFO - ================================================================================
+2025-10-11 16:38:55,340 - INFO - Executing: Binary files extraction
+2025-10-11 16:38:57,398 - ERROR - ❌ Binary files extraction - Query failed: TABLE_NOT_FOUND: line 15:14: Table 'awsdatacatalog.fhir_prd_db.document_reference_content_attachment' does not exist
+2025-10-11 16:38:57,398 - INFO - 
+================================================================================
+2025-10-11 16:38:57,398 - INFO - EXTRACTION COMPLETE
+2025-10-11 16:38:57,398 - INFO - ================================================================================
+2025-10-11 16:38:57,398 - INFO - Duration: 14.1 seconds
+2025-10-11 16:38:57,398 - INFO - Output directory: staging_files/patient_55529723
+2025-10-11 16:38:57,398 - INFO - ================================================================================
+2025-10-11 16:38:57,398 - INFO - 
+⚠️  NOTE: For medications extraction with full metadata (44 fields),
+2025-10-11 16:38:57,399 - INFO - please update and run extract_all_medications_metadata.py separately
+2025-10-11 16:38:57,399 - INFO - with the new patient ID and MRN.

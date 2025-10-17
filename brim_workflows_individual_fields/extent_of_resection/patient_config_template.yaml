@@ -1,0 +1,98 @@
+# Patient Configuration Template for BRIM Input Generation
+#
+# Copy this template and fill in patient-specific values
+# Save as: patient_config_{FHIR_ID}.yaml
+#
+# Example:
+#   patient_config_e4BwD8ZYDBccepXcJ.Ilo3w3.yaml
+
+# ============================================================================
+# Patient Identifiers
+# ============================================================================
+
+# Patient FHIR ID from AWS HealthLake (PRIMARY IDENTIFIER - REQUIRED)
+patient_fhir_id: "e4BwD8ZYDBccepXcJ.Ilo3w3"
+
+# Patient birth date (YYYY-MM-DD format)
+# Used for age calculations
+birth_date: "2005-05-13"
+
+# ============================================================================
+# AWS Configuration
+# ============================================================================
+
+# AWS profile name for authentication
+# Must be configured in ~/.aws/credentials
+aws_profile: "radiant-dev"
+
+# Athena database name
+athena_database: "hli_fhir_db"
+
+# S3 bucket for Athena query results
+athena_s3_output: "s3://aws-athena-query-results-343218191717-us-east-1/"
+
+# ============================================================================
+# Athena Staging Files
+# ============================================================================
+
+# Required staging files from Athena extraction
+# These should be generated using the athena_extraction_validation scripts
+# NOTE: Filenames use patient FHIR ID
+
+staging_files:
+  # ALL_PROCEDURES_WITH_ENCOUNTERS_{FHIR_ID}.csv
+  procedures: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_extraction_validation/staging_files/ALL_PROCEDURES_WITH_ENCOUNTERS_e4BwD8ZYDBccepXcJ.Ilo3w3.csv"
+
+  # ALL_BINARY_FILES_METADATA_WITH_AVAILABILITY.csv (patient-agnostic)
+  documents: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_extraction_validation/staging_files/ALL_BINARY_FILES_METADATA_WITH_AVAILABILITY.csv"
+
+  # ALL_IMAGING_METADATA_{FHIR_ID}.csv (optional - will use DocumentReference as fallback)
+  imaging: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_extraction_validation/staging_files/ALL_IMAGING_METADATA_e4BwD8ZYDBccepXcJ.Ilo3w3.csv"
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Directory where all generated BRIM input files will be saved
+# Organized by patient FHIR ID
+output_directory: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/brim_workflows_individual_fields/extent_of_resection/staging_files/e4BwD8ZYDBccepXcJ.Ilo3w3"
+
+# ============================================================================
+# Pipeline Options (Optional)
+# ============================================================================
+
+# Temporal windows for imaging categorization
+imaging_windows:
+  # Days before surgery to consider "pre-operative"
+  preop_days: 30
+
+  # Days after surgery to consider "post-operative"
+  postop_days: 90
+
+# Surgical procedure keywords for identification
+# (default keywords are usually sufficient)
+surgical_keywords:
+  - "CRANIOTOMY"
+  - "CRANIECTOMY"
+  - "RESECTION"
+  - "EXCISION"
+  - "BIOPSY"
+  - "VENTRICULOSTOMY"
+  - "SHUNT"
+
+# Operative note document types (in priority order)
+operative_note_types:
+  - "OP Note - Complete (Template or Full Dictation)"
+  - "OP Note - Brief (Needs Dictation)"
+  - "Operative Record"
+  - "Anesthesia Postprocedure Evaluation"
+
+# ============================================================================
+# Validation (Optional)
+# ============================================================================
+
+# Path to gold standard data for validation (if available)
+gold_standard_file: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/GOLD_STANDARD_e4BwD8ZYDBccepXcJ.Ilo3w3.md"
+
+# Enable validation mode
+enable_validation: false

@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timedelta
 import json
 
-from .enhanced_diagnosis_extraction import BrainTumorDiagnosisExtractor
+from enhanced_diagnosis_extraction import BrainTumorDiagnosisExtractor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -1,0 +1,190 @@
+# Multi-Source Extraction Framework Configuration
+# This configuration is patient-agnostic and works for any patient in the cohort
+
+# Data source configuration
+data_source:
+  type: "csv"  # Options: "csv", "mcp", "database"
+
+  # CSV source settings
+  csv:
+    staging_path: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_extraction_validation/scripts/config_driven_versions/staging_files"
+
+  # Future MCP source settings
+  mcp:
+    connection_string: "mcp://localhost:5432/radiant_pca"
+    database: "fhir_v2_prd_db"
+    timeout: 30
+
+# Extraction targets configuration
+extraction:
+  # Data dictionary path
+  data_dictionary: "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/brim_workflows_individual_fields/radiology_op_note_data_dictionary.csv"
+
+  # Variables to extract (can be customized per study)
+  target_variables:
+    # Surgical variables
+    - event_type
+    - age_at_event_days
+    - surgery
+    - age_at_surgery
+    - extent_of_tumor_resection
+
+    # Progression variables
+    - progression_recurrence_indicator_operative_note
+    - progression_recurrence_indicator_imaging
+    - site_of_progression
+
+    # Tumor characteristics
+    - tumor_location
+    - metastasis
+    - metastasis_location
+
+    # Treatment variables
+    - radiation_therapy
+    - chemotherapy
+    - immunotherapy
+
+# LLM configuration for unstructured extraction
+llm:
+  provider: "ollama"
+  model: "gemma2:27b"
+  temperature: 0.0
+  max_tokens: 2000
+
+  # Context window management
+  context:
+    include_timeline: true
+    include_prior_surgeries: true
+    include_recent_imaging: true
+    max_context_events: 5
+
+# Binary selection strategy
+binary_selection:
+  # Maximum binaries to process per variable
+  max_binaries_per_variable: 10
+
+  # Priority rules for document selection
+  document_priority:
+    extent_of_resection:
+      - "OP Note - Complete"
+      - "Operative Record"
+      - "OP Note - Brief"
+      - "MR Brain"  # Post-op imaging
+
+    progression_indicator:
+      - "MR Brain"
+      - "CT Brain"
+      - "Progress Notes"
+      - "Oncology Note"
+
+    tumor_location:
+      - "Pathology Report"
+      - "MR Brain"
+      - "OP Note"
+
+  # Time windows for related documents
+  time_windows:
+    post_operative_imaging: 30  # days
+    pre_operative_imaging: 7   # days
+    progress_notes: 90         # days
+
+# Performance settings
+performance:
+  batch_size: 10
+  max_concurrent_extractions: 5
+  cache_enabled: true
+  cache_ttl: 86400  # seconds (24 hours)
+
+  # Resource limits
+  max_memory_gb: 16
+  max_extraction_time_minutes: 120
+
+# Validation rules
+validation:
+  enabled: true
+  confidence_threshold: 0.8
+
+  # Cross-source validation
+  cross_validation:
+    extent_of_resection:
+      sources: ["operative_note", "post_op_imaging", "progress_note"]
+      agreement_required: 2
+
+    progression:
+      sources: ["imaging", "clinical_note"]
+      agreement_required: 1
+
+  # Required manual review conditions
+  manual_review_triggers:
+    - variable: "extent_of_resection"
+      condition: "confidence < 0.7"
+    - variable: "metastasis"
+      condition: "value changed from previous event"
+    - variable: "event_type"
+      condition: "classification uncertainty"
+
+# Output configuration
+output:
+  format: "event_based"  # Options: "event_based", "patient_summary", "both"
+
+  # Event-based output settings
+  event_based:
+    include_empty_events: false
+    group_by_encounter: true
+    include_provenance: true
+
+  # File outputs
+  outputs:
+    - type: "csv"
+      path: "{patient_id}_extracted_features.csv"
+    - type: "json"
+      path: "{patient_id}_extraction_report.json"
+    - type: "data_dictionary"
+      path: "{patient_id}_data_dictionary_format.csv"
+
+# Logging configuration
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  file: "extraction_{timestamp}.log"
+
+  # Detailed extraction logging
+  extraction_details:
+    log_prompts: false
+    log_responses: false
+    log_confidence_scores: true
+    log_validation_results: true
+
+# Patient cohort settings (for batch processing)
+cohort:
+  # Patient selection
+  patient_list_file: null  # Path to CSV with patient IDs
+
+  # Or use criteria
+  selection_criteria:
+    diagnosis_codes: ["C71.9"]  # Brain tumor ICD codes
+    date_range:
+      start: "2018-01-01"
+      end: "2025-12-31"
+
+  # Processing options
+  parallel_patients: 1
+  checkpoint_after_patient: true
+  resume_from_checkpoint: true
+
+# Error handling
+error_handling:
+  max_retries: 3
+  retry_delay: 5  # seconds
+
+  # Fallback strategies
+  on_llm_failure: "use_structured_only"
+  on_binary_missing: "skip_variable"
+  on_validation_failure: "flag_for_review"
+
+# Feature flags (for testing new functionality)
+features:
+  use_timeline_builder: true
+  use_intelligent_selection: true
+  use_cross_validation: true
+  use_checkpoint_system: true
+  generate_provenance_report: true

@@ -30,8 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import the query engine from phase4
-# from phase4_llm_with_query_capability import StructuredDataQueryEngine
-# Import removed - query engine not needed for document retrieval
+from phase4_llm_with_query_capability import StructuredDataQueryEngine
 
 # Import Ollama client
 from ollama import Client

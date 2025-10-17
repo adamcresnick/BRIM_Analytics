@@ -1,0 +1,61 @@
+INFO:__main__:
+================================================================================
+INFO:__main__:ITERATIVE EXTRACTION DEMONSTRATION
+INFO:__main__:================================================================================
+INFO:__main__:
+--------------------------------------------------------------------------------
+INFO:__main__:TEST 1: EXTENT OF RESECTION
+INFO:__main__:--------------------------------------------------------------------------------
+INFO:__main__:Pass 1 (Document LLM): Not found
+INFO:iterative_extraction.pass2_structured_query:Querying structured data for extent of resection
+INFO:__main__:Pass 2 (Structured Query): Found 2 candidates
+INFO:__main__:  - STR (confidence: 0.70, source: Procedure: suboccipital craniotomy for posterior fossa tumor resection. subtotal resection achieved due to tumo)
+INFO:__main__:  - STR (confidence: 0.60, source: Post-op imaging: post-operative imaging shows residual tumor in cerebellar vermis)
+INFO:iterative_extraction.pass3_cross_validation:Cross-validation for extent_of_tumor_resection: 1 unique values from 4 candidates
+INFO:__main__:Pass 3 (Cross-validation): STR (confidence: 0.84)
+INFO:__main__:Pass 4 (Temporal): Adjustment factor = 1.00
+INFO:__main__:
+FINAL: STR (confidence: 0.84)
+INFO:__main__:Manual review needed: False
+INFO:__main__:
+Reasoning Chain:
+INFO:__main__:  Pass 3 (cross_validation): STR (confidence: 0.84)
+INFO:__main__:  Clinical flag: strong_consensus: 4 sources agree
+INFO:__main__:
+--------------------------------------------------------------------------------
+INFO:__main__:TEST 2: TUMOR LOCATION
+INFO:__main__:--------------------------------------------------------------------------------
+INFO:__main__:Pass 1 (Document LLM): Cerebellum (confidence: 0.55)
+INFO:iterative_extraction.pass2_structured_query:Querying structured data for tumor location
+INFO:__main__:Pass 2 (Structured Query): Found 4 candidates
+INFO:__main__:  - Cerebellum (confidence: 0.60)
+INFO:__main__:  - Cerebellum (confidence: 0.60)
+INFO:__main__:  - Cerebellar (confidence: 0.70)
+INFO:__main__:  - Cerebellum/Posterior Fossa (confidence: 0.80)
+INFO:iterative_extraction.pass3_cross_validation:Cross-validation for tumor_location: 3 unique values from 10 candidates
+INFO:__main__:Pass 3 (Cross-validation): Cerebellum (confidence: 0.30)
+INFO:__main__:Pass 4 (Temporal): Adjustment = 1.15
+INFO:__main__:
+FINAL: Cerebellum (confidence: 0.34)
+INFO:__main__:Manual review needed: True
+INFO:__main__:
+--------------------------------------------------------------------------------
+INFO:__main__:TEST 3: HISTOPATHOLOGY (with transformation detection)
+INFO:__main__:--------------------------------------------------------------------------------
+INFO:iterative_extraction.pass2_structured_query:Querying structured data for histopathology
+INFO:__main__:Pass 2: Found 1 candidates from diagnoses
+INFO:__main__:  - Glioblastoma (from Diagnosis: recurrent glioblastoma, grade iv)
+INFO:iterative_extraction.pass3_cross_validation:Cross-validation for histopathology: 1 unique values from 2 candidates
+INFO:__main__:Pass 4 Temporal Flags:
+INFO:__main__:  age_unusual: GBM less common in pediatrics (but can occur in adolescents)
+INFO:__main__:
+FINAL: Glioblastoma (confidence: 0.80)
+INFO:__main__:
+Reasoning Chain:
+INFO:__main__:  Pass 3 (cross_validation): Glioblastoma (confidence: 0.80)
+INFO:__main__:  Clinical flag: consensus: 2 sources agree
+INFO:__main__:  Clinical flag: age_unusual: GBM less common in pediatrics (but can occur in adolescents)
+INFO:__main__:
+================================================================================
+INFO:__main__:DEMONSTRATION COMPLETE
+INFO:__main__:================================================================================

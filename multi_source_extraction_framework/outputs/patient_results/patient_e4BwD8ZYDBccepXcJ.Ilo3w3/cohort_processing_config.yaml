@@ -1,0 +1,77 @@
+framework_version: '2.0'
+created_date: '2025-10-13T02:09:50.248045'
+modules:
+  tumor_surgery_classification:
+    enabled: true
+    indicators:
+      resection_terms:
+      - resection
+      - excision
+      - removal
+      - debulking
+      - craniotomy
+      biopsy_terms:
+      - biopsy
+      - stereotactic biopsy
+      - needle biopsy
+      exclude_terms:
+      - shunt
+      - ventriculoperitoneal
+      - wound
+      - infection
+  chemotherapy_identification:
+    enabled: true
+    strategies:
+    - rxnorm
+    - product_mapping
+    - name_pattern
+    - care_plan
+    - reason_codes
+    reference_files:
+      drugs: drugs.csv
+      drug_alias: drug_alias.csv
+      rxnorm_map: rxnorm_code_map.csv
+  radiation_analysis:
+    enabled: true
+    tables:
+    - radiation_care_plan_hierarchy
+    - radiation_treatment_courses
+    - radiation_treatment_appointments
+  imaging_prioritization:
+    enabled: true
+    windows:
+      pre_surgery_days: 30
+      post_surgery_days: 90
+      chemo_change_window_days: 30
+      radiation_planning_window_days: 14
+      progression_assessment_days: 90
+    priority_levels:
+      critical:
+      - pre_operative
+      - post_operative
+      - treatment_change
+      - progression_suspected
+      high:
+      - chemo_response
+      - radiation_planning
+      - new_symptoms
+      medium:
+      - surveillance_mri
+      - treatment_monitoring
+      low:
+      - routine_surveillance
+      - other
+  survival_tracking:
+    enabled: true
+    endpoints:
+      track_last_contact: true
+      track_last_imaging: true
+      track_last_treatment: true
+      track_last_lab: true
+output_formats:
+- csv
+- json
+cohort_processing:
+  batch_size: 10
+  parallel_processing: false
+  checkpoint_frequency: 5

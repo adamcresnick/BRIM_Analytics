@@ -1,30 +1,8 @@
 # Table & Column Mapping + Athena View Definitions
 ## Complete Reference for All Extraction Scripts
 
-**Date**: October 13, 2025 (Updated)  
-**Version**: 2.2 - Molecular Tests Addition  
+**Date**: October 12, 2025  
 **Purpose**: Document all source tables, columns, and prefixes used in extraction scripts, plus provide Athena SQL to recreate each output as a database view.
-
-**Updates in v2.2**:
-- ✅ **NEW**: Added molecular_tests_metadata.csv documentation (12 columns)
-- ✅ **NEW**: Added Section 8 for molecular tests extraction with mt_ and mtr_ prefixes
-- ✅ Renumbered: Diagnoses → Section 9, Post-Processing → Section 10
-- ✅ Updated prefix legend with mt_ and mtr_ entries
-- ✅ Updated Table of Contents with new section numbering
-
-**Updates in v2.1**:
-- ✅ **NEW**: Added Section 9 - Optional Post-Processing Scripts
-- ✅ Documented S3 Availability Checker (adds 3 columns to binary_files.csv)
-- ✅ Documented Chemotherapy Filter (5-strategy identification approach)
-
-**Updates in v2.0**:
-- ✅ Updated medications.csv: 44 → 45 columns (added `cp_created`)
-- ✅ Updated appointments.csv: 15 → 21 columns (added 6 `ap_participant_*` fields)
-- ✅ Updated imaging.csv: 17 → 18 columns (documented `patient_mrn`)
-- ✅ Updated procedures.csv: ~40 → 34 columns (exact count)
-- ✅ Updated measurements.csv: ~28 → 30 columns (exact count)
-- ✅ **NEW**: Added diagnoses.csv documentation (17 columns)
-- ✅ All Athena view definitions verified and updated
 
 ---
 
@@ -37,11 +15,6 @@
 6. [Imaging Extraction](#5-imaging-extraction)
 7. [Appointments Extraction](#6-appointments-extraction)
 8. [Encounters Extraction](#7-encounters-extraction)
-9. [Molecular Tests Extraction](#8-molecular-tests-extraction) ⭐ NEW
-10. [Diagnoses Extraction](#9-diagnoses-extraction)
-11. [Optional Post-Processing Scripts](#10-optional-post-processing-scripts)
-    - [S3 Availability Checker](#101-binary-files-s3-availability-checker)
-    - [Chemotherapy Filter](#102-chemotherapy-medications-filter)
 
 ---
 
@@ -84,17 +57,11 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 | `dcat_` | document_reference_category | Document categories |
 | **Appointments Script** | | |
 | `appt_` | appointment | Appointment details |
-| `ap_` | appointment_participant | Appointment participant information (actor, type, required, status, period) |
-| **Molecular Tests Script** | | |
-| `mt_` | molecular_tests | Molecular test metadata (test-level information) |
-| `mtr_` | molecular_test_results | Molecular test results (component-level aggregations) |
-| **Diagnoses Script** | | |
-| (no prefix) | problem_list_diagnoses | Problem list diagnoses (single table extraction) |
+| `ap_` | appointment_participant | Appointment participant information |
 
 **Note**: No prefixes are used for:
 - **Imaging extraction** (uses materialized views: `radiology_imaging_mri`, `radiology_imaging`)
 - **Encounters extraction** (main `encounter` table doesn't need prefixes for clarity)
-- **Diagnoses extraction** (single table, no ambiguity)
 
 ---
 
@@ -115,7 +82,7 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 9. **care_plan_category** (`cpc_` prefix) - Aggregated categories
 10. **care_plan_addresses** (`cpcon_` prefix) - Aggregated addresses/concerns
 
-### Column Mapping (45 columns) ⭐ UPDATED
+### Column Mapping (44 columns)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -157,7 +124,6 @@ All extraction scripts use **table prefixes** to indicate data provenance (which
 | cp_title | care_plan | title | Care plan title |
 | cp_status | care_plan | status | Care plan status |
 | cp_intent | care_plan | intent | Care plan intent |
-| **cp_created** | **care_plan** | **created** | **When care plan was created** ⭐ **NEW** |
 | cp_period_start | care_plan | period_start | Care plan period start |
 | cp_period_end | care_plan | period_end | Care plan period end |
 | cp_author_display | care_plan | author_display | Care plan author |
@@ -273,7 +239,6 @@ SELECT
     cp.title as cp_title,
     cp.status as cp_status,
     cp.intent as cp_intent,
-    cp.created as cp_created,  -- ⭐ NEW: When care plan was created
     cp.period_start as cp_period_start,
     cp.period_end as cp_period_end,
     cp.author_display as cp_author_display,
@@ -332,7 +297,7 @@ ORDER BY pm.authored_on DESC, pm.medication_name;
 6. **procedure_reason_code** (`prc_` prefix) - Reasons/indications
 7. **procedure_report** (`ppr_` prefix) - Procedure reports
 
-### Column Mapping (34 columns) ⭐ UPDATED (exact count)
+### Column Mapping (~40 columns)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -494,7 +459,7 @@ ORDER BY p.performed_date_time DESC;
 2. **lab_tests** (`lt_` prefix) - Laboratory test metadata
 3. **lab_test_results** (`ltr_` prefix) - Laboratory result values
 
-### Column Mapping (30 columns) ⭐ UPDATED (exact count)
+### Column Mapping (~28 columns)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -737,7 +702,7 @@ ORDER BY dr.date DESC;
 4. **diagnostic_report** (report_ prefix for joined fields) - Report metadata
 5. **diagnostic_report_category** (via CTE) - Report categories
 
-### Column Mapping (18 columns) ⭐ UPDATED (+patient_mrn convenience field)
+### Column Mapping (17 columns)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -756,7 +721,6 @@ ORDER BY dr.date DESC;
 | report_effective_period_start | diagnostic_report | effective_period_start | Report period start |
 | report_effective_period_stop | diagnostic_report | effective_period_stop | Report period end |
 | report_conclusion | diagnostic_report | conclusion | Report conclusion |
-| **patient_mrn** | **patient (via JOIN)** | **mrn** | **Patient MRN (convenience field)** ⭐ **NEW** |
 
 ### Athena View Definition
 
@@ -842,7 +806,7 @@ ORDER BY combined.imaging_date DESC;
 1. **appointment** (`appt_` prefix) - Appointment details
 2. **appointment_participant** (`ap_` prefix) - Participant information
 
-### Column Mapping (21 columns) ⭐ UPDATED (+6 participant fields)
+### Column Mapping (15 columns)
 
 | Output Column | Source Table | Source Column | Description |
 |---------------|--------------|---------------|-------------|
@@ -859,12 +823,8 @@ ORDER BY combined.imaging_date DESC;
 | appt_patient_instruction | appointment | patient_instruction | Patient instructions |
 | appt_cancelation_reason_text | appointment | cancelation_reason_text | Cancellation reason |
 | appt_priority | appointment | priority | Appointment priority |
-| **ap_participant_actor_reference** | **appointment_participant** | **participant_actor_reference** | **Participant reference** ⭐ **NEW** |
-| **ap_participant_actor_type** | **appointment_participant** | **participant_actor_type** | **Participant actor type** ⭐ **NEW** |
-| **ap_participant_required** | **appointment_participant** | **participant_required** | **Participant required flag** ⭐ **NEW** |
-| **ap_participant_status** | **appointment_participant** | **participant_status** | **Participant status** ⭐ **NEW** |
-| **ap_participant_period_start** | **appointment_participant** | **participant_period_start** | **Participant period start** ⭐ **NEW** |
-| **ap_participant_period_end** | **appointment_participant** | **participant_period_end** | **Participant period end** ⭐ **NEW** |
+| ap_participant_actor_reference | appointment_participant | participant_actor_reference | Participant reference |
+| ap_participant_status | appointment_participant | participant_status | Participant status |
 
 ### Athena View Definition
 
@@ -1004,234 +964,6 @@ ORDER BY e.period_start DESC;
 
 ---
 
-## 10. Optional Post-Processing Scripts
-
-The extraction workflow includes **two optional post-processing scripts** that can enhance the extracted data. These scripts are **not part of the core extraction workflow** and must be run separately if needed.
-
----
-
-### 10.1. Binary Files S3 Availability Checker
-
-**Script**: `check_binary_s3_availability.py`
-
-**Purpose**: Validates S3 availability for binary files extracted from FHIR and adds availability metadata to the `binary_files.csv` output.
-
-#### Key Features
-
-- **S3 Availability Check**: Uses boto3 `head_object` to verify each Binary file exists in S3
-- **Period-to-Underscore Conversion**: Handles critical S3 naming bug where FHIR Binary IDs contain periods (.) but S3 files use underscores (_)
-- **Progress Tracking**: Reports progress every 100 records for large datasets
-- **Expected Availability**: Empirically ~60-65% of binary files are available in S3
-
-#### S3 Configuration
-
-```python
-S3_BUCKET = 'radiant-prd-343218191717-us-east-1-prd-ehr-pipeline'
-S3_PREFIX = 'prd/source/Binary/'
-```
-
-#### Input
-
-- **File**: `binary_files.csv` (26 columns from main extraction)
-- **Location**: `staging_files/patient_{fhir_id}/binary_files.csv`
-
-#### Output
-
-Adds **3 additional columns** to `binary_files.csv`:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| s3_available | String | 'Yes' if file exists in S3, 'No' otherwise |
-| s3_bucket | String | S3 bucket name (populated only if available) |
-| s3_key | String | Full S3 key path (populated for all records, shows attempted path) |
-
-**Final Output**: `binary_files.csv` with **29 columns** (26 original + 3 S3 fields)
-
-#### Usage
-
-```bash
-cd /path/to/athena_extraction_validation/scripts
-
-# Run S3 availability check
-python3 check_binary_s3_availability.py
-
-# Reads: staging_files/ALL_BINARY_FILES_METADATA.csv
-# Writes: staging_files/ALL_BINARY_FILES_METADATA_WITH_AVAILABILITY.csv
-```
-
-**Prerequisites**:
-- Active AWS SSO session: `aws sso login --profile 343218191717_AWSAdministratorAccess`
-- Read access to `radiant-prd-343218191717-us-east-1-prd-ehr-pipeline` bucket
-- boto3 installed: `pip install boto3`
-
-#### Critical S3 Naming Bug
-
-FHIR Binary IDs may contain periods (.), but S3 object keys use underscores (_):
-
-```python
-# Example transformation
-fhir_binary_id = "e5G-oDAd4PW5ngncmfMRuWlczm9kqbixAZuwFex4GBmfbAGaL7o.2W4aP25qteg7zElompZiK5jeFGkPj7IrEsw3"
-s3_key = "prd/source/Binary/e5G-oDAd4PW5ngncmfMRuWlczm9kqbixAZuwFex4GBmfbAGaL7o_2W4aP25qteg7zElompZiK5jeFGkPj7IrEsw3"
-```
-
-The script automatically handles this conversion.
-
-#### Performance Notes
-
-- **Large Datasets**: Checking 20,000+ files can take 10-30 minutes
-- **Rate Limiting**: Script does not implement throttling; AWS SDK handles retries
-- **Parallel Execution**: Single-threaded; consider multiprocessing for very large datasets
-
----
-
-### 10.2. Chemotherapy Medications Filter
-
-**Script**: `filter_chemotherapy_from_medications.py`
-
-**Purpose**: Filters `medications.csv` to identify cancer therapy medications using a **5-strategy multi-modal identification approach**.
-
-#### Key Features
-
-- **5-Strategy Identification**:
-  1. **RxNorm Code Matching**: Compares medication RxNorm codes against comprehensive chemotherapy database
-  2. **Medication Name Pattern Matching**: Uses regex patterns for common chemotherapy drug names
-  3. **Care Plan Category Analysis**: Identifies medications linked to 'ONCOLOGY TREATMENT' care plans
-  4. **Care Plan Title/Description Analysis**: Searches care plan text for cancer treatment indicators
-  5. **Clinical Notes Analysis**: Scans medication notes for trial protocols and cancer treatment keywords
-
-- **Multi-Modal Approach**: Medications flagged by ANY strategy are included (high sensitivity)
-- **Strategy Attribution**: Output includes columns showing which strategies identified each medication
-- **Comprehensive Coverage**: Captures both standard chemotherapy and investigational agents
-
-#### Input
-
-- **File**: `medications.csv` (45 columns from main extraction)
-- **Location**: `staging_files/patient_{fhir_id}/medications.csv`
-
-#### Output
-
-- **File**: `chemotherapy_medications.csv`
-- **Location**: `staging_files/patient_{fhir_id}/chemotherapy_medications.csv`
-- **Columns**: Same 45 columns as input + 5 strategy flag columns
-
-#### Additional Output Columns
-
-| Column | Type | Description |
-|--------|------|-------------|
-| identified_by_rxnorm | Boolean | True if RxNorm code matched chemotherapy database |
-| identified_by_name_pattern | Boolean | True if medication name matched chemo pattern |
-| identified_by_care_plan_category | Boolean | True if linked to ONCOLOGY TREATMENT care plan |
-| identified_by_care_plan_text | Boolean | True if care plan title/description mentions cancer treatment |
-| identified_by_clinical_notes | Boolean | True if notes mention trial protocols or chemo keywords |
-
-#### Usage
-
-```bash
-cd /path/to/athena_extraction_validation/scripts
-
-# Run chemotherapy filter
-python3 filter_chemotherapy_from_medications.py \
-    --input staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/medications.csv \
-    --output staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/chemotherapy_medications.csv
-
-# Or use default paths (looks for medications.csv in staging_files/)
-python3 filter_chemotherapy_from_medications.py
-```
-
-**Prerequisites**:
-- pandas installed: `pip install pandas`
-- Input `medications.csv` must exist with all 45 columns
-
-#### Strategy Details
-
-**1. RxNorm Code Matching**
-- Compares `rx_norm_codes` column against curated chemotherapy RxNorm database
-- Database includes FDA-approved chemotherapy agents and common formulations
-- Handles multiple RxNorm codes per medication (semicolon-separated)
-
-**2. Medication Name Pattern Matching**
-```python
-# Example patterns
-chemo_patterns = [
-    r'.*mab$',           # Monoclonal antibodies (pembrolizumab, nivolumab)
-    r'.*tinib$',         # Kinase inhibitors (imatinib, dasatinib)
-    r'.*platin',         # Platinum-based (cisplatin, carboplatin)
-    r'vincristine',      # Vinca alkaloids
-    r'methotrexate',     # Antimetabolites
-    # ... 50+ patterns
-]
-```
-
-**3. Care Plan Category Analysis**
-- Scans `cpc_categories_aggregated` column for 'ONCOLOGY TREATMENT'
-- Identifies medications prescribed as part of cancer treatment protocols
-
-**4. Care Plan Title/Description Analysis**
-- Searches `cp_title` and `cpcon_addresses_aggregated` columns
-- Keywords: 'cancer', 'oncology', 'tumor', 'neoplasm', 'malignancy', 'chemotherapy'
-
-**5. Clinical Notes Analysis**
-- Scans `mrn_note_text_aggregated` column
-- Identifies trial protocols (e.g., 'COG AALL1231', 'St. Jude XV')
-- Keywords: 'protocol', 'trial', 'induction', 'consolidation', 'maintenance'
-
-#### Example Output
-
-```csv
-patient_fhir_id,medication_name,rx_norm_codes,identified_by_rxnorm,identified_by_name_pattern,identified_by_care_plan_category,identified_by_care_plan_text,identified_by_clinical_notes
-e4BwD8ZYDBccepXcJ.Ilo3w3,vincristine,7139,True,True,True,False,True
-e4BwD8ZYDBccepXcJ.Ilo3w3,PEG-asparaginase,,False,False,True,True,True
-e4BwD8ZYDBccepXcJ.Ilo3w3,methotrexate,6851,True,True,True,False,False
-```
-
-#### Performance Notes
-
-- **Fast Processing**: Filtering 1,000 medications takes <1 second
-- **High Sensitivity**: Multi-strategy approach minimizes false negatives
-- **False Positives**: May include supportive care medications if mentioned in oncology notes
-
-#### Integration with Workflow
-
-This script is **not automatically run** during main extraction. To integrate:
-
-```bash
-# Full workflow with chemotherapy filtering
-cd /path/to/athena_extraction_validation
-
-# 1. Run main extraction
-python3 scripts/config_driven_versions/extract_all_medications_metadata.py
-
-# 2. Filter chemotherapy medications
-python3 scripts/filter_chemotherapy_from_medications.py \
-    --input staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/medications.csv \
-    --output staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/chemotherapy_medications.csv
-
-# 3. (Optional) Check S3 availability for binary files
-python3 scripts/check_binary_s3_availability.py
-```
-
----
-
-### 10.3. Post-Processing Workflow Summary
-
-| Step | Script | Input | Output | Required? |
-|------|--------|-------|--------|-----------|
-| 1 | Main extraction scripts | Athena FHIR tables | 9 CSV files (medications, molecular tests, procedures, etc.) | ✅ Required |
-| 2 | `filter_chemotherapy_from_medications.py` | `medications.csv` (45 cols) | `chemotherapy_medications.csv` (50 cols) | ❌ Optional |
-| 3 | `check_binary_s3_availability.py` | `binary_files.csv` (26 cols) | `binary_files_with_s3.csv` (29 cols) | ❌ Optional |
-
-**Use Cases**:
-- **Chemotherapy Filter**: Cancer-focused trials requiring only chemotherapy medications
-- **S3 Availability Checker**: Document retrieval workflows requiring S3 access validation
-- **Both**: Comprehensive oncology data packages with treatment records and supporting documents
-
-**Documentation References**:
-- Chemotherapy identification strategies: `CHEMOTHERAPY_IDENTIFICATION_STRATEGY.md`
-- S3 binary retrieval: `DOCUMENT_BINARY_RETRIEVAL_STRATEGY.md`
-- Complete workflow: `BRIM_COMPLETE_WORKFLOW_GUIDE.md`
-
----
-
 ## Usage Examples
 
 ### Query Individual Views
@@ -1264,10 +996,6 @@ WHERE ap_participant_actor_reference LIKE '%e4BwD8ZYDBccepXcJ.Ilo3w3%';
 -- Encounters for specific patient
 SELECT * FROM fhir_prd_db.encounters_view 
 WHERE subject_reference = 'Patient/e4BwD8ZYDBccepXcJ.Ilo3w3';
-
--- Diagnoses for specific patient ⭐ NEW
-SELECT * FROM fhir_prd_db.diagnoses_view 
-WHERE patient_id = 'e4BwD8ZYDBccepXcJ.Ilo3w3';
 ```
 
 ### Export View Results to S3 (Athena UNLOAD)
@@ -1321,318 +1049,8 @@ WITH (format = 'TEXTFILE', field_delimiter = ',', compression = 'GZIP');
 
 ---
 
----
-
-## 8. Molecular Tests Extraction ⭐ NEW SECTION
-
-### Output File: `molecular_tests_metadata.csv`
-
-### Source Tables (2 tables with prefixes)
-
-1. **molecular_tests** (mt_) - Test metadata (who, what, when)
-2. **molecular_test_results** (mtr_) - Test result components and narratives
-
-**Prefix System**: 
-- `mt_` = molecular_tests table (test-level metadata)
-- `mtr_` = molecular_test_results table (component-level aggregations)
-
-### Column Mapping (12 columns)
-
-| Output Column | Source Table | Source Column | Description |
-|---------------|--------------|---------------|-------------|
-| patient_fhir_id | *hardcoded* | N/A | Patient FHIR ID from config |
-| mt_test_id | molecular_tests | test_id | Molecular test FHIR ID |
-| mt_test_date | molecular_tests | result_datetime | Test result date (YYYY-MM-DD) |
-| age_at_test_days | *calculated* | N/A | Age at test in days (birth_date → test_date) |
-| mt_lab_test_name | molecular_tests | lab_test_name | Raw Athena test name (e.g., "Comprehensive Solid Tumor Panel") |
-| mt_test_status | molecular_tests | lab_test_status | Test status (completed, preliminary, cancelled) |
-| mt_test_requester | molecular_tests | lab_test_requester | Provider who ordered test (e.g., "Brian Norman Harding, MD") |
-| mtr_component_count | *aggregated* | COUNT(*) | Number of result components per test |
-| mtr_total_narrative_chars | *aggregated* | SUM(LENGTH(test_result_narrative)) | Total character count of all narratives |
-| mtr_components_list | *aggregated* | ARRAY_AGG(test_component) | Semicolon-separated list of components (e.g., "GENOMICS INTERPRETATION; GENOMICS METHOD") |
-| mt_standard_assay | *derived* | N/A | Standardized assay type (WGS, WES, RNA-Seq, Targeted Panel, Other) |
-| mt_assay_type | *derived* | N/A | Research vs Clinical classification based on requester |
-
-### Athena View for Molecular Tests
-
-```sql
--- Config-driven comprehensive molecular tests extraction with aggregation
-WITH aggregated_results AS (
-    -- Aggregate multiple result components per test
-    SELECT 
-        test_id,
-        COUNT(*) as component_count,
-        SUM(LENGTH(COALESCE(test_result_narrative, ''))) as total_narrative_chars,
-        ARRAY_JOIN(
-            ARRAY_AGG(
-                DISTINCT COALESCE(test_component, 'Unknown')
-            ), 
-            '; '
-        ) as components_list
-    FROM fhir_prd_db.molecular_test_results
-    WHERE test_id IN (
-        SELECT test_id 
-        FROM fhir_prd_db.molecular_tests 
-        WHERE patient_id = '{PATIENT_FHIR_ID}'
-    )
-    GROUP BY test_id
-)
-
-SELECT 
-    -- Patient context (no MRN for PHI protection)
-    '{PATIENT_FHIR_ID}' as patient_fhir_id,
-    
-    -- Test identification
-    mt.test_id as mt_test_id,
-    
-    -- Temporal fields
-    substr(mt.result_datetime, 1, 10) as mt_test_date,
-    
-    -- ⭐ CRITICAL: Age at test calculation (privacy-preserving days)
-    date_diff('day', 
-              date_parse('{BIRTH_DATE}', '%Y-%m-%d'),
-              date_parse(substr(mt.result_datetime, 1, 10), '%Y-%m-%d')
-    ) as age_at_test_days,
-    
-    -- Test metadata from molecular_tests
-    mt.lab_test_name as mt_lab_test_name,
-    mt.lab_test_status as mt_test_status,
-    mt.lab_test_requester as mt_test_requester,
-    
-    -- Aggregated result metadata from molecular_test_results
-    COALESCE(ar.component_count, 0) as mtr_component_count,
-    COALESCE(ar.total_narrative_chars, 0) as mtr_total_narrative_chars,
-    COALESCE(ar.components_list, 'None') as mtr_components_list
-    
-FROM fhir_prd_db.molecular_tests mt
-LEFT JOIN aggregated_results ar ON mt.test_id = ar.test_id
-WHERE mt.patient_id = '{PATIENT_FHIR_ID}'
-ORDER BY mt.result_datetime, mt.test_id
-```
-
-### Standard Assay Mapping Logic
-
-The `mt_standard_assay` field is derived post-extraction using intelligent pattern matching:
-
-```python
-ASSAY_MAPPINGS = {
-    'Comprehensive Solid Tumor Panel': 'WGS',
-    'Comprehensive Solid Tumor Panel T/N Pair': 'WGS',
-    'Tumor Panel Normal Paired': 'WGS',
-    'Solid Tumor Panel': 'WGS',
-    'Foundation Medicine': 'Targeted Panel',
-    'Caris': 'Targeted Panel',
-    'Tempus': 'WGS',
-    'RNA Sequencing': 'RNA-Seq',
-    'Whole Exome': 'WES',
-}
-
-def map_to_standard_assay(lab_test_name):
-    """Map Athena test name to standard assay nomenclature"""
-    if not lab_test_name:
-        return 'Unknown'
-    
-    # Check exact matches first
-    for athena_name, standard_name in ASSAY_MAPPINGS.items():
-        if athena_name.lower() in lab_test_name.lower():
-            return standard_name
-    
-    # Check for common keywords
-    lab_test_lower = lab_test_name.lower()
-    if 'rna' in lab_test_lower or 'transcriptome' in lab_test_lower:
-        return 'RNA-Seq'
-    elif 'exome' in lab_test_lower:
-        return 'WES'
-    elif 'panel' in lab_test_lower or 'solid tumor' in lab_test_lower:
-        return 'Targeted Panel'
-    elif 'genome' in lab_test_lower or 'wgs' in lab_test_lower:
-        return 'WGS'
-    
-    return 'Other'
-```
-
-### Research vs Clinical Classification
-
-The `mt_assay_type` field classifies tests based on requester patterns:
-
-```python
-def infer_assay_type(lab_test_requester):
-    """Infer if test is research or clinical based on requester"""
-    if not lab_test_requester:
-        return 'Unknown'
-    
-    requester_lower = lab_test_requester.lower()
-    
-    # Research indicators
-    research_keywords = ['research', 'study', 'protocol', 'cbtn', 'cavatica']
-    if any(kw in requester_lower for kw in research_keywords):
-        return 'research'
-    
-    # Clinical indicators (default)
-    return 'clinical'
-```
-
-### Extraction Script
-
-**File**: `scripts/config_driven_versions/extract_all_molecular_tests_metadata.py`
-
-**Usage**:
-```bash
-python3 scripts/config_driven_versions/extract_all_molecular_tests_metadata.py \
-    patient_config.json \
-    staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/
-```
-
-**Example Output**:
-```
-================================================================================
-MOLECULAR TESTS METADATA EXTRACTION - Config-Driven Version
-================================================================================
-Configuration loaded successfully
-  Patient ID: e4BwD8ZYDBccepXcJ.Ilo3w3
-  Birth Date: 2005-05-13
-
-================================================================================
-EXECUTING MOLECULAR TESTS QUERY
-================================================================================
-Query succeeded after 2 seconds
-Retrieved 3 rows with 10 columns
-
-================================================================================
-POST-PROCESSING: Adding Derived Fields
-================================================================================
-✓ Mapped 3 tests to standard assay types
-✓ Classified tests as research/clinical/unknown
-
-Assay Distribution:
-  WGS: 3
-
-Assay Type Distribution:
-  clinical: 3
-
-================================================================================
-EXTRACTION COMPLETE
-================================================================================
-✓ Output saved to: staging_files/patient_e4BwD8ZYDBccepXcJ.Ilo3w3/molecular_tests_metadata.csv
-✓ Total rows: 3
-✓ Total columns: 12
-✓ Date range: 2018-05-28 to 2021-03-10
-✓ Total narrative characters: 697,283,126,700
-```
-
-### Data Example
-
-```csv
-patient_fhir_id,mt_test_id,mt_test_date,age_at_test_days,mt_lab_test_name,mt_test_status,mt_test_requester,mtr_component_count,mtr_total_narrative_chars,mtr_components_list,mt_standard_assay,mt_assay_type
-e4BwD8ZYDBccepXcJ.Ilo3w3,esPMYhMRObk27PvwVR-xuIsmF1jXIo.8yrYsbXYF.lgQ3,2018-05-28,4763,Comprehensive Solid Tumor Panel,completed,"Brian Norman Harding, MD",2,6972,"Component (1): GENOMICS INTERPRETATION; Component (1): GENOMICS METHOD",WGS,clinical
-e4BwD8ZYDBccepXcJ.Ilo3w3,eLWaREDzUv7IYWz.akKbTqrh7-TqeQcQVNnvcbWkuZXc3,2021-03-10,5780,Comprehensive Solid Tumor Panel T/N Pair,completed,"Yong Collins, CRNP",2,8312,"Component (1): GENOMICS INTERPRETATION; Component (1): GENOMICS METHOD",WGS,clinical
-e4BwD8ZYDBccepXcJ.Ilo3w3,epjVHVOAQKI2IkhBB0.WsYo0y9t1yOAMpF5.GMczV1Vc3,2021-03-10,5780,Tumor Panel Normal Paired,completed,"Yong Collins, CRNP",2,6700,"Component (1): GENOMICS RESULTS; Component (1): GENOMICS METHOD",WGS,clinical
-```
-
-### Key Features
-
-1. **Standard Assay Nomenclature**: Maps Athena test names to standardized types (WGS, WES, RNA-Seq, Targeted Panel, Other)
-2. **Research vs Clinical**: Classifies tests based on requester patterns
-3. **Age at Test**: Privacy-preserving calculation in days from birth date
-4. **Component Aggregation**: Consolidates multiple result components per test
-5. **Narrative Tracking**: Tracks total narrative character count for downstream BRIM processing
-6. **PHI Protection**: No MRN in output, uses patient_fhir_id only
-
-### Important Notes
-
-1. **Birth Date Required**: Age calculation requires `birth_date` in `patient_config.json`
-2. **Result Aggregation**: Multiple test components are aggregated using `ARRAY_AGG` and `SUM`
-3. **Narrative Processing**: Large narratives (>100 chars) can be extracted separately for BRIM Health processing
-4. **Test Status**: Most tests are `completed`, but may include `preliminary` or `cancelled`
-5. **Component Types**: Common components include:
-   - GENOMICS INTERPRETATION
-   - GENOMICS METHOD
-   - GENOMICS RESULTS
-
----
-
----
-
-## 9. Diagnoses Extraction ⭐ NEW SECTION
-
-### Output File: `diagnoses.csv`
-
-### Source Tables (1 table - single source)
-
-1. **problem_list_diagnoses** (no prefix) - Problem list diagnoses with ICD-10 and SNOMED codes
-
-**Note**: This extraction uses the `problem_list_diagnoses` materialized view which consolidates data from:
-- `condition` table (main diagnosis table)
-- `condition_code_coding` table (ICD-10 and SNOMED codes)
-- Patient demographic data for age calculations
-
-### Column Mapping (17 columns)
-
-| Output Column | Source Table | Source Column | Description |
-|---------------|--------------|---------------|-------------|
-| patient_id | problem_list_diagnoses | patient_id | Patient FHIR ID |
-| condition_id | problem_list_diagnoses | condition_id | Condition/diagnosis FHIR ID |
-| diagnosis_name | problem_list_diagnoses | diagnosis_name | Human-readable diagnosis name |
-| clinical_status_text | problem_list_diagnoses | clinical_status_text | Clinical status (Active, Resolved, Inactive) |
-| onset_date_time | problem_list_diagnoses | onset_date_time | When diagnosis began |
-| abatement_date_time | problem_list_diagnoses | abatement_date_time | When diagnosis resolved |
-| recorded_date | problem_list_diagnoses | recorded_date | When diagnosis was recorded in system |
-| icd10_code | problem_list_diagnoses | icd10_code | ICD-10 diagnosis code |
-| icd10_display | problem_list_diagnoses | icd10_display | ICD-10 code description |
-| snomed_code | problem_list_diagnoses | snomed_code | SNOMED CT code |
-| snomed_display | problem_list_diagnoses | snomed_display | SNOMED CT description |
-| age_at_onset_days | N/A | calculated | Age in days at diagnosis onset |
-| age_at_onset_years | N/A | calculated | Age in years at diagnosis onset |
-| age_at_abatement_days | N/A | calculated | Age in days at diagnosis resolution |
-| age_at_abatement_years | N/A | calculated | Age in years at diagnosis resolution |
-| age_at_recorded_days | N/A | calculated | Age in days when diagnosis was recorded |
-| age_at_recorded_years | N/A | calculated | Age in years when diagnosis was recorded |
-
-### Athena View Definition
-
-```sql
--- Create view: diagnoses_view
--- Database: fhir_prd_db
--- Usage: SELECT * FROM fhir_prd_db.diagnoses_view WHERE patient_id = '{fhir_id}'
-
-CREATE OR REPLACE VIEW fhir_prd_db.diagnoses_view AS
-SELECT 
-    patient_id,
-    condition_id,
-    diagnosis_name,
-    clinical_status_text,
-    onset_date_time,
-    abatement_date_time,
-    recorded_date,
-    icd10_code,
-    icd10_display,
-    snomed_code,
-    snomed_display
-FROM problem_list_diagnoses
-ORDER BY recorded_date DESC, onset_date_time DESC;
-```
-
-**Note**: Age calculations are performed in the Python extraction script using the patient's birth date from `patient_config.json`. These are not included in the Athena view as they require patient-specific context.
-
----
-
 ## Changelog
 
 - **2025-10-12**: Initial creation with all 7 extraction scripts documented
 - **2025-10-12**: Added complete prefix definitions and Athena view SQL for all scripts
 - **2025-10-12**: Documented column mappings with source tables and descriptions
-- **2025-10-12 (v2.0)**: ⭐ **COMPREHENSIVE UPDATE**
-  - Updated medications.csv: 44 → 45 columns (added `cp_created`)
-  - Updated appointments.csv: 15 → 21 columns (added 6 `ap_participant_*` fields)
-  - Updated imaging.csv: 17 → 18 columns (documented `patient_mrn`)
-  - Updated procedures.csv: ~40 → 34 exact column count
-  - Updated measurements.csv: ~28 → 30 exact column count
-  - **NEW**: Added complete diagnoses.csv section (17 columns)
-  - All Athena views updated to match current extraction scripts
-  - All column counts verified against actual CSV outputs
-- **2025-10-13 (v2.1)**: ⭐ **POST-PROCESSING DOCUMENTATION**
-  - **NEW**: Added "Optional Post-Processing Scripts" section
-  - Documented `check_binary_s3_availability.py` (adds 3 S3 columns to binary_files.csv)
-  - Documented `filter_chemotherapy_from_medications.py` (5-strategy cancer therapy identification)
-  - Clarified that these scripts are optional and run separately from main extraction
-  - Added workflow integration examples and use case guidance

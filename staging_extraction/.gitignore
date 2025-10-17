@@ -1,0 +1,14 @@
+# Patient-specific configuration (contains PHI)
+patient_config.json
+
+# Staging file outputs (contain patient data)
+staging_files/
+*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
