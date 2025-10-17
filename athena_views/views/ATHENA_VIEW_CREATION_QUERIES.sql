@@ -25,7 +25,10 @@ SELECT
     pa.gender as pd_gender,
     pa.race as pd_race,
     pa.ethnicity as pd_ethnicity,
-    pa.birth_date as pd_birth_date,
+    CASE
+        WHEN LENGTH(pa.birth_date) = 10 THEN pa.birth_date || 'T00:00:00Z'
+        ELSE pa.birth_date
+    END as pd_birth_date,
     DATE_DIFF('year', DATE(pa.birth_date), CURRENT_DATE) as pd_age_years
 FROM fhir_prd_db.patient_access pa
 WHERE pa.id IS NOT NULL;
@@ -45,12 +48,21 @@ SELECT
     pld.condition_id as pld_condition_id,
     pld.diagnosis_name as pld_diagnosis_name,
     pld.clinical_status_text as pld_clinical_status,
-    pld.onset_date_time as pld_onset_date,
+    CASE
+        WHEN LENGTH(pld.onset_date_time) = 10 THEN pld.onset_date_time || 'T00:00:00Z'
+        ELSE pld.onset_date_time
+    END as pld_onset_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
         CAST(SUBSTR(pld.onset_date_time, 1, 10) AS DATE))) as age_at_onset_days,
-    pld.abatement_date_time as pld_abatement_date,
-    pld.recorded_date as pld_recorded_date,
+    CASE
+        WHEN LENGTH(pld.abatement_date_time) = 10 THEN pld.abatement_date_time || 'T00:00:00Z'
+        ELSE pld.abatement_date_time
+    END as pld_abatement_date,
+    CASE
+        WHEN LENGTH(pld.recorded_date) = 10 THEN pld.recorded_date || 'T00:00:00Z'
+        ELSE pld.recorded_date
+    END as pld_recorded_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
         CAST(SUBSTR(pld.recorded_date, 1, 10) AS DATE))) as age_at_recorded_days,
