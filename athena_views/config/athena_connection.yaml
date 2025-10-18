@@ -1,0 +1,59 @@
+# Athena Connection Configuration
+# =================================
+# AWS Athena connection settings for multi-agent framework
+
+aws:
+  region: us-east-1
+  profile: default  # AWS CLI profile name (optional)
+
+athena:
+  database: fhir_prd_db
+  workgroup: primary
+  output_location: s3://aws-athena-query-results-us-east-1-YOUR_ACCOUNT_ID/
+
+  # Query execution settings
+  max_wait_time: 300  # seconds
+  max_results_per_query: 1000
+  enable_query_caching: true
+
+  # Cost optimization
+  enable_result_reuse: true
+  result_reuse_minutes: 60
+
+# View definitions (15 standardized views)
+views:
+  core_clinical:
+    - v_patient_demographics
+    - v_problem_list_diagnoses
+    - v_procedures
+    - v_medications
+    - v_imaging
+    - v_encounters
+    - v_measurements
+    - v_binary_files
+    - v_molecular_tests
+
+  radiation_oncology:
+    - v_radiation_treatment_appointments
+    - v_radiation_treatment_courses
+    - v_radiation_care_plan_notes
+    - v_radiation_care_plan_hierarchy
+    - v_radiation_service_request_notes
+    - v_radiation_service_request_rt_history
+
+# Patient identifier column (standardized across all views)
+patient_id_column: patient_fhir_id
+
+# Date format (ISO 8601 with timezone)
+date_format: "%Y-%m-%dT%H:%M:%SZ"
+
+# Query timeout and retry settings
+retry:
+  max_attempts: 3
+  backoff_multiplier: 2  # seconds
+
+# Logging
+logging:
+  level: INFO
+  log_queries: true
+  log_results_summary: true
