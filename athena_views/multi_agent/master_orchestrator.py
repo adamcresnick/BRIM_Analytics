@@ -412,7 +412,11 @@ class MasterOrchestrator:
         elif view_name == 'procedures':
             data = self.athena_agent.query_procedures(patient_fhir_id)
         elif view_name == 'medications':
-            data = self.athena_agent.query_medications(patient_fhir_id)
+            # Special handling for chemotherapy agents - use filtered query
+            if field_name == 'chemotherapy_agent':
+                data = self.athena_agent.query_chemotherapy_medications(patient_fhir_id)
+            else:
+                data = self.athena_agent.query_medications(patient_fhir_id)
         else:
             data = None
 

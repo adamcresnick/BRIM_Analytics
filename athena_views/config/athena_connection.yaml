@@ -4,12 +4,13 @@
 
 aws:
   region: us-east-1
-  profile: default  # AWS CLI profile name (optional)
+  profile: radiant-prod  # AWS SSO profile with AWSAdministratorAccess
+  account_id: 343218191717
 
 athena:
   database: fhir_prd_db
   workgroup: primary
-  output_location: s3://aws-athena-query-results-us-east-1-YOUR_ACCOUNT_ID/
+  output_location: s3://aws-athena-query-results-us-east-1-343218191717/
 
   # Query execution settings
   max_wait_time: 300  # seconds

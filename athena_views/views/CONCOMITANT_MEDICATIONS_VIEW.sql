@@ -1,0 +1,16 @@
+-- ================================================================================
+-- CONCOMITANT MEDICATIONS VIEW - PRODUCTION SQL (CORRECTED)
+-- ================================================================================
+-- Purpose: Capture concomitant medications administered during chemotherapy time windows
+-- Data Sources: medication_request, medication, medication_code_coding
+-- Key Features:
+--   - Uses medication_code_coding (NOT medication_request_code_coding)
+--   - Joins via medication table to get RxNorm codes
+--   - Defines chemotherapy time windows (start/stop dates)
+--   - Categorizes conmeds and calculates temporal overlaps
+-- Date: October 18, 2025
+-- Version: 2.0 (Fixed table references)
+-- ================================================================================
+
+-- NOTE: Copy this entire view from ATHENA_VIEW_CREATION_QUERIES.sql lines 3236-3567
+-- This file is a reference - the master version is in ATHENA_VIEW_CREATION_QUERIES.sql

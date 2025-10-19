@@ -11,9 +11,15 @@ Branch: feature/multi-agent-framework
 
 import boto3
 import time
+import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 import pandas as pd
 from datetime import datetime, timedelta
+
+# Add data_dictionary to path for chemotherapy filter
+sys.path.append(str(Path(__file__).parent.parent / 'data_dictionary'))
+from chemotherapy_filter import ChemotherapyFilter
 
 
 class AthenaQueryAgent:
@@ -26,7 +32,8 @@ class AthenaQueryAgent:
         self,
         database: str = 'fhir_prd_db',
         output_location: str = 's3://aws-athena-query-results-us-east-1-YOUR_BUCKET/',
-        region: str = 'us-east-1'
+        region: str = 'us-east-1',
+        enable_chemo_filter: bool = True
     ):
         """
         Initialize Athena Query Agent.
@@ -35,11 +42,22 @@ class AthenaQueryAgent:
             database: Athena database name (default: fhir_prd_db)
             output_location: S3 bucket for query results
             region: AWS region
+            enable_chemo_filter: Enable chemotherapy filtering (default: True)
         """
         self.database = database
         self.output_location = output_location
         self.region = region
         self.client = boto3.client('athena', region_name=region)
+
+        # Initialize chemotherapy filter
+        self.chemo_filter = None
+        if enable_chemo_filter:
+            try:
+                self.chemo_filter = ChemotherapyFilter()
+                print("✓ Chemotherapy filter initialized")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not initialize chemotherapy filter: {e}")
+                self.chemo_filter = None
 
         # View definitions (15 standardized views)
         self.views = {
@@ -286,6 +304,42 @@ class AthenaQueryAgent:
 
         df = self.execute_query(query)
         return df.to_dict('records')
+
+    def query_chemotherapy_medications(
+        self,
+        patient_fhir_id: str,
+        date_range: Optional[tuple] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Query chemotherapy medications using comprehensive filtering.
+
+        Uses 3-strategy filtering:
+        1. RxNorm ingredient matching
+        2. Product code mapping
+        3. Name-based matching via drug aliases
+
+        Args:
+            patient_fhir_id: Patient FHIR ID
+            date_range: Optional (start_date, end_date) tuple
+
+        Returns:
+            List of chemotherapy medication records with filter metadata
+        """
+        # First get all medications
+        all_medications = self.query_medications(
+            patient_fhir_id=patient_fhir_id,
+            date_range=date_range
+        )
+
+        # If chemotherapy filter not available, return all medications
+        if self.chemo_filter is None:
+            print("⚠️  Warning: Chemotherapy filter not initialized, returning all medications")
+            return all_medications
+
+        # Filter to chemotherapy agents only
+        chemo_medications = self.chemo_filter.filter_medications(all_medications)
+
+        return chemo_medications
 
     def query_imaging(
         self,
