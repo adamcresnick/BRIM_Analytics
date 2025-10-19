@@ -2,7 +2,7 @@
 -- UNIFIED PATIENT TIMELINE VIEW - COMPLETE VERSION
 -- ================================================================================
 -- Purpose: Normalize ALL temporal events across FHIR domains into single queryable view
--- Version: 2.1 (Updated for datetime-standardized source views)
+-- Version: 2.2 (Updated to use v_visits_unified instead of v_encounters)
 -- Date: 2025-10-19
 --
 -- IMPORTANT: This view now works with datetime-standardized source views where:
@@ -15,7 +15,7 @@
 --   - Procedures (v_procedures, v_procedures_tumor, v_hydrocephalus_procedures)
 --   - Imaging (v_imaging)
 --   - Medications (v_medications, v_concomitant_medications, v_imaging_corticosteroid_use)
---   - Encounters (v_encounters)
+--   - Visits (v_visits_unified) - unified encounters + appointments, no duplication
 --   - Measurements (v_measurements) - height, weight, vitals, labs
 --   - Molecular Tests (v_molecular_tests)
 --   - Radiation (v_radiation_treatment_courses, v_radiation_treatment_appointments)
@@ -327,32 +327,38 @@ LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vm.patient_fhir_id = vpd.pat
 UNION ALL
 
 -- ============================================================================
--- 5. ENCOUNTERS AS EVENTS
--- Source: v_encounters
--- Provenance: Encounter FHIR resource
+-- 5. VISITS (ENCOUNTERS + APPOINTMENTS) AS EVENTS
+-- Source: v_visits_unified
+-- Provenance: Encounter + Appointment FHIR resources (unified)
 -- ============================================================================
 SELECT
-    ve.patient_fhir_id,
-    'enc_' || ve.encounter_fhir_id as event_id,
-    CAST(ve.encounter_date AS DATE) as event_date,
-    ve.age_at_encounter_days as age_at_event_days,
-    CAST(ve.age_at_encounter_days AS DOUBLE) / 365.25 as age_at_event_years,
+    vv.patient_fhir_id,
+    'visit_' || COALESCE(vv.encounter_id, vv.appointment_fhir_id) as event_id,
+    vv.visit_date as event_date,
+    vv.age_at_visit_days as age_at_event_days,
+    CAST(vv.age_at_visit_days AS DOUBLE) / 365.25 as age_at_event_years,
 
-    'Encounter' as event_type,
+    'Visit' as event_type,
     CASE
-        WHEN ve.class_display = 'Appointment' THEN 'Outpatient Visit'
-        WHEN ve.class_display = 'Inpatient' THEN 'Inpatient Stay'
-        WHEN ve.class_display = 'Emergency' THEN 'Emergency Visit'
-        WHEN ve.class_display LIKE '%Oncology%' THEN 'Oncology Visit'
-        ELSE ve.class_display
+        WHEN vv.visit_type = 'completed_scheduled' THEN 'Completed Visit'
+        WHEN vv.visit_type = 'completed_no_encounter' THEN 'Appointment Only'
+        WHEN vv.visit_type = 'no_show' THEN 'No Show'
+        WHEN vv.visit_type = 'cancelled' THEN 'Cancelled Visit'
+        WHEN vv.visit_type = 'future_scheduled' THEN 'Scheduled Visit'
+        WHEN vv.source = 'encounter_only' THEN 'Unscheduled Encounter'
+        ELSE 'Other Visit'
     END as event_category,
-    ve.service_type_text as event_subtype,
-    COALESCE(ve.service_type_text, ve.class_display) as event_description,
-    ve.status as event_status,
+    COALESCE(vv.appointment_type_text, vv.encounter_status) as event_subtype,
+    COALESCE(
+        vv.appointment_description,
+        vv.appointment_type_text,
+        'Visit on ' || CAST(vv.visit_date AS VARCHAR)
+    ) as event_description,
+    COALESCE(vv.appointment_status, vv.encounter_status) as event_status,
 
-    'v_encounters' as source_view,
-    'Encounter' as source_domain,
-    ve.encounter_fhir_id as source_id,
+    'v_visits_unified' as source_view,
+    'Encounter+Appointment' as source_domain,
+    COALESCE(vv.encounter_id, vv.appointment_fhir_id) as source_id,
 
     CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
     CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
@@ -360,29 +366,33 @@ SELECT
     CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
 
     CAST(CAST(MAP(
-        ARRAY['class', 'service_type', 'reason_code_text', 'service_provider', 'period_start', 'period_end'],
+        ARRAY['visit_type', 'appointment_status', 'appointment_type', 'encounter_status', 'appointment_start', 'appointment_end', 'encounter_start', 'encounter_end', 'appointment_completed', 'encounter_occurred'],
         ARRAY[
-            CAST(ve.class_display AS VARCHAR),
-            CAST(ve.service_type_text AS VARCHAR),
-            CAST(ve.reason_code_text AS VARCHAR),
-            CAST(ve.service_provider_display AS VARCHAR),
-            CAST(ve.period_start AS VARCHAR),
-            CAST(ve.period_end AS VARCHAR)
+            CAST(vv.visit_type AS VARCHAR),
+            CAST(vv.appointment_status AS VARCHAR),
+            CAST(vv.appointment_type_text AS VARCHAR),
+            CAST(vv.encounter_status AS VARCHAR),
+            CAST(vv.appointment_start AS VARCHAR),
+            CAST(vv.appointment_end AS VARCHAR),
+            CAST(vv.encounter_start AS VARCHAR),
+            CAST(vv.encounter_end AS VARCHAR),
+            CAST(vv.appointment_completed AS VARCHAR),
+            CAST(vv.encounter_occurred AS VARCHAR)
         ]
     ) AS JSON) AS VARCHAR) as event_metadata,
 
     CAST(CAST(MAP(
         ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction'],
         ARRAY[
-            'v_encounters',
-            'encounter',
+            'v_visits_unified',
+            'encounter + appointment',
             CAST(CURRENT_TIMESTAMP AS VARCHAR),
             'false',
             'false'
         ]
     ) AS JSON) AS VARCHAR) as extraction_context
 
-FROM fhir_prd_db.v_encounters ve
+FROM fhir_prd_db.v_visits_unified vv
 
 UNION ALL
 

@@ -1,5 +1,5 @@
 # ATHENA VIEWS - MASTER DATA DICTIONARY
-**Version:** 2.0 (Datetime Standardized)
+**Version:** 2.1 (Unified Timeline Updated)
 **Last Updated:** 2025-10-19
 **Total Views:** 25 (22 source views + 2 prerequisites + 1 unified timeline)
 
@@ -540,14 +540,15 @@ Understanding column prefixes helps trace data back to source FHIR resources:
 
 ### v_unified_patient_timeline
 **Purpose:** Master timeline combining all 13 event sources
+**Version:** 2.2 (Updated to use v_visits_unified instead of v_encounters)
 **Key Columns:**
 - `patient_fhir_id` (VARCHAR)
 - `event_id` (VARCHAR)
 - `event_date` (DATE) - Standardized event date
 - `age_at_event_days` (INTEGER)
 - `age_at_event_years` (DOUBLE)
-- `event_type` (VARCHAR) - Diagnosis, Procedure, Imaging, Medication, etc.
-- `event_category` (VARCHAR) - Tumor, Treatment Toxicity, etc.
+- `event_type` (VARCHAR) - Diagnosis, Procedure, Imaging, Medication, Visit, etc.
+- `event_category` (VARCHAR) - Tumor, Treatment Toxicity, Completed Visit, etc.
 - `event_subtype` (VARCHAR) - Progression, Recurrence, etc.
 - `event_description` (VARCHAR)
 - `event_status` (VARCHAR)
@@ -563,7 +564,12 @@ Understanding column prefixes helps trace data back to source FHIR resources:
 
 **Datetime Columns:** 1 (event_date as DATE, derived from source datetime columns)
 **Dependencies:** ALL source views
-**Event Sources:** 13 (diagnoses, procedures, imaging, medications, encounters, measurements, molecular_tests, radiation_appointments, ophthalmology, audiology, transplants, corticosteroid_imaging, radiation_summary)
+**Event Sources:** 13 (diagnoses, procedures, imaging, medications, **visits_unified**, measurements, molecular_tests, radiation_appointments, ophthalmology, audiology, transplants, corticosteroid_imaging, radiation_summary)
+
+**IMPORTANT CHANGE (v2.2):** Now uses **v_visits_unified** instead of v_encounters. This provides:
+- Unified appointment + encounter data (no duplication)
+- Complete visit context (scheduled, no-show, cancelled, unscheduled)
+- Richer metadata (appointment type, status, duration)
 
 ---
 
