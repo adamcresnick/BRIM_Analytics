@@ -22,13 +22,24 @@
 
 
 -- ================================================================================
+
 -- VIEW: v_radiation_treatments
 -- DATETIME STANDARDIZATION: 14 columns converted from VARCHAR
 -- CHANGES:
---   - obs_effective_date: VARCHAR → TIMESTAMP(3)
---   - obs_issued_date: VARCHAR → TIMESTAMP(3)
 --   - obs_start_date: VARCHAR → TIMESTAMP(3)
 --   - obs_stop_date: VARCHAR → TIMESTAMP(3)
+--   - obs_effective_date: VARCHAR → TIMESTAMP(3)
+--   - obs_issued_date: VARCHAR → TIMESTAMP(3)
+--   - sr_occurrence_date_time: VARCHAR → TIMESTAMP(3)
+--   - sr_occurrence_period_start: VARCHAR → TIMESTAMP(3)
+--   - sr_occurrence_period_end: VARCHAR → TIMESTAMP(3)
+--   - sr_authored_on: VARCHAR → TIMESTAMP(3)
+--   - apt_first_appointment_date: VARCHAR → TIMESTAMP(3)
+--   - apt_last_appointment_date: VARCHAR → TIMESTAMP(3)
+--   - cp_first_start_date: VARCHAR → TIMESTAMP(3)
+--   - cp_last_end_date: VARCHAR → TIMESTAMP(3)
+--   - best_treatment_start_date: VARCHAR → TIMESTAMP(3)
+--   - best_treatment_stop_date: VARCHAR → TIMESTAMP(3)
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
@@ -156,8 +167,281 @@ observation_consolidated AS (
 ),
 
 -- ================================================================================
+-- CTE 2: Service Request radiation courses
+-- Source: service_request table
+-- Coverage: 3 records, 1 patient (very limited)
+-- ================================================================================
+service_request_courses AS (
+    SELECT
+        sr.subject_reference as patient_fhir_id,
+        sr.id as service_request_id,
+
+        -- Service request fields (sr_ prefix - PRESERVE ALL ORIGINAL FIELDS)
+        sr.status as sr_status,
+        sr.intent as sr_intent,
+        sr.code_text as sr_code_text,
+        sr.quantity_quantity_value as sr_quantity_value,
+        sr.quantity_quantity_unit as sr_quantity_unit,
+        sr.quantity_ratio_numerator_value as sr_quantity_ratio_numerator_value,
+        sr.quantity_ratio_numerator_unit as sr_quantity_ratio_numerator_unit,
+        sr.quantity_ratio_denominator_value as sr_quantity_ratio_denominator_value,
+        sr.quantity_ratio_denominator_unit as sr_quantity_ratio_denominator_unit,
+        TRY(CAST(sr.occurrence_date_time AS TIMESTAMP(3))) as sr_occurrence_date_time,
+        TRY(CAST(sr.occurrence_period_start AS TIMESTAMP(3))) as sr_occurrence_period_start,
+        TRY(CAST(sr.occurrence_period_end AS TIMESTAMP(3))) as sr_occurrence_period_end,
+        TRY(CAST(sr.authored_on AS TIMESTAMP(3))) as sr_authored_on,
+        sr.requester_reference as sr_requester_reference,
+        sr.requester_display as sr_requester_display,
+        sr.performer_type_text as sr_performer_type_text,
+        sr.patient_instruction as sr_patient_instruction,
+        sr.priority as sr_priority,
+        sr.do_not_perform as sr_do_not_perform,
+
+        -- Data source flag
+        'service_request' as data_source_primary
+
+    FROM fhir_prd_db.service_request sr
+    WHERE sr.subject_reference IS NOT NULL
+      AND (LOWER(sr.code_text) LIKE '%radiation%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiation%')
+),
+
+-- ================================================================================
+-- CTE 3: Service Request sub-schemas (notes, reason codes, body sites)
+-- Source: service_request_* tables
+-- ================================================================================
+service_request_notes AS (
+    SELECT
+        srn.service_request_id,
+        LISTAGG(srn.note_text, ' | ') WITHIN GROUP (ORDER BY srn.note_time) as note_text_aggregated,
+        LISTAGG(srn.note_author_reference_display, ' | ') WITHIN GROUP (ORDER BY srn.note_time) as note_authors
+    FROM fhir_prd_db.service_request_note srn
+    WHERE srn.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%' OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+    )
+    GROUP BY srn.service_request_id
+),
+service_request_reason_codes AS (
+    SELECT
+        srrc.service_request_id,
+        LISTAGG(srrc.reason_code_text, ' | ') WITHIN GROUP (ORDER BY srrc.reason_code_text) as reason_code_text_aggregated,
+        LISTAGG(srrc.reason_code_coding, ' | ') WITHIN GROUP (ORDER BY srrc.reason_code_text) as reason_code_coding_aggregated
+    FROM fhir_prd_db.service_request_reason_code srrc
+    WHERE srrc.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%' OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+    )
+    GROUP BY srrc.service_request_id
+),
+service_request_body_sites AS (
+    SELECT
+        srbs.service_request_id,
+        LISTAGG(srbs.body_site_text, ' | ') WITHIN GROUP (ORDER BY srbs.body_site_text) as body_site_text_aggregated,
+        LISTAGG(srbs.body_site_coding, ' | ') WITHIN GROUP (ORDER BY srbs.body_site_text) as body_site_coding_aggregated
+    FROM fhir_prd_db.service_request_body_site srbs
+    WHERE srbs.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%' OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+    )
+    GROUP BY srbs.service_request_id
+),
+
+-- ================================================================================
+-- CTE 4: Appointment data (scheduling context)
+-- Source: appointment + appointment_participant tables
+-- Coverage: 331,796 appointments, 1,855 patients
+-- ================================================================================
+appointment_summary AS (
+    SELECT
+        ap.participant_actor_reference as patient_fhir_id,
+        COUNT(DISTINCT a.id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'fulfilled' THEN a.id END) as fulfilled_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'cancelled' THEN a.id END) as cancelled_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'noshow' THEN a.id END) as noshow_appointments,
+        TRY(CAST(MIN(a.start) AS TIMESTAMP(3))) as first_appointment_date,
+        TRY(CAST(MAX(a.start) AS TIMESTAMP(3))) as last_appointment_date,
+        TRY(CAST(MIN(CASE WHEN a.status = 'fulfilled' THEN a.start END) AS TIMESTAMP(3))) as first_fulfilled_appointment,
+        TRY(CAST(MAX(CASE WHEN a.status = 'fulfilled' THEN a.start END) AS TIMESTAMP(3))) as last_fulfilled_appointment
+    FROM fhir_prd_db.appointment a
+    JOIN fhir_prd_db.appointment_participant ap ON a.id = ap.appointment_id
+    WHERE ap.participant_actor_reference LIKE 'Patient/%'
+      AND ap.participant_actor_reference IN (
+          -- Only include appointments for patients with radiation courses or observations
+          SELECT DISTINCT subject_reference FROM fhir_prd_db.service_request
+          WHERE LOWER(code_text) LIKE '%radiation%'
+          UNION
+          SELECT DISTINCT subject_reference FROM fhir_prd_db.observation
+          WHERE code_text LIKE 'ELECT - INTAKE FORM - RADIATION%'
+      )
+    GROUP BY ap.participant_actor_reference
+),
+
+-- ================================================================================
+-- CTE 5: Care Plan data (treatment plan context)
+-- Source: care_plan + care_plan_part_of tables
+-- Coverage: 18,189 records, 568 patients
+-- ================================================================================
+care_plan_summary AS (
+    SELECT
+        cp.subject_reference as patient_fhir_id,
+        COUNT(DISTINCT cp.id) as total_care_plans,
+        LISTAGG(DISTINCT cp.title, ' | ') WITHIN GROUP (ORDER BY cp.title) as care_plan_titles,
+        LISTAGG(DISTINCT cp.status, ' | ') WITHIN GROUP (ORDER BY cp.status) as care_plan_statuses,
+        TRY(CAST(MIN(cp.period_start) AS TIMESTAMP(3))) as first_care_plan_start,
+        TRY(CAST(MAX(cp.period_end) AS TIMESTAMP(3))) as last_care_plan_end
+    FROM fhir_prd_db.care_plan cp
+    WHERE cp.subject_reference IS NOT NULL
+      AND (LOWER(cp.title) LIKE '%radiation%')
+    GROUP BY cp.subject_reference
+)
+
+-- ================================================================================
+-- MAIN SELECT: Combine all sources with field provenance
+-- ================================================================================
+SELECT
+    -- Patient identifier
+    COALESCE(oc.patient_fhir_id, src.patient_fhir_id, apt.patient_fhir_id, cps.patient_fhir_id) as patient_fhir_id,
+
+    -- Primary data source indicator
+    COALESCE(oc.data_source_primary, src.data_source_primary) as data_source_primary,
+
+    -- Course identifier (composite key)
+    COALESCE(oc.observation_id, src.service_request_id) as course_id,
+    oc.course_line as obs_course_line_number,
+
+    -- ============================================================================
+    -- OBSERVATION FIELDS (obs_ prefix) - STRUCTURED DOSE/SITE DATA
+    -- Source: observation + observation_component tables (ELECT intake forms)
+    -- ============================================================================
+    oc.obs_dose_value,
+    oc.obs_dose_unit,
+    oc.obs_radiation_field,
+    oc.obs_radiation_site_code,
+    oc.obs_start_date,
+    oc.obs_stop_date,
+    oc.obs_status,
+    oc.obs_effective_date,
+    oc.obs_issued_date,
+    oc.obs_code_text,
+
+    -- Observation component comments (obsc_ prefix)
+    oc.obsc_comments,
+    oc.obsc_comment_authors,
+
+    -- ============================================================================
+    -- SERVICE REQUEST FIELDS (sr_ prefix) - TREATMENT COURSE METADATA
+    -- Source: service_request table
+    -- ============================================================================
+    src.sr_status,
+    src.sr_intent,
+    src.sr_code_text,
+    src.sr_quantity_value,
+    src.sr_quantity_unit,
+    src.sr_quantity_ratio_numerator_value,
+    src.sr_quantity_ratio_numerator_unit,
+    src.sr_quantity_ratio_denominator_value,
+    src.sr_quantity_ratio_denominator_unit,
+    src.sr_occurrence_date_time,
+    src.sr_occurrence_period_start,
+    src.sr_occurrence_period_end,
+    src.sr_authored_on,
+    src.sr_requester_reference,
+    src.sr_requester_display,
+    src.sr_performer_type_text,
+    src.sr_patient_instruction,
+    src.sr_priority,
+    src.sr_do_not_perform,
+
+    -- Service request sub-schema fields (srn_, srrc_, srbs_ prefixes)
+    srn.note_text_aggregated as srn_note_text,
+    srn.note_authors as srn_note_authors,
+    srrc.reason_code_text_aggregated as srrc_reason_code_text,
+    srrc.reason_code_coding_aggregated as srrc_reason_code_coding,
+    srbs.body_site_text_aggregated as srbs_body_site_text,
+    srbs.body_site_coding_aggregated as srbs_body_site_coding,
+
+    -- ============================================================================
+    -- APPOINTMENT FIELDS (apt_ prefix) - SCHEDULING CONTEXT
+    -- Source: appointment + appointment_participant tables
+    -- ============================================================================
+    apt.total_appointments as apt_total_appointments,
+    apt.fulfilled_appointments as apt_fulfilled_appointments,
+    apt.cancelled_appointments as apt_cancelled_appointments,
+    apt.noshow_appointments as apt_noshow_appointments,
+    apt.first_appointment_date as apt_first_appointment_date,
+    apt.last_appointment_date as apt_last_appointment_date,
+    apt.first_fulfilled_appointment as apt_first_fulfilled_appointment,
+    apt.last_fulfilled_appointment as apt_last_fulfilled_appointment,
+
+    -- ============================================================================
+    -- CARE PLAN FIELDS (cp_ prefix) - TREATMENT PLAN CONTEXT
+    -- Source: care_plan + care_plan_part_of tables
+    -- ============================================================================
+    cps.total_care_plans as cp_total_care_plans,
+    cps.care_plan_titles as cp_titles,
+    cps.care_plan_statuses as cp_statuses,
+    cps.first_care_plan_start as cp_first_start_date,
+    cps.last_care_plan_end as cp_last_end_date,
+
+    -- ============================================================================
+    -- DERIVED/COMPUTED FIELDS
+    -- ============================================================================
+
+    -- Best available treatment dates (prioritize observation over service_request)
+    COALESCE(oc.obs_start_date, src.sr_occurrence_period_start, apt.first_fulfilled_appointment) as best_treatment_start_date,
+    COALESCE(oc.obs_stop_date, src.sr_occurrence_period_end, apt.last_fulfilled_appointment) as best_treatment_stop_date,
+
+    -- Data completeness indicators
+    CASE WHEN oc.obs_dose_value IS NOT NULL THEN true ELSE false END as has_structured_dose,
+    CASE WHEN oc.obs_radiation_field IS NOT NULL THEN true ELSE false END as has_structured_site,
+    CASE WHEN oc.obs_start_date IS NOT NULL OR src.sr_occurrence_period_start IS NOT NULL THEN true ELSE false END as has_treatment_dates,
+    CASE WHEN apt.total_appointments > 0 THEN true ELSE false END as has_appointments,
+    CASE WHEN cps.total_care_plans > 0 THEN true ELSE false END as has_care_plan,
+
+    -- Data quality score (0-1)
+    (
+        CAST(CASE WHEN oc.obs_dose_value IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.3 +
+        CAST(CASE WHEN oc.obs_radiation_field IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.3 +
+        CAST(CASE WHEN oc.obs_start_date IS NOT NULL OR src.sr_occurrence_period_start IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.2 +
+        CAST(CASE WHEN apt.total_appointments > 0 THEN 1 ELSE 0 END AS DOUBLE) * 0.1 +
+        CAST(CASE WHEN cps.total_care_plans > 0 THEN 1 ELSE 0 END AS DOUBLE) * 0.1
+    ) as data_quality_score
+
+FROM observation_consolidated oc
+FULL OUTER JOIN service_request_courses src
+    ON oc.patient_fhir_id = src.patient_fhir_id
+LEFT JOIN service_request_notes srn ON src.service_request_id = srn.service_request_id
+LEFT JOIN service_request_reason_codes srrc ON src.service_request_id = srrc.service_request_id
+LEFT JOIN service_request_body_sites srbs ON src.service_request_id = srbs.service_request_id
+LEFT JOIN appointment_summary apt
+    ON COALESCE(oc.patient_fhir_id, src.patient_fhir_id) = apt.patient_fhir_id
+LEFT JOIN care_plan_summary cps
+    ON COALESCE(oc.patient_fhir_id, src.patient_fhir_id) = cps.patient_fhir_id
+WHERE COALESCE(oc.patient_fhir_id, src.patient_fhir_id, apt.patient_fhir_id, cps.patient_fhir_id) IS NOT NULL
+
+ORDER BY patient_fhir_id, obs_course_line_number, best_treatment_start_date;
+
+
+-- ################################################################################
+-- ################################################################################
+-- 12. v_radiation_documents - DOCUMENT REFERENCES FOR NLP EXTRACTION
+-- ################################################################################
+-- ################################################################################
+-- Copy everything from CREATE OR REPLACE VIEW to the semicolon ending this view
+
+
 -- VIEW: v_concomitant_medications
--- DATETIME STANDARDIZATION: 11 columns converted from VARCHAR
+-- DATETIME STANDARDIZATION: 8 columns converted from VARCHAR
+-- CHANGES:
+--   - chemo_start_datetime: VARCHAR → TIMESTAMP(3)
+--   - chemo_stop_datetime: VARCHAR → TIMESTAMP(3)
+--   - chemo_authored_datetime: VARCHAR → TIMESTAMP(3)
+--   - conmed_start_datetime: VARCHAR → TIMESTAMP(3)
+--   - conmed_stop_datetime: VARCHAR → TIMESTAMP(3)
+--   - conmed_authored_datetime: VARCHAR → TIMESTAMP(3)
+--   - overlap_start_datetime: VARCHAR → TIMESTAMP(3)
+--   - overlap_stop_datetime: VARCHAR → TIMESTAMP(3)
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
@@ -178,6 +462,353 @@ medication_timing_bounds AS (
 ),
 
 -- ================================================================================
+-- Step 1: Identify chemotherapy medications and their time windows
+-- ================================================================================
+chemotherapy_agents AS (
+    SELECT
+        mr.subject_reference as patient_fhir_id,
+        mr.id as medication_fhir_id,
+        mcc.code_coding_code as rxnorm_cui,
+        mcc.code_coding_display as medication_name,
+        mr.status,
+        mr.intent,
+
+        -- Standardized start date (prefer timing bounds, fallback to authored_on)
+        CASE
+            WHEN mtb.earliest_bounds_start IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mtb.earliest_bounds_start) = 10
+                    THEN mtb.earliest_bounds_start || 'T00:00:00Z'
+                    ELSE mtb.earliest_bounds_start
+                END
+            WHEN LENGTH(mr.authored_on) = 10
+                THEN mr.authored_on || 'T00:00:00Z'
+            ELSE mr.authored_on
+        END as start_datetime,
+
+        -- Standardized stop date (prefer timing bounds, fallback to dispense validity period)
+        CASE
+            WHEN mtb.latest_bounds_end IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mtb.latest_bounds_end) = 10
+                    THEN mtb.latest_bounds_end || 'T00:00:00Z'
+                    ELSE mtb.latest_bounds_end
+                END
+            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mr.dispense_request_validity_period_end) = 10
+                    THEN mr.dispense_request_validity_period_end || 'T00:00:00Z'
+                    ELSE mr.dispense_request_validity_period_end
+                END
+            ELSE NULL
+        END as stop_datetime,
+
+        -- Authored date (order date)
+        CASE
+            WHEN LENGTH(mr.authored_on) = 10
+            THEN mr.authored_on || 'T00:00:00Z'
+            ELSE mr.authored_on
+        END as authored_datetime,
+
+        -- Date source for quality tracking
+        CASE
+            WHEN mtb.earliest_bounds_start IS NOT NULL THEN 'timing_bounds'
+            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN 'dispense_period'
+            WHEN mr.authored_on IS NOT NULL THEN 'authored_on'
+            ELSE 'missing'
+        END as date_source
+
+    FROM fhir_prd_db.medication_request mr
+    LEFT JOIN medication_timing_bounds mtb ON mr.id = mtb.medication_request_id
+    LEFT JOIN fhir_prd_db.medication m ON m.id = SUBSTRING(mr.medication_reference_reference, 12)
+    LEFT JOIN fhir_prd_db.medication_code_coding mcc
+        ON mcc.medication_id = m.id
+        AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
+    WHERE (
+        -- Known chemotherapy RxNorm codes (common pediatric brain tumor agents)
+        mcc.code_coding_code IN (
+            '82264',   -- Temozolomide
+            '6599',    -- Lomustine (CCNU)
+            '2095',    -- Carmustine (BCNU)
+            '3002',    -- Cyclophosphamide
+            '2555',    -- Cisplatin
+            '2130',    -- Carboplatin
+            '4139',    -- Etoposide
+            '57841',   -- Irinotecan
+            '11152',   -- Vincristine
+            '11119',   -- Vinblastine
+            '6851',    -- Methotrexate
+            '3034',    -- Cytarabine
+            '72824',   -- Bevacizumab
+            '203195',  -- Procarbazine
+            '9384',    -- Thiotepa
+            '1723',    -- Busulfan
+            '10312',   -- Topotecan
+            '42355'    -- Dacarbazine
+        )
+        OR LOWER(m.code_text) LIKE '%temozolomide%'
+        OR LOWER(m.code_text) LIKE '%lomustine%'
+        OR LOWER(m.code_text) LIKE '%carmustine%'
+        OR LOWER(m.code_text) LIKE '%cyclophosphamide%'
+        OR LOWER(m.code_text) LIKE '%cisplatin%'
+        OR LOWER(m.code_text) LIKE '%carboplatin%'
+        OR LOWER(m.code_text) LIKE '%etoposide%'
+        OR LOWER(m.code_text) LIKE '%irinotecan%'
+        OR LOWER(m.code_text) LIKE '%vincristine%'
+        OR LOWER(m.code_text) LIKE '%vinblastine%'
+        OR LOWER(m.code_text) LIKE '%chemotherapy%'
+        OR LOWER(m.code_text) LIKE '%antineoplastic%'
+        OR LOWER(m.code_text) LIKE '%cytotoxic%'
+    )
+    AND mr.status IN ('active', 'completed', 'on-hold', 'stopped')
+),
+
+-- ================================================================================
+-- Step 2: Identify all other medications (potential concomitant medications)
+-- ================================================================================
+all_medications AS (
+    SELECT
+        mr.subject_reference as patient_fhir_id,
+        mr.id as medication_fhir_id,
+        mcc.code_coding_code as rxnorm_cui,
+        mcc.code_coding_display as medication_name,
+        mr.status,
+        mr.intent,
+
+        -- Standardized start date (prefer timing bounds, fallback to authored_on)
+        CASE
+            WHEN mtb.earliest_bounds_start IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mtb.earliest_bounds_start) = 10
+                    THEN mtb.earliest_bounds_start || 'T00:00:00Z'
+                    ELSE mtb.earliest_bounds_start
+                END
+            WHEN LENGTH(mr.authored_on) = 10
+                THEN mr.authored_on || 'T00:00:00Z'
+            ELSE mr.authored_on
+        END as start_datetime,
+
+        -- Standardized stop date (prefer timing bounds, fallback to dispense validity period)
+        CASE
+            WHEN mtb.latest_bounds_end IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mtb.latest_bounds_end) = 10
+                    THEN mtb.latest_bounds_end || 'T00:00:00Z'
+                    ELSE mtb.latest_bounds_end
+                END
+            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN
+                CASE
+                    WHEN LENGTH(mr.dispense_request_validity_period_end) = 10
+                    THEN mr.dispense_request_validity_period_end || 'T00:00:00Z'
+                    ELSE mr.dispense_request_validity_period_end
+                END
+            ELSE NULL
+        END as stop_datetime,
+
+        -- Authored date (order date)
+        CASE
+            WHEN LENGTH(mr.authored_on) = 10
+            THEN mr.authored_on || 'T00:00:00Z'
+            ELSE mr.authored_on
+        END as authored_datetime,
+
+        -- Date source for quality tracking
+        CASE
+            WHEN mtb.earliest_bounds_start IS NOT NULL THEN 'timing_bounds'
+            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN 'dispense_period'
+            WHEN mr.authored_on IS NOT NULL THEN 'authored_on'
+            ELSE 'missing'
+        END as date_source,
+
+        -- Categorize medication by RxNorm code
+        CASE
+            -- Antiemetics (nausea/vomiting prevention)
+            WHEN mcc.code_coding_code IN ('26225', '4896', '288635', '135', '7533', '51272')
+                THEN 'antiemetic'
+            -- Corticosteroids (reduce swelling, prevent allergic reactions)
+            WHEN mcc.code_coding_code IN ('3264', '8640', '6902', '5492', '4850')
+                THEN 'corticosteroid'
+            -- Growth factors (stimulate blood cell production)
+            WHEN mcc.code_coding_code IN ('105585', '358810', '4716', '139825')
+                THEN 'growth_factor'
+            -- Anticonvulsants (seizure prevention)
+            WHEN mcc.code_coding_code IN ('35766', '11118', '6470', '2002', '8134', '114477')
+                THEN 'anticonvulsant'
+            -- Antimicrobials (infection prevention/treatment)
+            WHEN mcc.code_coding_code IN ('161', '10831', '1043', '7454', '374056', '203')
+                THEN 'antimicrobial'
+            -- Proton pump inhibitors / GI protection
+            WHEN mcc.code_coding_code IN ('7646', '29046', '40790', '8163')
+                THEN 'gi_protection'
+            -- Pain management
+            WHEN mcc.code_coding_code IN ('7804', '7052', '5489', '6754', '237')
+                THEN 'analgesic'
+            -- H2 blockers
+            WHEN mcc.code_coding_code IN ('8772', '10156', '4278')
+                THEN 'h2_blocker'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%ondansetron%' OR LOWER(m.code_text) LIKE '%zofran%' THEN 'antiemetic'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%dexamethasone%' OR LOWER(m.code_text) LIKE '%prednisone%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%filgrastim%' OR LOWER(m.code_text) LIKE '%neupogen%' THEN 'growth_factor'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%levetiracetam%' OR LOWER(m.code_text) LIKE '%keppra%' THEN 'anticonvulsant'
+            ELSE 'other'
+        END as medication_category
+
+    FROM fhir_prd_db.medication_request mr
+    LEFT JOIN medication_timing_bounds mtb ON mr.id = mtb.medication_request_id
+    LEFT JOIN fhir_prd_db.medication m ON m.id = SUBSTRING(mr.medication_reference_reference, 12)
+    LEFT JOIN fhir_prd_db.medication_code_coding mcc
+        ON mcc.medication_id = m.id
+        AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
+    WHERE mr.status IN ('active', 'completed', 'on-hold', 'stopped')
+        -- Exclude chemotherapy agents from conmed list
+        AND mr.id NOT IN (SELECT medication_fhir_id FROM chemotherapy_agents)
+)
+
+-- ================================================================================
+-- Step 3: Calculate temporal overlaps between chemotherapy and concomitant meds
+-- ================================================================================
+SELECT
+    -- Patient identifier
+    ca.patient_fhir_id,
+
+    -- ============================================================================
+    -- CHEMOTHERAPY AGENT DETAILS
+    -- ============================================================================
+    ca.medication_fhir_id as chemo_medication_fhir_id,
+    ca.rxnorm_cui as chemo_rxnorm_cui,
+    ca.medication_name as chemo_medication_name,
+    ca.status as chemo_status,
+    ca.intent as chemo_intent,
+
+    -- Chemotherapy time window
+    -- Chemotherapy time window
+    TRY(CAST(ca.start_datetime AS TIMESTAMP(3))) as chemo_start_datetime,
+    TRY(CAST(ca.stop_datetime AS TIMESTAMP(3))) as chemo_stop_datetime,
+    TRY(CAST(ca.authored_datetime AS TIMESTAMP(3))) as chemo_authored_datetime,
+
+    -- Chemotherapy duration in days
+    CASE
+        WHEN ca.stop_datetime IS NOT NULL AND ca.start_datetime IS NOT NULL
+        THEN DATE_DIFF('day',
+            CAST(SUBSTR(ca.start_datetime, 1, 10) AS DATE),
+            CAST(SUBSTR(ca.stop_datetime, 1, 10) AS DATE))
+        ELSE NULL
+    END as chemo_duration_days,
+
+    ca.date_source as chemo_date_source,
+    CASE WHEN ca.rxnorm_cui IS NOT NULL THEN true ELSE false END as has_chemo_rxnorm,
+
+    -- ============================================================================
+    -- CONCOMITANT MEDICATION DETAILS
+    -- ============================================================================
+    am.medication_fhir_id as conmed_medication_fhir_id,
+    am.rxnorm_cui as conmed_rxnorm_cui,
+    am.medication_name as conmed_medication_name,
+    am.status as conmed_status,
+    am.intent as conmed_intent,
+
+    -- Conmed time window
+    -- Conmed time window
+    TRY(CAST(am.start_datetime AS TIMESTAMP(3))) as conmed_start_datetime,
+    TRY(CAST(am.stop_datetime AS TIMESTAMP(3))) as conmed_stop_datetime,
+    TRY(CAST(am.authored_datetime AS TIMESTAMP(3))) as conmed_authored_datetime,
+
+    -- Conmed duration in days
+    CASE
+        WHEN am.stop_datetime IS NOT NULL AND am.start_datetime IS NOT NULL
+        THEN DATE_DIFF('day',
+            CAST(SUBSTR(am.start_datetime, 1, 10) AS DATE),
+            CAST(SUBSTR(am.stop_datetime, 1, 10) AS DATE))
+        ELSE NULL
+    END as conmed_duration_days,
+
+    am.date_source as conmed_date_source,
+    CASE WHEN am.rxnorm_cui IS NOT NULL THEN true ELSE false END as has_conmed_rxnorm,
+
+    -- Conmed categorization
+    am.medication_category as conmed_category,
+
+    -- ============================================================================
+    -- TEMPORAL OVERLAP DETAILS
+    -- ============================================================================
+
+    -- Overlap start (later of the two start dates)
+    TRY(CAST(CASE
+        WHEN ca.start_datetime >= am.start_datetime THEN ca.start_datetime
+        ELSE am.start_datetime
+    END AS TIMESTAMP(3))) as overlap_start_datetime,
+    -- Overlap stop (earlier of the two stop dates, or NULL if either is NULL)
+    TRY(CAST(CASE
+        WHEN ca.stop_datetime IS NULL OR am.stop_datetime IS NULL THEN NULL
+        WHEN ca.stop_datetime <= am.stop_datetime THEN ca.stop_datetime
+        ELSE am.stop_datetime
+    END AS TIMESTAMP(3))) as overlap_stop_datetime,
+
+    -- Overlap duration in days
+    CASE
+        WHEN ca.stop_datetime IS NOT NULL AND am.stop_datetime IS NOT NULL
+            AND ca.start_datetime IS NOT NULL AND am.start_datetime IS NOT NULL
+        THEN DATE_DIFF('day',
+            CAST(SUBSTR(GREATEST(ca.start_datetime, am.start_datetime), 1, 10) AS DATE),
+            CAST(SUBSTR(LEAST(ca.stop_datetime, am.stop_datetime), 1, 10) AS DATE))
+        ELSE NULL
+    END as overlap_duration_days,
+
+    -- Overlap type classification
+    CASE
+        -- Conmed entirely during chemo window
+        WHEN am.start_datetime >= ca.start_datetime
+            AND (am.stop_datetime IS NULL OR (ca.stop_datetime IS NOT NULL AND am.stop_datetime <= ca.stop_datetime))
+            THEN 'during_chemo'
+        -- Conmed started during chemo but may extend beyond
+        WHEN am.start_datetime >= ca.start_datetime
+            AND (ca.stop_datetime IS NULL OR am.start_datetime <= ca.stop_datetime)
+            THEN 'started_during_chemo'
+        -- Conmed stopped during chemo but started before
+        WHEN am.stop_datetime IS NOT NULL
+            AND ca.stop_datetime IS NOT NULL
+            AND am.stop_datetime >= ca.start_datetime
+            AND am.stop_datetime <= ca.stop_datetime
+            THEN 'stopped_during_chemo'
+        -- Conmed spans entire chemo period
+        WHEN am.start_datetime <= ca.start_datetime
+            AND (am.stop_datetime IS NULL OR (ca.stop_datetime IS NOT NULL AND am.stop_datetime >= ca.stop_datetime))
+            THEN 'spans_chemo'
+        ELSE 'partial_overlap'
+    END as overlap_type,
+
+    -- Data quality indicators
+    CASE
+        WHEN ca.date_source = 'timing_bounds' AND am.date_source = 'timing_bounds' THEN 'high'
+        WHEN ca.date_source = 'timing_bounds' OR am.date_source = 'timing_bounds' THEN 'medium'
+        WHEN ca.date_source = 'dispense_period' AND am.date_source = 'dispense_period' THEN 'medium'
+        ELSE 'low'
+    END as date_quality
+
+FROM chemotherapy_agents ca
+INNER JOIN all_medications am
+    ON ca.patient_fhir_id = am.patient_fhir_id
+WHERE
+    -- Temporal overlap condition: periods must overlap
+    -- Condition 1: conmed starts during chemo
+    (
+        am.start_datetime >= ca.start_datetime
+        AND (ca.stop_datetime IS NULL OR am.start_datetime <= ca.stop_datetime)
+    )
+    -- Condition 2: conmed stops during chemo
+    OR (
+        am.stop_datetime IS NOT NULL
+        AND ca.stop_datetime IS NOT NULL
+        AND am.stop_datetime >= ca.start_datetime
+        AND am.stop_datetime <= ca.stop_datetime
+    )
+    -- Condition 3: conmed spans entire chemo period
+    OR (
+        am.start_datetime <= ca.start_datetime
+        AND (am.stop_datetime IS NULL OR (ca.stop_datetime IS NOT NULL AND am.stop_datetime >= ca.stop_datetime))
+    )
+
+
 -- VIEW: v_hydrocephalus_diagnosis
 -- DATETIME STANDARDIZATION: 9 columns converted from VARCHAR
 -- CHANGES:
@@ -1312,15 +1943,15 @@ shunt_procedures AS (
         TRY(CAST(CASE
             WHEN LENGTH(p.performed_date_time) = 10 THEN p.performed_date_time || 'T00:00:00Z'
             ELSE p.performed_date_time
-        END as proc_performed_datetime, AS TIMESTAMP(3))) as proc_performed_datetime,
+        END AS TIMESTAMP(3))) as proc_performed_datetime,
         TRY(CAST(CASE
             WHEN LENGTH(p.performed_period_start) = 10 THEN p.performed_period_start || 'T00:00:00Z'
             ELSE p.performed_period_start
-        END as proc_period_start, AS TIMESTAMP(3))) as proc_period_start,
+        END AS TIMESTAMP(3))) as proc_period_start,
         TRY(CAST(CASE
             WHEN LENGTH(p.performed_period_end) = 10 THEN p.performed_period_end || 'T00:00:00Z'
             ELSE p.performed_period_end
-        END as proc_period_end, AS TIMESTAMP(3))) as proc_period_end,
+        END AS TIMESTAMP(3))) as proc_period_end,
 
         p.category_text as proc_category_text,
         p.outcome_text as proc_outcome_text,
@@ -1714,7 +2345,7 @@ WITH collection_procedures AS (
             WHEN LENGTH(p.performed_date_time) = 10
             THEN p.performed_date_time || 'T00:00:00Z'
             ELSE p.performed_date_time
-        END as collection_datetime, AS TIMESTAMP(3))) as collection_datetime,
+        END AS TIMESTAMP(3))) as collection_datetime,
 
         -- Extract method from coding
         COALESCE(pc.code_coding_display, p.code_text) as collection_method,
@@ -1750,11 +2381,11 @@ cd34_counts AS (
         o.id as observation_fhir_id,
 
         -- Standardize measurement date
-        CASE
+        TRY(CAST(CASE
             WHEN LENGTH(o.effective_date_time) = 10
             THEN o.effective_date_time || 'T00:00:00Z'
             ELSE o.effective_date_time
-        END as measurement_datetime,
+        END AS TIMESTAMP(3))) as measurement_datetime,
 
         o.code_text as measurement_type,
         o.value_quantity_value as cd34_count,
@@ -1829,7 +2460,7 @@ mobilization_agents AS (
             WHEN LENGTH(mr.authored_on) = 10
                 THEN mr.authored_on || 'T00:00:00Z'
             ELSE mr.authored_on
-        END as mobilization_start_datetime, AS TIMESTAMP(3))) as mobilization_start_datetime,
+        END AS TIMESTAMP(3))) as mobilization_start_datetime,
 
         -- Standardize end date
         TRY(CAST(CASE
@@ -1846,7 +2477,7 @@ mobilization_agents AS (
                     ELSE mr.dispense_request_validity_period_end
                 END
             ELSE NULL
-        END as mobilization_stop_datetime, AS TIMESTAMP(3))) as mobilization_stop_datetime,
+        END AS TIMESTAMP(3))) as mobilization_stop_datetime,
 
         COALESCE(m.code_text, mr.medication_reference_display) as medication_name,
         mcc.code_coding_code as rxnorm_code,
@@ -1903,11 +2534,11 @@ product_quality AS (
         o.subject_reference as patient_fhir_id,
         o.id as observation_fhir_id,
 
-        CASE
+        TRY(CAST(CASE
             WHEN LENGTH(o.effective_date_time) = 10
             THEN o.effective_date_time || 'T00:00:00Z'
             ELSE o.effective_date_time
-        END as measurement_datetime,
+        END AS TIMESTAMP(3))) as measurement_datetime,
 
         o.code_text as quality_metric,
         o.value_quantity_value as metric_value,
@@ -2170,10 +2801,10 @@ SELECT
     -- Calculate age at visit (use appointment or encounter date)
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        TRY(CAST(SUBSTR(COALESCE(appointment_start, encounter_start), 1, 10) AS DATE)))) as age_at_visit_days,
+        DATE(COALESCE(appointment_start, encounter_start)))) as age_at_visit_days,
 
     -- Visit date (earliest of appointment or encounter)
-    TRY(CAST(SUBSTR(COALESCE(appointment_start, encounter_start), 1, 10) AS DATE)) as visit_date
+    DATE(COALESCE(appointment_start, encounter_start)) as visit_date
 
 FROM (
     SELECT * FROM appointments_with_encounters
@@ -2257,10 +2888,10 @@ SELECT
     -- Age calculations
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        CAST(SUBSTR(ci.imaging_date, 1, 10) AS DATE))) as age_at_imaging_days,
+        DATE(ci.imaging_date))) as age_at_imaging_days,
     TRY(DATE_DIFF('year',
         DATE(pa.birth_date),
-        CAST(SUBSTR(ci.imaging_date, 1, 10) AS DATE))) as age_at_imaging_years
+        DATE(ci.imaging_date))) as age_at_imaging_years
 
 FROM combined_imaging ci
 LEFT JOIN fhir_prd_db.diagnostic_report dr
@@ -2353,10 +2984,10 @@ SELECT
     pa.birth_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        CAST(SUBSTR(COALESCE(obs_measurement_date, lt_measurement_date), 1, 10) AS DATE))) as age_at_measurement_days,
+        DATE(COALESCE(obs_measurement_date, lt_measurement_date)))) as age_at_measurement_days,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        CAST(SUBSTR(COALESCE(obs_measurement_date, lt_measurement_date), 1, 10) AS DATE)) / 365.25) as age_at_measurement_years
+        DATE(COALESCE(obs_measurement_date, lt_measurement_date))) / 365.25) as age_at_measurement_years
 FROM (
     SELECT * FROM observations
     UNION ALL
@@ -2594,7 +3225,7 @@ corticosteroid_medications AS (
             WHEN LENGTH(mr.authored_on) = 10
                 THEN mr.authored_on || 'T00:00:00Z'
             ELSE mr.authored_on
-        END as medication_start_datetime, AS TIMESTAMP(3))) as medication_start_datetime,
+        END AS TIMESTAMP(3))) as medication_start_datetime,
 
         TRY(CAST(CASE
             WHEN mtb.latest_bounds_end IS NOT NULL THEN
@@ -2610,7 +3241,7 @@ corticosteroid_medications AS (
                     ELSE mr.dispense_request_validity_period_end
                 END
             ELSE NULL
-        END as medication_stop_datetime, AS TIMESTAMP(3))) as medication_stop_datetime,
+        END AS TIMESTAMP(3))) as medication_stop_datetime,
 
         mr.status as medication_status
 
@@ -2868,18 +3499,18 @@ SELECT
     TRY(CAST(CASE
         WHEN LENGTH(pld.onset_date_time) = 10 THEN pld.onset_date_time || 'T00:00:00Z'
         ELSE pld.onset_date_time
-    END as pld_onset_date, AS TIMESTAMP(3))) as pld_onset_date,
+    END AS TIMESTAMP(3))) as pld_onset_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
         CAST(SUBSTR(pld.onset_date_time, 1, 10) AS DATE))) as age_at_onset_days,
     TRY(CAST(CASE
         WHEN LENGTH(pld.abatement_date_time) = 10 THEN pld.abatement_date_time || 'T00:00:00Z'
         ELSE pld.abatement_date_time
-    END as pld_abatement_date, AS TIMESTAMP(3))) as pld_abatement_date,
+    END AS TIMESTAMP(3))) as pld_abatement_date,
     TRY(CAST(CASE
         WHEN LENGTH(pld.recorded_date) = 10 THEN pld.recorded_date || 'T00:00:00Z'
         ELSE pld.recorded_date
-    END as pld_recorded_date, AS TIMESTAMP(3))) as pld_recorded_date,
+    END AS TIMESTAMP(3))) as pld_recorded_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
         CAST(SUBSTR(pld.recorded_date, 1, 10) AS DATE))) as age_at_recorded_days,
@@ -3023,8 +3654,9 @@ ORDER BY dr.subject_reference, extraction_priority, dr.date DESC;
 -- VIEW: v_radiation_treatment_appointments
 -- DATETIME STANDARDIZATION: 3 columns converted from VARCHAR
 -- CHANGES:
---   - appointment_end: VARCHAR → TIMESTAMP(3)
 --   - appointment_start: VARCHAR → TIMESTAMP(3)
+--   - appointment_end: VARCHAR → TIMESTAMP(3)
+--   - created: VARCHAR → TIMESTAMP(3)
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
@@ -3039,7 +3671,7 @@ SELECT DISTINCT
     TRY(CAST(a.start AS TIMESTAMP(3))) as appointment_start,
     TRY(CAST(a."end" AS TIMESTAMP(3))) as appointment_end,
     a.minutes_duration,
-    a.created,
+    TRY(CAST(a.created AS TIMESTAMP(3))) as created,
     a.comment as appointment_comment,
     a.patient_instruction
 FROM fhir_prd_db.appointment a
@@ -3142,6 +3774,9 @@ ORDER BY dr.subject_reference, dr.date DESC;
 -- ================================================================================
 -- VIEW: v_encounters
 -- DATETIME STANDARDIZATION: 2 columns converted from VARCHAR
+-- CHANGES:
+--   - period_start: VARCHAR → TIMESTAMP(3)
+--   - period_end: VARCHAR → TIMESTAMP(3)
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
@@ -3228,8 +3863,8 @@ SELECT
     e.class_display,
     e.service_type_text,
     e.priority_text,
-    e.period_start,
-    e.period_end,
+    TRY(CAST(e.period_start AS TIMESTAMP(3))) as period_start,
+    TRY(CAST(e.period_end AS TIMESTAMP(3))) as period_end,
     e.length_value,
     e.length_unit,
     e.service_provider_display,
@@ -3297,19 +3932,52 @@ ORDER BY cp.period_start;
 
 -- ================================================================================
 -- VIEW: v_audiology_assessments
--- DATETIME STANDARDIZATION: 1 columns converted from VARCHAR
+-- DATETIME STANDARDIZATION: 10 VARCHAR datetime columns → TIMESTAMP(3)
+-- CHANGES: Wrapped full_datetime columns in all CTEs with TRY(CAST(... AS TIMESTAMP(3)))
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_audiology_assessments AS
+WITH
+  audiogram_thresholds AS (
+   SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, (CASE WHEN (LOWER(o.code_text) LIKE '%left ear%') THEN 'left' WHEN (LOWER(o.code_text) LIKE '%right ear%') THEN 'right' END) ear_side, (CASE WHEN (LOWER(o.code_text) LIKE '%1000%hz%') THEN 1000 WHEN (LOWER(o.code_text) LIKE '%2000%hz%') THEN 2000 WHEN (LOWER(o.code_text) LIKE '%4000%hz%') THEN 4000 WHEN (LOWER(o.code_text) LIKE '%6000%hz%') THEN 6000 WHEN (LOWER(o.code_text) LIKE '%8000%hz%') THEN 8000 WHEN (LOWER(o.code_text) LIKE '%500%hz%') THEN 500 WHEN (LOWER(o.code_text) LIKE '%250%hz%') THEN 250 END) frequency_hz, o.value_quantity_value threshold_db, o.value_quantity_unit threshold_unit, o.code_text test_name, 'audiogram_threshold' assessment_category, 'observation' source_table, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM fhir_prd_db.observation o WHERE ((LOWER(o.code_text) LIKE '%ear%hz%') AND ((LOWER(o.code_text) LIKE '%1000%') OR (LOWER(o.code_text) LIKE '%2000%') OR (LOWER(o.code_text) LIKE '%4000%') OR (LOWER(o.code_text) LIKE '%6000%') OR (LOWER(o.code_text) LIKE '%8000%') OR (LOWER(o.code_text) LIKE '%500%') OR (LOWER(o.code_text) LIKE '%250%')))
+), hearing_aid_status AS (
+   SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, o.code_text assessment_name, (CASE WHEN (LOWER(o.code_text) LIKE '%hearing aid ear%') THEN 'hearing_aid_laterality' WHEN (LOWER(o.code_text) LIKE '%hearing aid%') THEN 'hearing_aid_required' END) assessment_category, 'observation' source_table, oc.component_value_string laterality_value, (CASE WHEN (LOWER(oc.component_value_string) LIKE '%both%ear%') THEN 'Bilateral' WHEN (LOWER(oc.component_value_string) LIKE '%right%ear%') THEN 'Right' WHEN (LOWER(oc.component_value_string) LIKE '%left%ear%') THEN 'Left' WHEN ((LOWER(o.code_text) LIKE '%hearing aid%') AND (oc.component_code_text IS NOT NULL)) THEN 'Yes' END) standardized_value, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.observation o LEFT JOIN fhir_prd_db.observation_component oc ON (o.id = oc.observation_id)) WHERE (LOWER(o.code_text) LIKE '%hearing aid%')
+), hearing_loss_observations AS (
+   SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, o.code_text assessment_name, (CASE WHEN (LOWER(o.code_text) LIKE '%laterality%') THEN 'hearing_loss_laterality' WHEN (LOWER(o.code_text) LIKE '%hearing loss type%') THEN 'hearing_loss_type' WHEN (LOWER(o.code_text) LIKE '%sensorineural%') THEN 'hearing_loss_type' WHEN (LOWER(o.code_text) LIKE '%conductive%') THEN 'hearing_loss_type' WHEN (LOWER(o.code_text) LIKE '%hearing loss%') THEN 'hearing_loss_symptom' END) assessment_category, 'observation' source_table, (CASE WHEN (LOWER(o.code_text) LIKE '%sensorineural%') THEN 'Sensorineural' WHEN (LOWER(o.code_text) LIKE '%conductive%') THEN 'Conductive' WHEN (LOWER(o.code_text) LIKE '%mixed%') THEN 'Mixed' END) hearing_loss_type, (CASE WHEN (LOWER(oc.component_value_string) LIKE '%both%ear%') THEN 'Bilateral' WHEN (LOWER(oc.component_value_string) LIKE '%right%ear%') THEN 'Right' WHEN (LOWER(oc.component_value_string) LIKE '%left%ear%') THEN 'Left' END) laterality, oc.component_value_string raw_value, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.observation o LEFT JOIN fhir_prd_db.observation_component oc ON (o.id = oc.observation_id)) WHERE (((LOWER(o.code_text) LIKE '%hearing loss%') OR (LOWER(o.code_text) LIKE '%sensorineural%') OR (LOWER(o.code_text) LIKE '%conductive%') OR (LOWER(o.code_text) LIKE '%hard of hearing%')) AND (NOT (LOWER(o.code_text) LIKE '%ear%hz%')))
+), hearing_tests_other AS (
+   SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, o.code_text assessment_name, (CASE WHEN (LOWER(o.code_text) LIKE '%hearing reception threshold%') THEN 'hearing_reception_threshold' WHEN (LOWER(o.code_text) LIKE '%hearing screen%result%') THEN 'hearing_screen_result' WHEN (LOWER(o.code_text) LIKE '%hearing%intact%') THEN 'hearing_exam_normal' WHEN (LOWER(o.code_text) LIKE '%vision and hearing%') THEN 'hearing_status_general' END) assessment_category, 'observation' source_table, o.value_quantity_value numeric_value, o.value_quantity_unit value_unit, oc.component_value_string text_value, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.observation o LEFT JOIN fhir_prd_db.observation_component oc ON (o.id = oc.observation_id)) WHERE (((LOWER(o.code_text) LIKE '%hearing reception threshold%') OR (LOWER(o.code_text) LIKE '%hearing screen%') OR (LOWER(o.code_text) LIKE '%hearing%intact%') OR ((LOWER(o.code_text) LIKE '%vision and hearing%') AND (LOWER(o.code_text) LIKE '%hearing%'))) AND (NOT (LOWER(o.code_text) LIKE '%ear%hz%')))
+), hearing_loss_diagnoses AS (
+   SELECT c.id condition_fhir_id, SUBSTRING(c.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(c.onset_date_time, 1, 10) AS DATE)) diagnosis_date, c.code_text diagnosis_name, (CASE WHEN (LOWER(c.code_text) LIKE '%ototoxic%') THEN 'ototoxic_hearing_loss' WHEN (LOWER(c.code_text) LIKE '%ototoxicity monitoring%') THEN 'ototoxicity_monitoring' WHEN (LOWER(c.code_text) LIKE '%sensorineural%') THEN 'sensorineural_hearing_loss' WHEN (LOWER(c.code_text) LIKE '%conductive%') THEN 'conductive_hearing_loss' WHEN (LOWER(c.code_text) LIKE '%mixed%') THEN 'mixed_hearing_loss' WHEN (LOWER(c.code_text) LIKE '%deaf%') THEN 'deafness' ELSE 'hearing_loss_unspecified' END) diagnosis_category, 'condition' source_table, (CASE WHEN (LOWER(c.code_text) LIKE '%sensorineural%') THEN 'Sensorineural' WHEN (LOWER(c.code_text) LIKE '%conductive%') THEN 'Conductive' WHEN (LOWER(c.code_text) LIKE '%mixed%') THEN 'Mixed' WHEN (LOWER(c.code_text) LIKE '%ototoxic%') THEN 'Ototoxic (Sensorineural)' END) hearing_loss_type, (CASE WHEN ((LOWER(c.code_text) LIKE '%bilateral%') OR (LOWER(c.code_text) LIKE '%both ears%')) THEN 'Bilateral' WHEN ((LOWER(c.code_text) LIKE '%unilateral%') AND (LOWER(c.code_text) LIKE '%left%')) THEN 'Left' WHEN ((LOWER(c.code_text) LIKE '%unilateral%') AND (LOWER(c.code_text) LIKE '%right%')) THEN 'Right' WHEN (LOWER(c.code_text) LIKE '%left ear%') THEN 'Left' WHEN (LOWER(c.code_text) LIKE '%right ear%') THEN 'Right' WHEN (LOWER(c.code_text) LIKE '%asymmetrical%') THEN 'Bilateral (asymmetric)' END) laterality, (CASE WHEN (LOWER(c.code_text) LIKE '%ototoxic%') THEN true ELSE false END) is_ototoxic, ccs.clinical_status_coding_code condition_status, TRY(CAST(c.onset_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.condition c LEFT JOIN fhir_prd_db.condition_clinical_status_coding ccs ON (c.id = ccs.condition_id)) WHERE ((LOWER(c.code_text) LIKE '%hearing loss%') OR (LOWER(c.code_text) LIKE '%deaf%') OR (LOWER(c.code_text) LIKE '%ototoxic%') OR (LOWER(c.code_text) LIKE '%ototoxicity%'))
+), audiology_procedures AS (
+   SELECT p.id procedure_fhir_id, SUBSTRING(p.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(p.performed_date_time, 1, 10) AS DATE)) assessment_date, p.code_text procedure_name, (CASE WHEN (LOWER(p.code_text) LIKE '%audiometric screening%') THEN 'audiometric_screening' WHEN (LOWER(p.code_text) LIKE '%pure tone audiometry%') THEN 'pure_tone_audiometry' WHEN ((LOWER(p.code_text) LIKE '%speech%audiometry%') OR (LOWER(p.code_text) LIKE '%speech threshold%')) THEN 'speech_audiometry' WHEN (LOWER(p.code_text) LIKE '%air%bone%') THEN 'air_bone_audiometry' WHEN (LOWER(p.code_text) LIKE '%comprehensive hearing%') THEN 'comprehensive_hearing_test' WHEN (LOWER(p.code_text) LIKE '%hearing aid check%') THEN 'hearing_aid_check' WHEN ((LOWER(p.code_text) LIKE '%abr%') OR (LOWER(p.code_text) LIKE '%auditory brainstem%')) THEN 'abr_test' WHEN (LOWER(p.code_text) LIKE '%tympanometry%') THEN 'tympanometry' ELSE 'other_audiology_procedure' END) procedure_category, 'procedure' source_table, p.status procedure_status, pc.code_coding_code cpt_code, pc.code_coding_display cpt_description, TRY(CAST(p.performed_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.procedure p LEFT JOIN fhir_prd_db.procedure_code_coding pc ON (p.id = pc.procedure_id)) WHERE ((LOWER(p.code_text) LIKE '%audiolog%') OR (LOWER(p.code_text) LIKE '%audiometr%') OR (LOWER(p.code_text) LIKE '%hearing%') OR (LOWER(p.code_text) LIKE '%abr%'))
+), audiology_orders AS (
+   SELECT sr.id service_request_fhir_id, SUBSTRING(sr.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(sr.authored_on, 1, 10) AS DATE)) order_date, sr.code_text order_name, (CASE WHEN (LOWER(sr.code_text) LIKE '%audiolog%') THEN 'audiology_order' WHEN (LOWER(sr.code_text) LIKE '%audiometr%') THEN 'audiometry_order' WHEN (LOWER(sr.code_text) LIKE '%hearing%') THEN 'hearing_test_order' END) order_category, 'service_request' source_table, sr.status order_status, sr.intent order_intent, TRY(CAST(sr.authored_on AS TIMESTAMP(3))) order_datetime FROM fhir_prd_db.service_request sr WHERE ((LOWER(sr.code_text) LIKE '%audiolog%') OR (LOWER(sr.code_text) LIKE '%audiometr%') OR (LOWER(sr.code_text) LIKE '%hearing%'))
+), audiology_reports AS (
+   SELECT dr.id diagnostic_report_fhir_id, SUBSTRING(dr.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(dr.effective_date_time, 1, 10) AS DATE)) report_date, dr.code_text report_name, (CASE WHEN (LOWER(dr.code_text) LIKE '%audiolog%') THEN 'audiology_report' WHEN (LOWER(dr.code_text) LIKE '%audiometr%') THEN 'audiometry_report' WHEN (LOWER(dr.code_text) LIKE '%hearing%') THEN 'hearing_test_report' END) report_category, 'diagnostic_report' source_table, dr.status report_status, TRY(CAST(dr.effective_date_time AS TIMESTAMP(3))) report_datetime FROM fhir_prd_db.diagnostic_report dr WHERE ((LOWER(dr.code_text) LIKE '%audiolog%') OR (LOWER(dr.code_text) LIKE '%audiometr%') OR (LOWER(dr.code_text) LIKE '%hearing%'))
+), audiology_documents AS (
+   SELECT dref.id document_reference_fhir_id, SUBSTRING(dref.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(dref.date, 1, 10) AS DATE)) document_date, dref.description document_description, dref.type_text document_type, (CASE WHEN (LOWER(dref.type_text) LIKE '%audiologic assessment%') THEN 'audiologic_assessment_document' WHEN (LOWER(dref.description) LIKE '%audiolog%evaluation%') THEN 'audiology_evaluation_document' WHEN (LOWER(dref.description) LIKE '%audiometr%') THEN 'audiometry_document' WHEN (LOWER(dref.description) LIKE '%hearing%') THEN 'hearing_test_document' ELSE 'audiology_other_document' END) document_category, 'document_reference' source_table, dref.status document_status, TRY(CAST(dref.date AS TIMESTAMP(3))) document_datetime, dc.content_attachment_url file_url, dc.content_attachment_content_type file_type FROM (fhir_prd_db.document_reference dref LEFT JOIN fhir_prd_db.document_reference_content dc ON (dref.id = dc.document_reference_id)) WHERE ((LOWER(dref.description) LIKE '%audiolog%') OR (LOWER(dref.type_text) LIKE '%audiolog%') OR (LOWER(dref.description) LIKE '%hearing%') OR (LOWER(dref.type_text) LIKE '%hearing%'))
+)
+SELECT 'audiogram' data_type, observation_fhir_id record_fhir_id, patient_fhir_id, assessment_date, test_name assessment_description, assessment_category, source_table, observation_status record_status, ear_side, frequency_hz, threshold_db, threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM audiogram_thresholds
+UNION ALL SELECT 'hearing_aid' data_type, observation_fhir_id record_fhir_id, patient_fhir_id, assessment_date, assessment_name assessment_description, assessment_category, source_table, observation_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, null hearing_loss_type, standardized_value laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM hearing_aid_status
+UNION ALL SELECT 'hearing_loss_observation' data_type, observation_fhir_id record_fhir_id, patient_fhir_id, assessment_date, assessment_name assessment_description, assessment_category, source_table, observation_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, hearing_loss_type, laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM hearing_loss_observations
+UNION ALL SELECT 'hearing_test' data_type, observation_fhir_id record_fhir_id, patient_fhir_id, assessment_date, assessment_name assessment_description, assessment_category, source_table, observation_status record_status, null ear_side, null frequency_hz, CAST(numeric_value AS VARCHAR) threshold_db, value_unit threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM hearing_tests_other
+UNION ALL SELECT 'diagnosis' data_type, condition_fhir_id record_fhir_id, patient_fhir_id, diagnosis_date assessment_date, diagnosis_name assessment_description, diagnosis_category assessment_category, source_table, condition_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, hearing_loss_type, laterality, is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM hearing_loss_diagnoses
+UNION ALL SELECT 'procedure' data_type, procedure_fhir_id record_fhir_id, patient_fhir_id, assessment_date, procedure_name assessment_description, procedure_category assessment_category, source_table, procedure_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, cpt_code, cpt_description, null order_intent, null file_url, null file_type, full_datetime FROM audiology_procedures
+UNION ALL SELECT 'order' data_type, service_request_fhir_id record_fhir_id, patient_fhir_id, order_date assessment_date, order_name assessment_description, order_category assessment_category, source_table, order_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, null cpt_code, null cpt_description, order_intent, null file_url, null file_type, order_datetime full_datetime FROM audiology_orders
+UNION ALL SELECT 'report' data_type, diagnostic_report_fhir_id record_fhir_id, patient_fhir_id, report_date assessment_date, report_name assessment_description, report_category assessment_category, source_table, report_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, null file_url, null file_type, report_datetime full_datetime FROM audiology_reports
+UNION ALL SELECT 'document' data_type, document_reference_fhir_id record_fhir_id, patient_fhir_id, document_date assessment_date, document_description assessment_description, document_category assessment_category, source_table, document_status record_status, null ear_side, null frequency_hz, null threshold_db, null threshold_unit, null hearing_loss_type, null laterality, null is_ototoxic, null cpt_code, null cpt_description, null order_intent, file_url, file_type, document_datetime full_datetime FROM audiology_documents;
 
 -- ================================================================================
 -- VIEW: v_ophthalmology_assessments
--- DATETIME STANDARDIZATION: 1 columns converted from VARCHAR
+-- DATETIME STANDARDIZATION: 9 VARCHAR datetime columns → TIMESTAMP(3)
+-- CHANGES: Wrapped full_datetime columns in all CTEs with TRY(CAST(... AS TIMESTAMP(3)))
 -- PRESERVED: All JOINs, WHERE clauses, aggregations, and business logic
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_ophthalmology_assessments AS
+WITH visual_acuity_obs AS (SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, o.code_text assessment_name, 'visual_acuity' assessment_category, 'observation' source_table, o.value_quantity_value numeric_value, o.value_quantity_unit value_unit, o.value_string text_value, oc.component_code_text component_name, oc.component_value_quantity_value component_numeric_value, oc.component_value_quantity_unit component_unit, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.observation o LEFT JOIN fhir_prd_db.observation_component oc ON (o.id = oc.observation_id)) WHERE ((LOWER(o.code_text) LIKE '%visual%acuity%') OR (LOWER(o.code_text) LIKE '%snellen%') OR (LOWER(o.code_text) LIKE '%logmar%') OR (LOWER(o.code_text) LIKE '%etdrs%') OR (LOWER(o.code_text) LIKE '%hotv%') OR (LOWER(o.code_text) LIKE '%lea%') OR (LOWER(o.code_text) LIKE '%vision%screening%') OR (LOWER(o.code_text) LIKE '%bcva%'))), fundus_optic_disc_obs AS (SELECT o.id observation_fhir_id, SUBSTRING(o.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(o.effective_date_time, 1, 10) AS DATE)) assessment_date, o.code_text assessment_name, (CASE WHEN (LOWER(o.code_text) LIKE '%papilledema%') THEN 'optic_disc_papilledema' WHEN ((LOWER(o.code_text) LIKE '%optic%disc%') OR (LOWER(o.code_text) LIKE '%fundus%disc%')) THEN 'optic_disc_exam' WHEN (LOWER(o.code_text) LIKE '%fundus%macula%') THEN 'fundus_macula' WHEN (LOWER(o.code_text) LIKE '%fundus%vessel%') THEN 'fundus_vessels' WHEN (LOWER(o.code_text) LIKE '%fundus%vitreous%') THEN 'fundus_vitreous' WHEN (LOWER(o.code_text) LIKE '%fundus%periphery%') THEN 'fundus_periphery' ELSE 'fundus_other' END) assessment_category, 'observation' source_table, o.value_quantity_value numeric_value, o.value_quantity_unit value_unit, o.value_string text_value, oc.component_code_text component_name, oc.component_value_quantity_value component_numeric_value, oc.component_value_quantity_unit component_unit, o.status observation_status, TRY(CAST(o.effective_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.observation o LEFT JOIN fhir_prd_db.observation_component oc ON (o.id = oc.observation_id)) WHERE (((LOWER(o.code_text) LIKE '%fundus%') OR (LOWER(o.code_text) LIKE '%optic%disc%') OR (LOWER(o.code_text) LIKE '%papilledema%') OR (LOWER(o.code_text) LIKE '%optic%pallor%') OR (LOWER(o.code_text) LIKE '%optic%atrophy%') OR (LOWER(o.code_text) LIKE '%cup%disc%')) AND (NOT (LOWER(o.code_text) LIKE '%visual%acuity%')))), visual_field_procedures AS (SELECT p.id procedure_fhir_id, SUBSTRING(p.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(p.performed_date_time, 1, 10) AS DATE)) assessment_date, p.code_text assessment_name, 'visual_field' assessment_category, 'procedure' source_table, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, p.status procedure_status, pc.code_coding_code cpt_code, pc.code_coding_display cpt_description, TRY(CAST(p.performed_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.procedure p LEFT JOIN fhir_prd_db.procedure_code_coding pc ON (p.id = pc.procedure_id)) WHERE ((LOWER(p.code_text) LIKE '%visual%field%') OR (LOWER(p.code_text) LIKE '%perimetry%') OR (LOWER(p.code_text) LIKE '%goldmann%') OR (LOWER(p.code_text) LIKE '%humphrey%') OR (pc.code_coding_code IN ('92081', '92082', '92083')))), oct_procedures AS (SELECT p.id procedure_fhir_id, SUBSTRING(p.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(p.performed_date_time, 1, 10) AS DATE)) assessment_date, p.code_text assessment_name, (CASE WHEN (LOWER(p.code_text) LIKE '%optic%nerve%') THEN 'oct_optic_nerve' WHEN (LOWER(p.code_text) LIKE '%retina%') THEN 'oct_retina' WHEN (LOWER(p.code_text) LIKE '%macula%') THEN 'oct_macula' ELSE 'oct_unspecified' END) assessment_category, 'procedure' source_table, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, p.status procedure_status, pc.code_coding_code cpt_code, pc.code_coding_display cpt_description, TRY(CAST(p.performed_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.procedure p LEFT JOIN fhir_prd_db.procedure_code_coding pc ON (p.id = pc.procedure_id)) WHERE ((LOWER(p.code_text) LIKE '%oct%') OR (LOWER(p.code_text) LIKE '%optical%coherence%') OR (LOWER(p.code_text) LIKE '%rnfl%') OR (LOWER(p.code_text) LIKE '%ganglion%cell%') OR (pc.code_coding_code IN ('92133', '92134', '92133.999', '92134.999')))), fundus_photo_procedures AS (SELECT p.id procedure_fhir_id, SUBSTRING(p.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(p.performed_date_time, 1, 10) AS DATE)) assessment_date, p.code_text assessment_name, 'fundus_photography' assessment_category, 'procedure' source_table, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, p.status procedure_status, pc.code_coding_code cpt_code, pc.code_coding_display cpt_description, TRY(CAST(p.performed_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.procedure p LEFT JOIN fhir_prd_db.procedure_code_coding pc ON (p.id = pc.procedure_id)) WHERE ((LOWER(p.code_text) LIKE '%fundus%photo%') OR (LOWER(p.code_text) LIKE '%fundus%imaging%') OR (LOWER(p.code_text) LIKE '%retinal%photo%') OR (pc.code_coding_code IN ('92250', '92225', '92226', '92227', '92228')))), ophthal_exam_procedures AS (SELECT p.id procedure_fhir_id, SUBSTRING(p.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(p.performed_date_time, 1, 10) AS DATE)) assessment_date, p.code_text assessment_name, 'ophthalmology_exam' assessment_category, 'procedure' source_table, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, p.status procedure_status, pc.code_coding_code cpt_code, pc.code_coding_display cpt_description, TRY(CAST(p.performed_date_time AS TIMESTAMP(3))) full_datetime FROM (fhir_prd_db.procedure p LEFT JOIN fhir_prd_db.procedure_code_coding pc ON (p.id = pc.procedure_id)) WHERE ((LOWER(p.code_text) LIKE '%ophthal%exam%') OR (LOWER(p.code_text) LIKE '%eye%exam%anes%') OR (LOWER(p.code_text) LIKE '%optic%nerve%decompression%') OR (LOWER(p.code_text) LIKE '%optic%glioma%') OR (pc.code_coding_code IN ('92002', '92004', '92012', '92014', '92018')))), ophthalmology_orders AS (SELECT sr.id service_request_fhir_id, SUBSTRING(sr.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(sr.authored_on, 1, 10) AS DATE)) order_date, sr.code_text order_name, (CASE WHEN (LOWER(sr.code_text) LIKE '%visual%field%') THEN 'visual_field_order' WHEN (LOWER(sr.code_text) LIKE '%oct%optic%') THEN 'oct_optic_nerve_order' WHEN (LOWER(sr.code_text) LIKE '%oct%retina%') THEN 'oct_retina_order' WHEN (LOWER(sr.code_text) LIKE '%ophthal%') THEN 'ophthalmology_order' ELSE 'other_eye_order' END) order_category, 'service_request' source_table, sr.status order_status, sr.intent order_intent, TRY(CAST(sr.authored_on AS TIMESTAMP(3))) order_datetime FROM fhir_prd_db.service_request sr WHERE (((LOWER(sr.code_text) LIKE '%ophthal%') OR (LOWER(sr.code_text) LIKE '%visual%field%') OR (LOWER(sr.code_text) LIKE '%oct%') OR (LOWER(sr.code_text) LIKE '%optic%') OR (LOWER(sr.code_text) LIKE '%eye%exam%')) AND (NOT ((LOWER(sr.code_text) LIKE '%poct%') OR (LOWER(sr.code_text) LIKE '%glucose%'))))), ophthalmology_reports AS (SELECT dr.id diagnostic_report_fhir_id, SUBSTRING(dr.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(dr.effective_date_time, 1, 10) AS DATE)) report_date, dr.code_text report_name, (CASE WHEN (LOWER(dr.code_text) LIKE '%visual%field%') THEN 'visual_field_report' WHEN (LOWER(dr.code_text) LIKE '%oct%optic%') THEN 'oct_optic_nerve_report' WHEN (LOWER(dr.code_text) LIKE '%oct%retina%') THEN 'oct_retina_report' WHEN (LOWER(dr.code_text) LIKE '%fundus%') THEN 'fundus_report' WHEN (LOWER(dr.code_text) LIKE '%vision%screening%') THEN 'vision_screening_report' ELSE 'other_eye_report' END) report_category, 'diagnostic_report' source_table, dr.status report_status, TRY(CAST(dr.effective_date_time AS TIMESTAMP(3))) report_datetime FROM fhir_prd_db.diagnostic_report dr WHERE (((LOWER(dr.code_text) LIKE '%ophthal%') OR (LOWER(dr.code_text) LIKE '%visual%field%') OR (LOWER(dr.code_text) LIKE '%oct%') OR (LOWER(dr.code_text) LIKE '%fundus%') OR (LOWER(dr.code_text) LIKE '%eye%') OR (LOWER(dr.code_text) LIKE '%vision%screening%')) AND (NOT ((LOWER(dr.code_text) LIKE '%poct%') OR (LOWER(dr.code_text) LIKE '%glucose%'))))), ophthalmology_documents AS (SELECT dref.id document_reference_fhir_id, SUBSTRING(dref.subject_reference, 9) patient_fhir_id, TRY(CAST(SUBSTR(dref.date, 1, 10) AS DATE)) document_date, dref.description document_description, dref.type_text document_type, (CASE WHEN (LOWER(dref.description) LIKE '%oct%') THEN 'oct_document' WHEN ((LOWER(dref.description) LIKE '%visual%field%') OR (LOWER(dref.description) LIKE '%goldman%')) THEN 'visual_field_document' WHEN (LOWER(dref.description) LIKE '%fundus%') THEN 'fundus_document' WHEN (LOWER(dref.description) LIKE '%ophthal%consult%') THEN 'ophthalmology_consult' WHEN (LOWER(dref.type_text) LIKE '%ophthal%') THEN 'ophthalmology_other' ELSE 'eye_related_document' END) document_category, 'document_reference' source_table, dref.status document_status, TRY(CAST(dref.date AS TIMESTAMP(3))) document_datetime, dc.content_attachment_url file_url, dc.content_attachment_content_type file_type FROM (fhir_prd_db.document_reference dref LEFT JOIN fhir_prd_db.document_reference_content dc ON (dref.id = dc.document_reference_id)) WHERE (((LOWER(dref.description) LIKE '%ophthal%') OR (LOWER(dref.description) LIKE '%visual%field%') OR (LOWER(dref.description) LIKE '%oct%') OR (LOWER(dref.description) LIKE '%fundus%') OR (LOWER(dref.description) LIKE '%eye%exam%') OR (LOWER(dref.type_text) LIKE '%ophthal%') OR (LOWER(dref.description) LIKE '%goldman%')) AND (NOT (LOWER(dref.description) LIKE '%octreotide%')))), all_assessments AS (SELECT observation_fhir_id record_fhir_id, patient_fhir_id, assessment_date, assessment_name assessment_description, assessment_category, source_table, observation_status record_status, null cpt_code, null cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null order_intent, null file_url, null file_type, full_datetime FROM visual_acuity_obs UNION ALL SELECT observation_fhir_id, patient_fhir_id, assessment_date, assessment_name, assessment_category, source_table, observation_status, null, null, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null, null, null, full_datetime FROM fundus_optic_disc_obs UNION ALL SELECT procedure_fhir_id, patient_fhir_id, assessment_date, assessment_name, assessment_category, source_table, procedure_status, cpt_code, cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null, null, null, full_datetime FROM visual_field_procedures UNION ALL SELECT procedure_fhir_id, patient_fhir_id, assessment_date, assessment_name, assessment_category, source_table, procedure_status, cpt_code, cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null, null, null, full_datetime FROM oct_procedures UNION ALL SELECT procedure_fhir_id, patient_fhir_id, assessment_date, assessment_name, assessment_category, source_table, procedure_status, cpt_code, cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null, null, null, full_datetime FROM fundus_photo_procedures UNION ALL SELECT procedure_fhir_id, patient_fhir_id, assessment_date, assessment_name, assessment_category, source_table, procedure_status, cpt_code, cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, null, null, null, full_datetime FROM ophthal_exam_procedures), all_orders AS (SELECT service_request_fhir_id record_fhir_id, patient_fhir_id, order_date assessment_date, order_name assessment_description, order_category assessment_category, source_table, order_status record_status, null cpt_code, null cpt_description, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, order_intent, null file_url, null file_type, order_datetime full_datetime FROM ophthalmology_orders), all_reports AS (SELECT diagnostic_report_fhir_id record_fhir_id, patient_fhir_id, report_date assessment_date, report_name assessment_description, report_category assessment_category, source_table, report_status record_status, null cpt_code, null cpt_description, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, null order_intent, null file_url, null file_type, report_datetime full_datetime FROM ophthalmology_reports), all_documents AS (SELECT document_reference_fhir_id record_fhir_id, patient_fhir_id, document_date assessment_date, document_description assessment_description, document_category assessment_category, source_table, document_status record_status, null cpt_code, null cpt_description, null numeric_value, null value_unit, null text_value, null component_name, null component_numeric_value, null component_unit, null order_intent, file_url, file_type, document_datetime full_datetime FROM ophthalmology_documents)
+SELECT record_fhir_id, patient_fhir_id, assessment_date, assessment_description, assessment_category, source_table, record_status, cpt_code, cpt_description, numeric_value, value_unit, text_value, component_name, component_numeric_value, component_unit, order_intent, file_url, file_type, full_datetime FROM (SELECT * FROM all_assessments UNION ALL SELECT * FROM all_orders UNION ALL SELECT * FROM all_reports UNION ALL SELECT * FROM all_documents);
 
 -- ================================================================================
 -- VIEW: v_patient_demographics
