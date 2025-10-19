@@ -2,13 +2,8 @@
 -- UNIFIED PATIENT TIMELINE VIEW - COMPLETE VERSION
 -- ================================================================================
 -- Purpose: Normalize ALL temporal events across FHIR domains into single queryable view
--- Version: 2.1 (Updated for datetime-standardized source views)
+-- Version: 2.0 (Complete - includes all CRITICAL, HIGH, and MODERATE priority gaps)
 -- Date: 2025-10-19
---
--- IMPORTANT: This view now works with datetime-standardized source views where:
---   - All VARCHAR datetime columns have been converted to TIMESTAMP(3)
---   - Date columns use DATE type
---   - Consistent typing enables simpler DATE() extraction instead of complex CAST logic
 --
 -- Coverage:
 --   - Diagnoses (v_diagnoses, v_problem_list_diagnoses, v_hydrocephalus_diagnosis)
@@ -508,9 +503,9 @@ UNION ALL
 SELECT
     vrta.patient_fhir_id,
     'radfx_' || vrta.appointment_id as event_id,
-    DATE(vrta.appointment_start) as event_date,  -- appointment_start is TIMESTAMP(3) after standardization
-    DATE_DIFF('day', DATE(vpd.pd_birth_date), DATE(vrta.appointment_start)) as age_at_event_days,
-    CAST(DATE_DIFF('day', DATE(vpd.pd_birth_date), DATE(vrta.appointment_start)) AS DOUBLE) / 365.25 as age_at_event_years,
+    date(from_iso8601_timestamp(vrta.appointment_start)) as event_date,
+    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), date(from_iso8601_timestamp(vrta.appointment_start))) as age_at_event_days,
+    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), date(from_iso8601_timestamp(vrta.appointment_start))) AS DOUBLE) / 365.25 as age_at_event_years,
 
     'Radiation Fraction' as event_type,
     'Radiation Therapy' as event_category,

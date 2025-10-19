@@ -2,7 +2,13 @@
 -- V_UNIFIED_PATIENT_TIMELINE - PREREQUISITE VIEWS
 -- ================================================================================
 -- Purpose: Create normalized alias views required by v_unified_patient_timeline
+-- Version: 2.0 (Updated for datetime-standardized source views)
 -- Date: 2025-10-19
+--
+-- IMPORTANT: This version works with datetime-standardized source views where:
+--   - v_problem_list_diagnoses has TIMESTAMP(3) datetime columns
+--   - v_radiation_treatments has TIMESTAMP(3) datetime columns
+--   - No CAST needed - columns already have proper types
 --
 -- v_unified_patient_timeline references views with normalized column names (no prefixes)
 -- but the actual Athena views use prefixes (pld_, proc_, obs_, etc.)
@@ -31,10 +37,10 @@ SELECT
     pld_condition_id as condition_id,
     pld_diagnosis_name as diagnosis_name,
     pld_clinical_status as clinical_status_text,
-    CAST(pld_onset_date AS TIMESTAMP) as onset_date_time,
+    pld_onset_date as onset_date_time,  -- Already TIMESTAMP(3) after standardization
     age_at_onset_days,
-    CAST(pld_abatement_date AS TIMESTAMP) as abatement_date_time,
-    CAST(pld_recorded_date AS TIMESTAMP) as recorded_date,
+    pld_abatement_date as abatement_date_time,  -- Already TIMESTAMP(3) after standardization
+    pld_recorded_date as recorded_date,  -- Already TIMESTAMP(3) after standardization
     age_at_recorded_days,
     pld_icd10_code as icd10_code,
     pld_icd10_display as icd10_display,
@@ -80,11 +86,11 @@ WITH radiation_courses AS (
 course_1_data AS (
     SELECT
         patient_fhir_id,
-        MIN(CAST(start_date AS DATE)) as course_1_start_date,
-        MAX(CAST(stop_date AS DATE)) as course_1_end_date,
+        MIN(DATE(start_date)) as course_1_start_date,  -- start_date is TIMESTAMP(3) after standardization
+        MAX(DATE(stop_date)) as course_1_end_date,  -- stop_date is TIMESTAMP(3) after standardization
         CAST(DATE_DIFF('day',
-            MIN(CAST(start_date AS DATE)),
-            MAX(CAST(stop_date AS DATE))
+            MIN(DATE(start_date)),
+            MAX(DATE(stop_date))
         ) / 7.0 AS DOUBLE) as course_1_duration_weeks,
         LISTAGG(DISTINCT radiation_field, ', ') WITHIN GROUP (ORDER BY radiation_field) as treatment_techniques,
         COUNT(DISTINCT obs_effective_date) as num_observations
