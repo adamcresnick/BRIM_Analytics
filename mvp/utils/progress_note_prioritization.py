@@ -154,7 +154,8 @@ class ProgressNotePrioritizer:
                 logger.warning(f"Error processing imaging for note prioritization: {e}")
                 continue
 
-        # 3. Notes after medication changes (if provided)
+        # 3. Notes around medication changes (if provided)
+        # Include notes both BEFORE and AFTER medication start
         if medication_changes:
             for med_change in medication_changes:
                 try:
@@ -162,7 +163,26 @@ class ProgressNotePrioritizer:
                     if not change_date:
                         continue
 
-                    # Find first note after medication change
+                    # Find last note BEFORE medication change (baseline)
+                    pre_med_change_note = self._find_last_note_before_event(
+                        notes_with_dates,
+                        change_date,
+                        self.post_event_window_days
+                    )
+
+                    if pre_med_change_note and pre_med_change_note['note'].get('document_reference_id') not in note_ids_seen:
+                        prioritized.append(PrioritizedNote(
+                            note=pre_med_change_note['note'],
+                            priority_reason="pre_medication_change",
+                            related_event_id=med_change.get('medication_id'),
+                            related_event_type="medication_change",
+                            related_event_date=change_date,
+                            days_from_event=pre_med_change_note['days_from_event']
+                        ))
+                        note_ids_seen.add(pre_med_change_note['note'].get('document_reference_id'))
+                        logger.debug(f"Added pre-medication-change note: {abs(pre_med_change_note['days_from_event'])} days before change")
+
+                    # Find first note AFTER medication change (response assessment)
                     post_med_change_note = self._find_first_note_after_event(
                         notes_with_dates,
                         change_date,
@@ -235,6 +255,37 @@ class ProgressNotePrioritizer:
             # Note must be AFTER event and within window
             if event_date < note_date <= window_end:
                 days_from_event = (note_date - event_date).days
+                return {
+                    'note': note,
+                    'days_from_event': days_from_event
+                }
+
+        return None
+
+    def _find_last_note_before_event(
+        self,
+        notes_with_dates: List[tuple],
+        event_date: datetime,
+        window_days: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find last progress note before an event (within window)
+
+        Args:
+            notes_with_dates: List of (note, date) tuples sorted by date
+            event_date: Date of clinical event
+            window_days: Days before event to search
+
+        Returns:
+            Dictionary with 'note' and 'days_from_event' (negative), or None
+        """
+        window_start = event_date - timedelta(days=window_days)
+
+        # Search backwards from event date
+        for note, note_date in reversed(notes_with_dates):
+            # Note must be BEFORE event and within window
+            if window_start <= note_date < event_date:
+                days_from_event = (note_date - event_date).days  # Will be negative
                 return {
                     'note': note,
                     'days_from_event': days_from_event

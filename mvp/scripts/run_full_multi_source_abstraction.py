@@ -356,12 +356,36 @@ def main():
         print(f"  Filtered to oncology-specific: {filtering_results['oncology_notes']} notes ({filtering_results['oncology_percentage']:.1f}%)")
         print(f"  Excluded: {filtering_results['excluded_notes']} notes")
 
+        # Query chemotherapy starts from timeline for medication-based prioritization
+        print("  Querying chemotherapy events from timeline...")
+        chemo_events_df = timeline.conn.execute(f"""
+            SELECT
+                event_id,
+                event_date,
+                event_description
+            FROM unified_patient_timeline
+            WHERE patient_fhir_id = '{args.patient_id}'
+                AND event_type = 'Medication'
+                AND event_category = 'Chemotherapy'
+            ORDER BY event_date
+        """).fetchdf()
+
+        # Convert to list of dicts for prioritizer
+        medication_changes = []
+        for _, row in chemo_events_df.iterrows():
+            medication_changes.append({
+                'change_date': row['event_date'],
+                'medication_id': row['event_id']
+            })
+        print(f"  Found {len(medication_changes)} chemotherapy start events")
+
         # Prioritize progress notes based on clinical events
         print("  Prioritizing progress notes based on clinical events...")
         prioritized_notes = note_prioritizer.prioritize_notes(
             progress_notes=oncology_notes,
             surgeries=operative_reports,
-            imaging_events=imaging_text_reports  # Use imaging text as imaging events
+            imaging_events=imaging_text_reports,  # Use imaging text as imaging events
+            medication_changes=medication_changes if medication_changes else None
         )
         print(f"  Prioritized to {len(prioritized_notes)} key notes ({len(prioritized_notes)/len(oncology_notes)*100:.1f}% of oncology notes)")
 

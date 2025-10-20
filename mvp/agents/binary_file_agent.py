@@ -336,6 +336,9 @@ class BinaryFileAgent:
             If successful: (text, None)
             If failed: ("", error_message)
         """
+        # Construct S3 path from binary_id
+        s3_bucket, s3_key = self.construct_s3_path(binary_id)
+
         # Create minimal metadata object
         metadata = BinaryFileMetadata(
             binary_id=binary_id,
@@ -346,7 +349,9 @@ class BinaryFileAgent:
             dr_category_text=None,
             dr_description=None,
             dr_date=None,
-            age_at_document_days=None
+            age_at_document_days=None,
+            s3_bucket=s3_bucket,
+            s3_key=s3_key
         )
 
         # Use main extraction method
