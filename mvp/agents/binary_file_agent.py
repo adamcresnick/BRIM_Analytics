@@ -312,6 +312,51 @@ class BinaryFileAgent:
             metadata=metadata
         )
 
+    def extract_text_from_binary(
+        self,
+        binary_id: str,
+        patient_fhir_id: str,
+        content_type: str = "application/pdf",
+        document_reference_id: str = None
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Convenience wrapper for extracting text from a binary file.
+
+        This method provides a simpler interface than extract_binary_content()
+        for cases where you have binary_id but not full metadata.
+
+        Args:
+            binary_id: Binary resource FHIR ID
+            patient_fhir_id: Patient FHIR ID
+            content_type: Content type (default: application/pdf)
+            document_reference_id: Optional DocumentReference ID
+
+        Returns:
+            Tuple of (extracted_text, error_message)
+            If successful: (text, None)
+            If failed: ("", error_message)
+        """
+        # Create minimal metadata object
+        metadata = BinaryFileMetadata(
+            binary_id=binary_id,
+            document_reference_id=document_reference_id or binary_id,
+            patient_fhir_id=patient_fhir_id,
+            content_type=content_type,
+            dr_type_text=None,
+            dr_category_text=None,
+            dr_description=None,
+            dr_date=None,
+            age_at_document_days=None
+        )
+
+        # Use main extraction method
+        result = self.extract_binary_content(metadata)
+
+        if result.extraction_success:
+            return (result.extracted_text, None)
+        else:
+            return ("", result.extraction_error)
+
     def get_imaging_binary_files(
         self,
         athena_client,
