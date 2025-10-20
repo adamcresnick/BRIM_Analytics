@@ -358,26 +358,30 @@ def main():
 
         # Query chemotherapy starts from timeline for medication-based prioritization
         print("  Querying chemotherapy events from timeline...")
-        chemo_events_df = timeline.conn.execute(f"""
-            SELECT
-                event_id,
-                event_date,
-                event_description
-            FROM unified_patient_timeline
-            WHERE patient_fhir_id = '{args.patient_id}'
-                AND event_type = 'Medication'
-                AND event_category = 'Chemotherapy'
-            ORDER BY event_date
-        """).fetchdf()
-
-        # Convert to list of dicts for prioritizer
         medication_changes = []
-        for _, row in chemo_events_df.iterrows():
-            medication_changes.append({
-                'change_date': row['event_date'],
-                'medication_id': row['event_id']
-            })
-        print(f"  Found {len(medication_changes)} chemotherapy start events")
+        try:
+            chemo_events_df = timeline.conn.execute(f"""
+                SELECT
+                    event_id,
+                    event_date,
+                    event_description
+                FROM unified_patient_timeline
+                WHERE patient_fhir_id = '{args.patient_id}'
+                    AND event_type = 'Medication'
+                    AND event_category = 'Chemotherapy'
+                ORDER BY event_date
+            """).fetchdf()
+
+            # Convert to list of dicts for prioritizer
+            for _, row in chemo_events_df.iterrows():
+                medication_changes.append({
+                    'change_date': row['event_date'],
+                    'medication_id': row['event_id']
+                })
+            print(f"  Found {len(medication_changes)} chemotherapy start events")
+        except Exception as e:
+            print(f"  ⚠️  Timeline query failed (timeline not populated): {str(e)[:100]}")
+            print(f"  Continuing without medication-based prioritization...")
 
         # Prioritize progress notes based on clinical events
         print("  Prioritizing progress notes based on clinical events...")

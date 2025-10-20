@@ -23,10 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from agents.medgemma_agent import MedGemmaAgent
 from agents.binary_file_agent import BinaryFileAgent
 from utils.document_text_cache import DocumentTextCache
-from utils.prompt_templates import (
+from agents.extraction_prompts import (
     build_imaging_classification_prompt,
-    build_tumor_status_prompt,
-    build_eor_prompt,
+    build_tumor_status_extraction_prompt,
+    build_operative_report_eor_extraction_prompt,
     build_progress_note_disease_state_prompt
 )
 
@@ -134,7 +134,7 @@ def main():
             classification_prompt = build_imaging_classification_prompt(extracted_text)
             classification_result = medgemma.extract(classification_prompt, "imaging_classification")
 
-            tumor_status_prompt = build_tumor_status_prompt(extracted_text)
+            tumor_status_prompt = build_tumor_status_extraction_prompt(extracted_text)
             tumor_status_result = medgemma.extract(tumor_status_prompt, "tumor_status")
 
             print(f"    Classification: {classification_result.get('imaging_classification', 'N/A')}")
