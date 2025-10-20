@@ -381,8 +381,10 @@ def main():
                 'source': 'imaging_text',
                 'source_id': report_id,
                 'date': report_date,
-                'classification': classification_result,
-                'tumor_status': tumor_status_result
+                'classification': classification_result.extracted_data if classification_result.success else {'error': classification_result.error},
+                'tumor_status': tumor_status_result.extracted_data if tumor_status_result.success else {'error': tumor_status_result.error},
+                'classification_confidence': classification_result.confidence,
+                'tumor_status_confidence': tumor_status_result.confidence
             })
             extraction_count['imaging_text'] += 1
 
@@ -533,6 +535,22 @@ def main():
     except Exception as e:
         logger.error(f"Workflow failed: {e}", exc_info=True)
         print(f"\n❌ ERROR: {e}")
+
+        # CRITICAL: Save whatever data we have, even on error!
+        try:
+            comprehensive_summary['end_time'] = datetime.now().isoformat()
+            comprehensive_summary['status'] = 'failed_with_partial_data'
+            comprehensive_summary['error'] = str(e)
+
+            emergency_path = output_dir / f"{args.patient_id}_PARTIAL.json"
+            with open(emergency_path, 'w') as f:
+                json.dump(comprehensive_summary, f, indent=2)
+
+            print(f"\n⚠️  PARTIAL DATA SAVED: {emergency_path}")
+            print(f"    Extractions completed before error: {len(all_extractions)}")
+        except Exception as save_error:
+            logger.error(f"Failed to save partial data: {save_error}")
+
         save_checkpoint('failed', 'error', {'error': str(e)})
         return 1
 
