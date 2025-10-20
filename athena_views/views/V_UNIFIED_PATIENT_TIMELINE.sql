@@ -306,7 +306,7 @@ SELECT
             CAST(vm.mr_validity_period_end AS VARCHAR),
             CAST(vm.mr_status AS VARCHAR),
             CAST(vm.requester_name AS VARCHAR),
-            CAST(vm.mrb_care_plan_reference AS VARCHAR)
+            CAST(vm.mrb_care_plan_references AS VARCHAR)
         ]
     ) AS JSON) AS VARCHAR) as event_metadata,
 
@@ -424,12 +424,13 @@ SELECT
     CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
 
     CAST(CAST(MAP(
-        ARRAY['test_name', 'specimen_type', 'specimen_collection_date', 'specimen_body_site', 'component_count', 'narrative_chars', 'requester'],
+        ARRAY['test_name', 'specimen_types', 'specimen_sites', 'specimen_ids', 'specimen_collection_date', 'component_count', 'narrative_chars', 'requester'],
         ARRAY[
             CAST(vmt.mt_lab_test_name AS VARCHAR),
-            CAST(vmt.mt_specimen_type AS VARCHAR),
+            CAST(vmt.mt_specimen_types AS VARCHAR),
+            CAST(vmt.mt_specimen_sites AS VARCHAR),
+            CAST(vmt.mt_specimen_ids AS VARCHAR),
             CAST(vmt.mt_specimen_collection_date AS VARCHAR),
-            CAST(vmt.mt_specimen_body_site AS VARCHAR),
             CAST(vmt.mtr_component_count AS VARCHAR),
             CAST(vmt.mtr_total_narrative_chars AS VARCHAR),
             CAST(vmt.mt_test_requester AS VARCHAR)
@@ -979,6 +980,7 @@ SELECT
 
 FROM fhir_prd_db.v_imaging_corticosteroid_use vicu
 LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vicu.patient_fhir_id = vpd.patient_fhir_id
+WHERE vicu.on_corticosteroid = true  -- Only include imaging events with actual corticosteroid use
 
 ORDER BY patient_fhir_id, event_date, event_type;
 

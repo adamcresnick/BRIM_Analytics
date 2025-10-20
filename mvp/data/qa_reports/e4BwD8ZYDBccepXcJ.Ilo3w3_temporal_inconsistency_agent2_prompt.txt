@@ -1,0 +1,88 @@
+# AGENT 2 RE-REVIEW REQUEST: TEMPORAL INCONSISTENCY
+
+## Context from Agent 1 (Claude - Orchestrator)
+
+You previously extracted tumor status from two imaging reports with the following results:
+
+**Event 1** (2018-05-27 00:00:00):
+- Event ID: img_egCavClt7q8KwyBCgPS0JXrAMVCHX-E0Q1D-Od9nchS03
+- Your classification: **tumor_status = Increased**
+- Your confidence: 0.80
+
+**Event 2** (2018-05-29 00:00:00, 2 days later):
+- Event ID: img_eEe13sHGFL.xUsHCNkt59VBryiQKdqIv6WLgdMCHLZ3U3
+- Your classification: **tumor_status = Decreased**
+- Your confidence: 0.85
+
+## Agent 1's Inconsistency Detection
+
+**Issue**: Tumor status changed from "Increased" to "Decreased" in only 2 days without documented treatment intervention between these dates.
+
+**Clinical plausibility concern**: This rapid improvement is unusual without:
+- Surgical resection
+- Initiation of chemotherapy
+- Radiation therapy
+- High-dose steroids
+
+## Multi-Source Data for Re-Review
+
+Agent 1 has gathered the following additional sources to help you re-evaluate:
+
+### Source 1: Imaging Text Reports (from v_imaging)
+
+## Agent 1's Questions for Agent 2
+
+Based on reviewing all sources above, please provide:
+
+1. **Clinical Plausibility Assessment**:
+   - Is a status change from Increased→Decreased in 2 days clinically plausible?
+   - What evidence from the sources supports or refutes this?
+
+2. **Duplicate Scan Hypothesis**:
+   - Could these be the same imaging study extracted twice?
+   - Are there identical study dates, accession numbers, or descriptions?
+
+3. **Misclassification Hypothesis**:
+   - After reviewing all sources, do you believe either classification was incorrect?
+   - If so, which one and why?
+
+4. **Multi-Source Reconciliation**:
+   - Do the PDF reports provide additional context not in the text reports?
+   - Do progress notes mention tumor status, treatment changes, or imaging findings?
+   - Is there a "gold standard" source that should override the others?
+
+5. **Recommended Resolution**:
+   - Keep both extractions as-is
+   - Mark one as duplicate
+   - Revise one classification (specify which and to what value)
+   - Escalate to human review with specific questions
+
+## Output Format
+
+Please provide a structured response:
+
+```json
+{
+    "clinical_plausibility": "plausible|implausible|uncertain",
+    "duplicate_scan_assessment": "yes|no|possible",
+    "misclassification_assessment": {
+        "event_1_correct": "yes|no|uncertain",
+        "event_2_correct": "yes|no|uncertain",
+        "reasoning": "..."
+    },
+    "multi_source_findings": {
+        "pdf_provides_additional_context": "yes|no",
+        "progress_notes_mention_status": "yes|no",
+        "gold_standard_source": "text_report|pdf|progress_note|none"
+    },
+    "recommended_resolution": {
+        "action": "keep_both|mark_duplicate|revise_event_1|revise_event_2|escalate",
+        "revised_value_if_applicable": "NED|Stable|Increased|Decreased|New_Malignancy",
+        "confidence": 0.0-1.0,
+        "reasoning": "..."
+    },
+    "agent2_explanation": "Detailed explanation of your assessment and reasoning..."
+}
+```
+
+Thank you, Agent 2. Agent 1 will use your assessment to adjudicate this inconsistency.

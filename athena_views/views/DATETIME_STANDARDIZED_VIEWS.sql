@@ -1344,6 +1344,27 @@ care_plan_conditions AS (
         LISTAGG(DISTINCT addresses_display, ' | ') WITHIN GROUP (ORDER BY addresses_display) as addresses_aggregated
     FROM fhir_prd_db.care_plan_addresses
     GROUP BY care_plan_id
+),
+medication_based_on AS (
+    -- Aggregate multiple care plans per medication to prevent JOIN explosion
+    SELECT
+        medication_request_id,
+        LISTAGG(DISTINCT based_on_reference, ' | ') WITHIN GROUP (ORDER BY based_on_reference) AS based_on_references,
+        LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays,
+        MIN(based_on_reference) AS primary_care_plan_id  -- pick one for downstream joins
+    FROM fhir_prd_db.medication_request_based_on
+    GROUP BY medication_request_id
+),
+care_plan_activity_agg AS (
+    -- Aggregate multiple activities per care plan to prevent JOIN explosion
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT activity_detail_status, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_status) AS activity_detail_statuses,
+        LISTAGG(DISTINCT activity_detail_description, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_description) AS activity_detail_descriptions
+    FROM fhir_prd_db.care_plan_activity
+    GROUP BY care_plan_id
 )
 SELECT
     -- Patient info
@@ -1385,9 +1406,10 @@ SELECT
     -- Aggregated reason codes (mrr_ prefix)
     mrr.reason_code_text_aggregated as mrr_reason_code_text_aggregated,
 
-    -- Based-on references (mrb_ prefix - care plan linkage)
-    mrb.based_on_reference as mrb_care_plan_reference,
-    mrb.based_on_display as mrb_care_plan_display,
+    -- Based-on references (mrb_ prefix - care plan linkage) - AGGREGATED
+    mrb.based_on_references as mrb_care_plan_references,
+    mrb.based_on_displays as mrb_care_plan_displays,
+    mrb.primary_care_plan_id as mrb_primary_care_plan_id,
 
     -- Dosage instruction fields (mrdi_ prefix) - CRITICAL FOR ROUTE ANALYSIS
     mrdi.route_text_aggregated as mrdi_route_text,
@@ -1420,21 +1442,22 @@ SELECT
     -- Care plan conditions (cpcon_ prefix)
     cpcon.addresses_aggregated as cpcon_addresses_aggregated,
 
-    -- Care plan activity (cpa_ prefix)
-    cpa.activity_detail_status as cpa_activity_detail_status
+    -- Care plan activity (cpa_ prefix) - AGGREGATED
+    cpa.activity_detail_statuses as cpa_activity_detail_statuses,
+    cpa.activity_detail_descriptions as cpa_activity_detail_descriptions
 
 FROM fhir_prd_db.patient_medications pm
 LEFT JOIN fhir_prd_db.medication_request mr ON pm.medication_request_id = mr.id
 LEFT JOIN medication_notes mrn ON mr.id = mrn.medication_request_id
 LEFT JOIN medication_reasons mrr ON mr.id = mrr.medication_request_id
-LEFT JOIN fhir_prd_db.medication_request_based_on mrb ON mr.id = mrb.medication_request_id
+LEFT JOIN medication_based_on mrb ON mr.id = mrb.medication_request_id  -- AGGREGATED CTE
 LEFT JOIN medication_dosage_instructions mrdi ON mr.id = mrdi.medication_request_id
 LEFT JOIN medication_forms mf ON pm.medication_id = mf.medication_id
 LEFT JOIN medication_ingredients mi ON pm.medication_id = mi.medication_id
-LEFT JOIN fhir_prd_db.care_plan cp ON mrb.based_on_reference = cp.id
+LEFT JOIN fhir_prd_db.care_plan cp ON mrb.primary_care_plan_id = cp.id  -- Use primary_care_plan_id
 LEFT JOIN care_plan_categories cpc ON cp.id = cpc.care_plan_id
 LEFT JOIN care_plan_conditions cpcon ON cp.id = cpcon.care_plan_id
-LEFT JOIN fhir_prd_db.care_plan_activity cpa ON cp.id = cpa.care_plan_id
+LEFT JOIN care_plan_activity_agg cpa ON cp.id = cpa.care_plan_id  -- AGGREGATED CTE
 WHERE pm.patient_id IS NOT NULL
 ORDER BY pm.patient_id, pm.authored_on;
 
@@ -2684,8 +2707,8 @@ WITH appointment_encounter_links AS (
         SUBSTRING(ea.appointment_reference, 13) as appointment_id,  -- Remove "Appointment/" prefix
         ea.encounter_id,
         e.status as encounter_status,
-        TRY(CAST(e.period_start AS TIMESTAMP(3))) as encounter_start,
-        TRY(CAST(e.period_end AS TIMESTAMP(3))) as encounter_end
+        CAST(FROM_ISO8601_TIMESTAMP(e.period_start) AS TIMESTAMP(3)) as encounter_start,
+        CAST(FROM_ISO8601_TIMESTAMP(e.period_end) AS TIMESTAMP(3)) as encounter_end
     FROM fhir_prd_db.encounter_appointment ea
     LEFT JOIN fhir_prd_db.encounter e ON ea.encounter_id = e.id
 ),
@@ -2703,11 +2726,11 @@ appointments_with_encounters AS (
         CAST(a.cancelation_reason_text AS VARCHAR) as cancelation_reason_text,
         CAST(a.description AS VARCHAR) as appointment_description,
 
-        -- Linked encounter details
+        -- Linked encounter details (already TIMESTAMP from CTE, just cast again for consistency)
         CAST(ael.encounter_id AS VARCHAR) as encounter_id,
         CAST(ael.encounter_status AS VARCHAR) as encounter_status,
-        TRY(CAST(CAST(ael.encounter_start AS VARCHAR) AS TIMESTAMP(3))) as encounter_start,
-        TRY(CAST(CAST(ael.encounter_end AS VARCHAR) AS TIMESTAMP(3))) as encounter_end,
+        ael.encounter_start,
+        ael.encounter_end,
 
         -- Visit type classification
         CASE
@@ -2749,8 +2772,8 @@ encounters_without_appointments AS (
         -- Encounter details
         CAST(e.id AS VARCHAR) as encounter_id,
         CAST(e.status AS VARCHAR) as encounter_status,
-        TRY(CAST(CAST(e.period_start AS VARCHAR) AS TIMESTAMP(3))) as encounter_start,
-        TRY(CAST(CAST(e.period_end AS VARCHAR) AS TIMESTAMP(3))) as encounter_end,
+        CAST(FROM_ISO8601_TIMESTAMP(e.period_start) AS TIMESTAMP(3)) as encounter_start,
+        CAST(FROM_ISO8601_TIMESTAMP(e.period_end) AS TIMESTAMP(3)) as encounter_end,
 
         -- Visit type
         'walk_in_unscheduled' as visit_type,
@@ -2769,51 +2792,70 @@ encounters_without_appointments AS (
           FROM fhir_prd_db.encounter_appointment
           WHERE encounter_id IS NOT NULL
       )
+),
+combined_visits AS (
+    SELECT * FROM appointments_with_encounters
+    UNION ALL
+    SELECT * FROM encounters_without_appointments
+),
+deduplicated_visits AS (
+    -- Assign canonical visit_id and use ROW_NUMBER to pick primary row
+    SELECT
+        *,
+        -- Canonical visit key (prefer encounter_id, fallback to appointment_id with suffix)
+        COALESCE(encounter_id, appointment_fhir_id || '_appt') as visit_id,
+        -- Use ROW_NUMBER to pick primary row when multiple linkages exist
+        ROW_NUMBER() OVER (
+            PARTITION BY patient_fhir_id, COALESCE(encounter_id, appointment_fhir_id || '_appt')
+            ORDER BY
+                CASE WHEN encounter_id IS NOT NULL THEN 1 ELSE 2 END,  -- Prefer rows with encounters
+                CASE WHEN appointment_fhir_id IS NOT NULL THEN 1 ELSE 2 END,  -- Then with appointments
+                COALESCE(appointment_start, encounter_start) DESC  -- Then most recent
+        ) as row_rank
+    FROM combined_visits
 )
 -- Combine both appointment-based and walk-in encounters
 SELECT
-    patient_fhir_id,
+    dv.patient_fhir_id,
 
     -- Visit identifiers
-    appointment_fhir_id,
-    encounter_id,
+    dv.visit_id,
+    dv.appointment_fhir_id,
+    dv.encounter_id,
 
     -- Visit classification
-    visit_type,
-    appointment_completed,
-    encounter_occurred,
-    source,
+    dv.visit_type,
+    dv.appointment_completed,
+    dv.encounter_occurred,
+    dv.source,
 
     -- Appointment details
-    appointment_status,
-    appointment_type_text,
-    appointment_start,
-    appointment_end,
-    appointment_duration_minutes,
-    cancelation_reason_text,
-    appointment_description,
+    dv.appointment_status,
+    dv.appointment_type_text,
+    dv.appointment_start,
+    dv.appointment_end,
+    dv.appointment_duration_minutes,
+    dv.cancelation_reason_text,
+    dv.appointment_description,
 
     -- Encounter details
-    encounter_status,
-    encounter_start,
-    encounter_end,
+    dv.encounter_status,
+    dv.encounter_start,
+    dv.encounter_end,
 
     -- Calculate age at visit (use appointment or encounter date)
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        DATE(COALESCE(appointment_start, encounter_start)))) as age_at_visit_days,
+        DATE(COALESCE(dv.appointment_start, dv.encounter_start)))) as age_at_visit_days,
 
     -- Visit date (earliest of appointment or encounter)
-    DATE(COALESCE(appointment_start, encounter_start)) as visit_date
+    DATE(COALESCE(dv.appointment_start, dv.encounter_start)) as visit_date
 
-FROM (
-    SELECT * FROM appointments_with_encounters
-    UNION ALL
-    SELECT * FROM encounters_without_appointments
-) combined
-LEFT JOIN fhir_prd_db.patient_access pa ON combined.patient_fhir_id = pa.id
+FROM deduplicated_visits dv
+LEFT JOIN fhir_prd_db.patient_access pa ON dv.patient_fhir_id = pa.id
+WHERE dv.row_rank = 1  -- Only keep primary row per visit
 
-ORDER BY patient_fhir_id, visit_date, appointment_start, encounter_start;
+ORDER BY dv.patient_fhir_id, visit_date, dv.appointment_start, dv.encounter_start;
 
 -- ================================================================================
 -- VIEW: v_imaging
@@ -2835,30 +2877,38 @@ WITH report_categories AS (
     GROUP BY diagnostic_report_id
 ),
 mri_imaging AS (
+    -- Aggregate MRI results to prevent JOIN explosion (one row per MRI study)
     SELECT
         mri.patient_id,
         mri.imaging_procedure_id,
-        TRY(CAST(mri.result_datetime AS TIMESTAMP(3))) as imaging_date,
+        CAST(FROM_ISO8601_TIMESTAMP(mri.result_datetime) AS TIMESTAMP(3)) as imaging_date,
         mri.imaging_procedure,
         mri.result_diagnostic_report_id,
         'MRI' as imaging_modality,
-        results.value_string as result_information,
-        results.result_display
+        -- Aggregate multiple result components into single field
+        LISTAGG(DISTINCT results.value_string, ' | ') WITHIN GROUP (ORDER BY results.value_string) as result_information,
+        LISTAGG(DISTINCT results.result_display, ' | ') WITHIN GROUP (ORDER BY results.result_display) as result_display
     FROM fhir_prd_db.radiology_imaging_mri mri
     LEFT JOIN fhir_prd_db.radiology_imaging_mri_results results
         ON mri.imaging_procedure_id = results.imaging_procedure_id
+    GROUP BY mri.patient_id, mri.imaging_procedure_id, mri.result_datetime,
+             mri.imaging_procedure, mri.result_diagnostic_report_id
 ),
 other_imaging AS (
+    -- Exclude MRIs that are already in mri_imaging to prevent duplicates from UNION
     SELECT
         ri.patient_id,
         ri.imaging_procedure_id,
-        TRY(CAST(ri.result_datetime AS TIMESTAMP(3))) as imaging_date,
+        CAST(FROM_ISO8601_TIMESTAMP(ri.result_datetime) AS TIMESTAMP(3)) as imaging_date,
         ri.imaging_procedure,
         ri.result_diagnostic_report_id,
         COALESCE(ri.imaging_procedure, 'Unknown') as imaging_modality,
         CAST(NULL AS VARCHAR) as result_information,
         CAST(NULL AS VARCHAR) as result_display
     FROM fhir_prd_db.radiology_imaging ri
+    LEFT JOIN fhir_prd_db.radiology_imaging_mri mri
+        ON ri.imaging_procedure_id = mri.imaging_procedure_id
+    WHERE mri.imaging_procedure_id IS NULL  -- Exclude MRIs already in mri_imaging
 ),
 combined_imaging AS (
     SELECT * FROM mri_imaging
@@ -2942,13 +2992,41 @@ WITH observations AS (
         CAST(NULL AS VARCHAR) as ltr_value_range_high_value,
         CAST(NULL AS VARCHAR) as ltr_value_range_high_unit,
         CAST(NULL AS VARCHAR) as ltr_value_boolean,
-        CAST(NULL AS VARCHAR) as ltr_value_integer
+        CAST(NULL AS VARCHAR) as ltr_value_integer,
+        CAST(NULL AS VARCHAR) as ltr_components_json,
+        CAST(NULL AS VARCHAR) as ltr_components_list,
+        CAST(NULL AS VARCHAR) as ltr_components_with_values
     FROM fhir_prd_db.observation
     WHERE subject_reference IS NOT NULL
 ),
+lab_tests_aggregated AS (
+    -- Aggregate lab test components to prevent JOIN explosion (one row per test)
+    SELECT
+        lt.patient_id,
+        lt.test_id,
+        lt.lab_test_name,
+        lt.result_datetime,
+        lt.lab_test_status,
+        lt.result_diagnostic_report_id,
+        lt.lab_test_requester,
+        -- Aggregate components using LISTAGG (Athena doesn't support json_arrayagg)
+        -- Cannot use DISTINCT with complex ORDER BY, so remove DISTINCT
+        LISTAGG(ltr.test_component, ' | ')
+            WITHIN GROUP (ORDER BY ltr.test_component) AS components_list,
+        LISTAGG(
+            CONCAT(ltr.test_component, ': ', COALESCE(CAST(ltr.value_quantity_value AS VARCHAR), ltr.value_string), ' ', COALESCE(ltr.value_quantity_unit, '')),
+            ' | '
+        ) WITHIN GROUP (ORDER BY ltr.test_component) AS components_with_values
+    FROM fhir_prd_db.lab_tests lt
+    LEFT JOIN fhir_prd_db.lab_test_results ltr
+           ON lt.test_id = ltr.test_id
+    WHERE lt.patient_id IS NOT NULL
+    GROUP BY lt.patient_id, lt.test_id, lt.lab_test_name, lt.result_datetime,
+             lt.lab_test_status, lt.result_diagnostic_report_id, lt.lab_test_requester
+),
 lab_tests_with_results AS (
     SELECT
-        lt.patient_id as patient_fhir_id,
+        lta.patient_id as patient_fhir_id,
         CAST(NULL AS VARCHAR) as obs_observation_id,
         CAST(NULL AS VARCHAR) as obs_measurement_type,
         CAST(NULL AS VARCHAR) as obs_measurement_value,
@@ -2958,26 +3036,28 @@ lab_tests_with_results AS (
         CAST(NULL AS VARCHAR) as obs_status,
         CAST(NULL AS VARCHAR) as obs_encounter_reference,
         'lab_tests' as source_table,
-        lt.test_id as lt_test_id,
-        lt.lab_test_name as lt_measurement_type,
-        TRY(CAST(lt.result_datetime AS TIMESTAMP(3))) as lt_measurement_date,
-        lt.lab_test_status as lt_status,
-        lt.result_diagnostic_report_id as lt_result_diagnostic_report_id,
-        lt.lab_test_requester as lt_lab_test_requester,
-        ltr.test_component as ltr_test_component,
-        ltr.value_string as ltr_value_string,
-        ltr.value_quantity_value as ltr_measurement_value,
-        ltr.value_quantity_unit as ltr_measurement_unit,
-        ltr.value_codeable_concept_text as ltr_value_codeable_concept_text,
-        ltr.value_range_low_value as ltr_value_range_low_value,
-        ltr.value_range_low_unit as ltr_value_range_low_unit,
-        ltr.value_range_high_value as ltr_value_range_high_value,
-        ltr.value_range_high_unit as ltr_value_range_high_unit,
-        ltr.value_boolean as ltr_value_boolean,
-        ltr.value_integer as ltr_value_integer
-    FROM fhir_prd_db.lab_tests lt
-    LEFT JOIN fhir_prd_db.lab_test_results ltr ON lt.test_id = ltr.test_id
-    WHERE lt.patient_id IS NOT NULL
+        lta.test_id as lt_test_id,
+        lta.lab_test_name as lt_measurement_type,
+        CAST(FROM_ISO8601_TIMESTAMP(lta.result_datetime) AS TIMESTAMP(3)) as lt_measurement_date,
+        lta.lab_test_status as lt_status,
+        lta.result_diagnostic_report_id as lt_result_diagnostic_report_id,
+        lta.lab_test_requester as lt_lab_test_requester,
+        lta.components_list as ltr_components_list,
+        lta.components_with_values as ltr_components_with_values,
+        -- Legacy single-value fields set to NULL (components are aggregated now)
+        CAST(NULL AS VARCHAR) as ltr_test_component,
+        CAST(NULL AS VARCHAR) as ltr_components_json,
+        CAST(NULL AS VARCHAR) as ltr_value_string,
+        CAST(NULL AS VARCHAR) as ltr_measurement_value,
+        CAST(NULL AS VARCHAR) as ltr_measurement_unit,
+        CAST(NULL AS VARCHAR) as ltr_value_codeable_concept_text,
+        CAST(NULL AS VARCHAR) as ltr_value_range_low_value,
+        CAST(NULL AS VARCHAR) as ltr_value_range_low_unit,
+        CAST(NULL AS VARCHAR) as ltr_value_range_high_value,
+        CAST(NULL AS VARCHAR) as ltr_value_range_high_unit,
+        CAST(NULL AS VARCHAR) as ltr_value_boolean,
+        CAST(NULL AS VARCHAR) as ltr_value_integer
+    FROM lab_tests_aggregated lta
 )
 SELECT
     combined.*,
@@ -3019,17 +3099,20 @@ WITH aggregated_results AS (
     GROUP BY test_id, dgd_id
 ),
 specimen_linkage AS (
-    SELECT DISTINCT
+    -- Aggregate multiple specimens per test to prevent JOIN explosion
+    SELECT
         ar.test_id,
-        ar.dgd_id,
-        sri.service_request_id,
-        sr.encounter_reference,
-        REPLACE(sr.encounter_reference, 'Encounter/', '') AS encounter_id,
-        s.id as specimen_id,
-        s.type_text as specimen_type,
-        s.collection_collected_date_time as specimen_collection_date,
-        s.collection_body_site_text as specimen_body_site,
-        s.accession_identifier_value as specimen_accession
+        MIN(ar.dgd_id) AS dgd_id,
+        MIN(sri.service_request_id) AS service_request_id,
+        MIN(sr.encounter_reference) AS encounter_reference,
+        MIN(REPLACE(sr.encounter_reference, 'Encounter/', '')) AS encounter_id,
+        MIN(s.id) AS specimen_id,
+        LISTAGG(DISTINCT s.type_text, ' | ') WITHIN GROUP (ORDER BY s.type_text) AS specimen_types,
+        LISTAGG(DISTINCT s.collection_body_site_text, ' | ') WITHIN GROUP (ORDER BY s.collection_body_site_text) AS specimen_sites,
+        MIN(s.collection_collected_date_time) AS specimen_collection_date,
+        MIN(s.accession_identifier_value) AS specimen_accession,
+        -- Aggregate all specimen IDs (Athena doesn't support json_arrayagg)
+        LISTAGG(DISTINCT s.id, ' | ') WITHIN GROUP (ORDER BY s.id) AS specimen_ids
     FROM aggregated_results ar
     LEFT JOIN fhir_prd_db.service_request_identifier sri
         ON ar.dgd_id = sri.identifier_value
@@ -3039,6 +3122,7 @@ specimen_linkage AS (
         ON sr.id = srs.service_request_id
     LEFT JOIN fhir_prd_db.specimen s
         ON REPLACE(srs.specimen_reference, 'Specimen/', '') = s.id
+    GROUP BY ar.test_id
 ),
 procedure_linkage AS (
     SELECT
@@ -3057,10 +3141,10 @@ procedure_linkage AS (
 SELECT
     mt.patient_id as patient_fhir_id,
     mt.test_id as mt_test_id,
-    TRY(CAST(SUBSTR(mt.result_datetime, 1, 10) AS TIMESTAMP(3))) as mt_test_date,
+    CAST(FROM_ISO8601_TIMESTAMP(mt.result_datetime) AS DATE) as mt_test_date,
     TRY(DATE_DIFF('day',
         DATE(pa.birth_date),
-        TRY(CAST(SUBSTR(mt.result_datetime, 1, 10) AS DATE)))) as age_at_test_days,
+        CAST(FROM_ISO8601_TIMESTAMP(mt.result_datetime) AS DATE))) as age_at_test_days,
     mt.lab_test_name as mt_lab_test_name,
     mt.lab_test_status as mt_test_status,
     mt.lab_test_requester as mt_test_requester,
@@ -3068,9 +3152,10 @@ SELECT
     COALESCE(ar.total_narrative_chars, 0) as mtr_total_narrative_chars,
     COALESCE(ar.components_list, 'None') as mtr_components_list,
     sl.specimen_id as mt_specimen_id,
-    sl.specimen_type as mt_specimen_type,
+    sl.specimen_ids as mt_specimen_ids,
+    sl.specimen_types as mt_specimen_types,
+    sl.specimen_sites as mt_specimen_sites,
     TRY(CAST(SUBSTR(sl.specimen_collection_date, 1, 10) AS TIMESTAMP(3))) as mt_specimen_collection_date,
-    sl.specimen_body_site as mt_specimen_body_site,
     sl.specimen_accession as mt_specimen_accession,
     sl.encounter_id as mt_encounter_id,
     pl.procedure_id as mt_procedure_id,
@@ -3737,10 +3822,10 @@ SELECT
     dr.doc_status as dr_doc_status,
     dr.type_text as dr_type_text,
     dcat.category_text as dr_category_text,
-    TRY(CAST(dr.date AS TIMESTAMP(3))) as dr_date,
+    TRY(CAST(FROM_ISO8601_TIMESTAMP(NULLIF(dr.date, '')) AS TIMESTAMP(3))) as dr_date,
     dr.description as dr_description,
-    TRY(CAST(dr.context_period_start AS TIMESTAMP(3))) as dr_context_period_start,
-    TRY(CAST(dr.context_period_end AS TIMESTAMP(3))) as dr_context_period_end,
+    TRY(CAST(FROM_ISO8601_TIMESTAMP(NULLIF(dr.context_period_start, '')) AS TIMESTAMP(3))) as dr_context_period_start,
+    TRY(CAST(FROM_ISO8601_TIMESTAMP(NULLIF(dr.context_period_end, '')) AS TIMESTAMP(3))) as dr_context_period_end,
     dr.context_facility_type_text as dr_facility_type,
     dr.context_practice_setting_text as dr_practice_setting,
     dr.authenticator_display as dr_authenticator,
@@ -3758,9 +3843,7 @@ SELECT
     dcont.content_attachment_title as content_title,
     dcont.content_format_display as content_format,
 
-    TRY(DATE_DIFF('day',
-        DATE(pa.birth_date),
-        TRY(CAST(SUBSTR(dr.date, 1, 10) AS DATE)))) as age_at_document_days
+    TRY(DATE_DIFF('day', DATE(pa.birth_date), DATE(FROM_ISO8601_TIMESTAMP(NULLIF(dr.date, ''))))) as age_at_document_days
 
 FROM fhir_prd_db.document_reference dr
 LEFT JOIN document_contexts denc ON dr.id = denc.document_reference_id

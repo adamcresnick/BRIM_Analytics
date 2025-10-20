@@ -22,18 +22,37 @@ This document provides a phased implementation plan to standardize 102 VARCHAR d
 
 ## Standardization Rules
 
-### Rule 1: VARCHAR with ISO8601 timestamp → TIMESTAMP(3)
+### Rule 1A: VARCHAR with ISO8601 timestamp (T/Z format) → TIMESTAMP(3)
 
-**Pattern**: Columns with `_datetime` suffix or containing time components
+**Pattern**: Columns containing ISO 8601 timestamps with "T" delimiter and "Z" timezone
+**Example Values**: "2024-06-10T14:30:00Z", "2025-05-14T14:07:05Z"
 
 **Conversion**:
 ```sql
 -- BEFORE (VARCHAR):
-collection_datetime  -- Value: "2024-06-10T14:30:00Z"
+result_datetime  -- Value: "2024-06-10T14:30:00Z"
+
+-- AFTER (TIMESTAMP(3)):
+FROM_ISO8601_TIMESTAMP(result_datetime) AS result_datetime
+```
+
+**Affected Tables**: radiology_imaging_mri, radiology_imaging, lab_tests, molecular_tests
+
+### Rule 1B: VARCHAR with standard timestamp (space-delimited) → TIMESTAMP(3)
+
+**Pattern**: Columns with timestamps using space delimiter
+**Example Values**: "2024-06-10 14:30:00", "2024-06-10 14:30:00.000"
+
+**Conversion**:
+```sql
+-- BEFORE (VARCHAR):
+collection_datetime  -- Value: "2024-06-10 14:30:00"
 
 -- AFTER (TIMESTAMP(3)):
 TRY(CAST(collection_datetime AS TIMESTAMP(3))) AS collection_datetime
 ```
+
+**Note**: Use TRY() to handle invalid/NULL values gracefully.
 
 ### Rule 2: VARCHAR with date-only → DATE
 

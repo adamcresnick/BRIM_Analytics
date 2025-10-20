@@ -1,0 +1,5133 @@
+# AGENT 2 (MedGemma) RE-REVIEW REQUEST: TEMPORAL INCONSISTENCY
+
+## Context from Agent 1 (Claude - Orchestrator)
+
+You previously extracted tumor status from imaging reports with the following results:
+
+**Event 1** (2018-05-27):
+- Event ID: img_egCavClt7q8KwyBCgPS0JXrAMVCHX-E0Q1D-Od9nchS03
+- Your classification: **tumor_status = Increased**
+- Your confidence: 0.80
+
+**Event 2** (2018-05-29, 2 days later):
+- Event ID: img_eEe13sHGFL.xUsHCNkt59VBryiQKdqIv6WLgdMCHLZ3U3
+- Your classification: **tumor_status = Decreased**
+- Your confidence: 0.85
+
+## Agent 1's Inconsistency Detection
+
+**Issue**: Tumor status changed from "Increased" to "Decreased" in only 2 days without documented treatment intervention.
+
+**Clinical plausibility concern**: This rapid improvement is unusual without:
+- Surgical resection
+- Initiation of chemotherapy
+- Radiation therapy
+- High-dose steroids
+
+## Multi-Source Data for Re-Review
+
+Agent 1 has gathered ALL available sources to help you re-evaluate:
+
+### Source 1: Imaging Text Reports (from v_imaging DiagnosticReport)
+
+### Source 2: Imaging PDF Reports (from v_binary_files)
+
+Agent 1 found 3 imaging PDFs in the temporal window.
+
+**PDF 1** (2018-05-27 14:56:19.000):
+- Document: emNX4t85s823XLujmN6YmvLfNLlGbE0VRcUWE2PVeQw43
+- Size: 0 bytes
+- Description: MR BRAIN W & W/O IV CONTRAST
+
+Extracted Text (first 1500 chars):
+```
+[PDF extraction failed: 'BinaryFileAgent' object has no attribute 'extract_text_from_binary_reference']
+```
+
+**PDF 2** (2018-05-28 12:59:47.000):
+- Document: e2B-sPceLyv.UCwXNVsVwVGATfuj6GFSZPEpsXmodr.w3
+- Size: 0 bytes
+- Description: ANES PERFORMED ARTERIAL CANNULATION US
+
+Extracted Text (first 1500 chars):
+```
+[PDF extraction failed: 'BinaryFileAgent' object has no attribute 'extract_text_from_binary_reference']
+```
+
+**PDF 3** (2018-05-29 01:03:09.000):
+- Document: eYRBqOyQ9EHcbiefzc-FWJYejMcx0v3mUjhuTNZk-IF43
+- Size: 0 bytes
+- Description: MR BRAIN W & W/O IV CONTRAST
+
+Extracted Text (first 1500 chars):
+```
+[PDF extraction failed: 'BinaryFileAgent' object has no attribute 'extract_text_from_binary_reference']
+```
+
+### Source 3: Oncology Progress Notes (from DocumentReference)
+
+Agent 1 found 999 clinical notes within ±30 days.
+
+**Note 1** (2018-05-09 16:21:31.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 2** (2018-05-09 16:21:31.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 3** (2018-05-09 16:40:04.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 4** (2018-05-09 16:40:04.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 5** (2018-05-09 20:18:13.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 6** (2018-05-09 20:18:13.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 7** (2018-05-09 21:08:42.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 8** (2018-05-09 21:08:42.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 9** (2018-05-09 21:21:08.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 10** (2018-05-09 21:21:08.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 11** (2018-05-10 18:50:35.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 12** (2018-05-10 18:50:35.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 13** (2018-05-10 18:57:01.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 14** (2018-05-10 18:57:01.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 15** (2018-05-21 18:50:25.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 16** (2018-05-21 18:50:25.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 17** (2018-05-22 20:20:22.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 18** (2018-05-22 20:20:22.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 19** (2018-05-22 23:18:20.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 20** (2018-05-22 23:18:20.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 21** (2018-05-22 23:37:50.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 22** (2018-05-22 23:37:50.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 23** (2018-05-24 18:50:47.000):
+- Category: Clinical Note
+- Type: Nursing Note
+- Title: 
+
+**Note 24** (2018-05-24 18:50:47.000):
+- Category: Clinical Note
+- Type: Nursing Note
+- Title: 
+
+**Note 25** (2018-05-24 19:15:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 26** (2018-05-24 19:15:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 27** (2018-05-24 19:58:46.000):
+- Category: Clinical Note
+- Type: Patient Instructions
+- Title: 
+
+**Note 28** (2018-05-24 19:58:46.000):
+- Category: Clinical Note
+- Type: Patient Instructions
+- Title: 
+
+**Note 29** (2018-05-25 18:49:50.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 30** (2018-05-25 18:49:50.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 31** (2018-05-25 19:34:59.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 32** (2018-05-25 19:34:59.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 33** (2018-05-25 20:51:37.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 34** (2018-05-25 20:51:37.000):
+- Category: Clinical Note
+- Type: Telephone Encounter
+- Title: 
+
+**Note 35** (2018-05-27 13:26:49.000):
+- Category: Clinical Note
+- Type: ED Triage HPI
+- Title: 
+
+**Note 36** (2018-05-27 13:26:49.000):
+- Category: Clinical Note
+- Type: ED Triage HPI
+- Title: 
+
+**Note 37** (2018-05-27 13:26:49.000):
+- Category: Clinical Note
+- Type: ED Triage HPI
+- Title: 
+
+**Note 38** (2018-05-27 13:26:49.000):
+- Category: Clinical Note
+- Type: ED Triage HPI
+- Title: 
+
+**Note 39** (2018-05-27 13:27:10.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 40** (2018-05-27 13:27:10.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 41** (2018-05-27 13:31:08.000):
+- Category: Clinical Note
+- Type: ED Provider Notes
+- Title: 
+
+**Note 42** (2018-05-27 13:31:08.000):
+- Category: Clinical Note
+- Type: ED Provider Notes
+- Title: 
+
+**Note 43** (2018-05-27 13:31:08.000):
+- Category: Clinical Note
+- Type: ED Provider Notes
+- Title: 
+
+**Note 44** (2018-05-27 13:31:08.000):
+- Category: Clinical Note
+- Type: ED Provider Notes
+- Title: 
+
+**Note 45** (2018-05-27 13:34:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 46** (2018-05-27 13:34:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 47** (2018-05-27 13:34:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 48** (2018-05-27 13:34:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 49** (2018-05-27 14:43:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 50** (2018-05-27 14:43:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 51** (2018-05-27 14:43:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 52** (2018-05-27 14:43:32.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 53** (2018-05-27 15:00:40.000):
+- Category: Correspondence
+- Type: Healthcare communication Document
+- Title: 
+
+**Note 54** (2018-05-27 15:32:06.000):
+- Category: Clinical Note
+- Type: ED RN Handoff Note
+- Title: 
+
+**Note 55** (2018-05-27 15:32:06.000):
+- Category: Clinical Note
+- Type: ED RN Handoff Note
+- Title: 
+
+**Note 56** (2018-05-27 15:32:06.000):
+- Category: Clinical Note
+- Type: ED RN Handoff Note
+- Title: 
+
+**Note 57** (2018-05-27 15:32:06.000):
+- Category: Clinical Note
+- Type: ED RN Handoff Note
+- Title: 
+
+**Note 58** (2018-05-27 15:47:44.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 59** (2018-05-27 15:47:44.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 60** (2018-05-27 15:47:44.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 61** (2018-05-27 15:47:44.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 62** (2018-05-27 16:23:53.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 63** (2018-05-27 16:23:53.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 64** (2018-05-27 16:23:53.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 65** (2018-05-27 16:23:53.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 66** (2018-05-27 16:42:40.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 67** (2018-05-27 16:42:40.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 68** (2018-05-27 16:42:40.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 69** (2018-05-27 16:42:40.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 70** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 71** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 72** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 73** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 74** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 75** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 76** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 77** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 78** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 79** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 80** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 81** (2018-05-27 17:49:43.000):
+- Category: Clinical Note
+- Type: Anesthesia Preprocedure Evaluation
+- Title: 
+
+**Note 82** (2018-05-27 18:09:08.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 83** (2018-05-27 18:09:08.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 84** (2018-05-27 18:09:08.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 85** (2018-05-27 18:09:08.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 86** (2018-05-27 18:09:38.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 87** (2018-05-27 18:09:38.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 88** (2018-05-27 18:09:38.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 89** (2018-05-27 18:09:38.000):
+- Category: Clinical Note
+- Type: ED Notes
+- Title: 
+
+**Note 90** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 91** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 92** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 93** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 94** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 95** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 96** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 97** (2018-05-27 19:17:38.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 98** (2018-05-27 19:53:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 99** (2018-05-27 19:53:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 100** (2018-05-27 19:53:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 101** (2018-05-27 19:53:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 102** (2018-05-27 22:09:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 103** (2018-05-27 22:09:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 104** (2018-05-27 22:09:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 105** (2018-05-27 22:09:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 106** (2018-05-27 23:24:10.000):
+- Category: Clinical Note
+- Type: Child Life
+- Title: 
+
+**Note 107** (2018-05-27 23:24:10.000):
+- Category: Clinical Note
+- Type: Child Life
+- Title: 
+
+**Note 108** (2018-05-27 23:24:10.000):
+- Category: Clinical Note
+- Type: Child Life
+- Title: 
+
+**Note 109** (2018-05-27 23:24:10.000):
+- Category: Clinical Note
+- Type: Child Life
+- Title: 
+
+**Note 110** (2018-05-28 07:28:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 111** (2018-05-28 07:28:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 112** (2018-05-28 07:28:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 113** (2018-05-28 07:28:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 114** (2018-05-28 10:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 115** (2018-05-28 10:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 116** (2018-05-28 10:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 117** (2018-05-28 10:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 118** (2018-05-28 10:42:44.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 119** (2018-05-28 10:42:44.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 120** (2018-05-28 10:42:44.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 121** (2018-05-28 10:42:44.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 122** (2018-05-28 12:41:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 123** (2018-05-28 12:41:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 124** (2018-05-28 12:41:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 125** (2018-05-28 12:41:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 126** (2018-05-28 12:59:28.000):
+- Category: Clinical Note
+- Type: Note
+- Title: 
+
+**Note 127** (2018-05-28 13:01:04.000):
+- Category: Clinical Note
+- Type: Anesthesia Procedure Notes
+- Title: 
+
+**Note 128** (2018-05-28 13:01:04.000):
+- Category: Clinical Note
+- Type: Anesthesia Procedure Notes
+- Title: 
+
+**Note 129** (2018-05-28 13:01:04.000):
+- Category: Clinical Note
+- Type: Anesthesia Procedure Notes
+- Title: 
+
+**Note 130** (2018-05-28 13:01:04.000):
+- Category: Clinical Note
+- Type: Anesthesia Procedure Notes
+- Title: 
+
+**Note 131** (2018-05-28 13:01:04.000):
+- Category: Clinical Note
+- Type: Note
+- Title: 
+
+**Note 132** (2018-05-29 00:09:59.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 133** (2018-05-29 00:09:59.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 134** (2018-05-29 01:00:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 135** (2018-05-29 01:00:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 136** (2018-05-29 01:00:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 137** (2018-05-29 01:00:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 138** (2018-05-29 02:38:58.000):
+- Category: Clinical Note
+- Type: Anesthesia Postprocedure Evaluation
+- Title: 
+
+**Note 139** (2018-05-29 02:38:58.000):
+- Category: Clinical Note
+- Type: Anesthesia Postprocedure Evaluation
+- Title: 
+
+**Note 140** (2018-05-29 02:38:58.000):
+- Category: Clinical Note
+- Type: Anesthesia Postprocedure Evaluation
+- Title: 
+
+**Note 141** (2018-05-29 02:38:58.000):
+- Category: Clinical Note
+- Type: Anesthesia Postprocedure Evaluation
+- Title: 
+
+**Note 142** (2018-05-29 10:08:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 143** (2018-05-29 10:08:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 144** (2018-05-29 10:08:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 145** (2018-05-29 10:08:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 146** (2018-05-29 10:09:48.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 147** (2018-05-29 10:09:48.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 148** (2018-05-29 13:39:15.000):
+- Category: Clinical Note
+- Type: OP Note - Complete (Template or Full Dictation)
+- Title: 
+
+**Note 149** (2018-05-29 13:39:15.000):
+- Category: Clinical Note
+- Type: OP Note - Complete (Template or Full Dictation)
+- Title: 
+
+**Note 150** (2018-05-29 13:39:15.000):
+- Category: Clinical Note
+- Type: OP Note - Complete (Template or Full Dictation)
+- Title: 
+
+**Note 151** (2018-05-29 13:39:15.000):
+- Category: Clinical Note
+- Type: OP Note - Complete (Template or Full Dictation)
+- Title: 
+
+**Note 152** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 153** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 154** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 155** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 156** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 157** (2018-05-29 15:30:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 158** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 159** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 160** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 161** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 162** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 163** (2018-05-29 15:41:29.000):
+- Category: Clinical Note
+- Type: OP Note - Brief (Needs Dictation)
+- Title: 
+
+**Note 164** (2018-05-29 15:44:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 165** (2018-05-29 15:44:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 166** (2018-05-29 15:44:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 167** (2018-05-29 15:44:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 168** (2018-05-29 16:09:49.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 169** (2018-05-29 16:09:49.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 170** (2018-05-29 16:47:50.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 171** (2018-05-29 16:47:50.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 172** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 173** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 174** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 175** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 176** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 177** (2018-05-29 16:56:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 178** (2018-05-29 16:59:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 179** (2018-05-29 16:59:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 180** (2018-05-29 16:59:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 181** (2018-05-29 16:59:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 182** (2018-05-29 17:06:14.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 183** (2018-05-29 17:06:14.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 184** (2018-05-29 17:06:14.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 185** (2018-05-29 17:06:14.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 186** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 187** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 188** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 189** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 190** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 191** (2018-05-29 17:48:59.000):
+- Category: Clinical Note
+- Type: Procedures
+- Title: 
+
+**Note 192** (2018-05-29 22:16:24.000):
+- Category: Clinical Note
+- Type: Care Plan Note
+- Title: 
+
+**Note 193** (2018-05-29 22:16:24.000):
+- Category: Clinical Note
+- Type: Care Plan Note
+- Title: 
+
+**Note 194** (2018-05-29 22:16:24.000):
+- Category: Clinical Note
+- Type: Care Plan Note
+- Title: 
+
+**Note 195** (2018-05-29 22:16:24.000):
+- Category: Clinical Note
+- Type: Care Plan Note
+- Title: 
+
+**Note 196** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 197** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 198** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 199** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 200** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 201** (2018-05-29 23:21:43.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 202** (2018-05-29 23:31:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 203** (2018-05-29 23:31:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 204** (2018-05-29 23:31:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 205** (2018-05-29 23:31:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 206** (2018-05-30 07:33:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 207** (2018-05-30 07:33:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 208** (2018-05-30 07:33:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 209** (2018-05-30 07:33:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 210** (2018-05-30 08:36:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 211** (2018-05-30 08:36:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 212** (2018-05-30 08:36:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 213** (2018-05-30 08:36:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 214** (2018-05-30 10:26:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 215** (2018-05-30 10:26:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 216** (2018-05-30 10:26:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 217** (2018-05-30 10:26:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 218** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 219** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 220** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 221** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 222** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 223** (2018-05-30 11:22:17.000):
+- Category: Clinical Note
+- Type: Med Student
+- Title: 
+
+**Note 224** (2018-05-30 12:17:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 225** (2018-05-30 12:17:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 226** (2018-05-30 12:17:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 227** (2018-05-30 12:17:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 228** (2018-05-30 14:49:52.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 229** (2018-05-30 14:49:52.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 230** (2018-05-30 16:59:54.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: Study Result Document
+
+**Note 231** (2018-05-30 16:59:54.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 232** (2018-05-30 16:59:54.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 233** (2018-05-30 17:04:22.000):
+- Category: Clinical Note
+- Type: Addendum Note
+- Title: 
+
+**Note 234** (2018-05-30 17:04:22.000):
+- Category: Clinical Note
+- Type: Addendum Note
+- Title: 
+
+**Note 235** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 236** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 237** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 238** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 239** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 240** (2018-05-30 19:21:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 241** (2018-05-30 19:29:46.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 242** (2018-05-30 19:29:46.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 243** (2018-05-30 19:29:46.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 244** (2018-05-30 19:29:46.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 245** (2018-05-30 20:41:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 246** (2018-05-30 20:41:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 247** (2018-05-30 20:41:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 248** (2018-05-30 20:41:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 249** (2018-05-30 22:32:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 250** (2018-05-30 22:32:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 251** (2018-05-30 22:32:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 252** (2018-05-30 22:32:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 253** (2018-05-30 22:48:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 254** (2018-05-30 22:48:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 255** (2018-05-30 22:48:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 256** (2018-05-30 22:48:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 257** (2018-05-31 08:15:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 258** (2018-05-31 08:15:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 259** (2018-05-31 08:15:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 260** (2018-05-31 08:15:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 261** (2018-05-31 09:34:09.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 262** (2018-05-31 09:34:09.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 263** (2018-05-31 10:24:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 264** (2018-05-31 10:24:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 265** (2018-05-31 10:24:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 266** (2018-05-31 10:24:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 267** (2018-05-31 12:05:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 268** (2018-05-31 12:05:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 269** (2018-05-31 12:05:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 270** (2018-05-31 12:05:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 271** (2018-05-31 13:53:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 272** (2018-05-31 13:53:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 273** (2018-05-31 13:53:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 274** (2018-05-31 13:53:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 275** (2018-05-31 16:02:46.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 276** (2018-05-31 16:02:46.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 277** (2018-05-31 18:01:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 278** (2018-05-31 18:01:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 279** (2018-05-31 18:01:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 280** (2018-05-31 18:01:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 281** (2018-05-31 20:29:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 282** (2018-05-31 20:29:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 283** (2018-05-31 20:29:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 284** (2018-05-31 20:29:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 285** (2018-05-31 21:03:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 286** (2018-05-31 21:03:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 287** (2018-05-31 21:03:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 288** (2018-05-31 21:03:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 289** (2018-05-31 22:55:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 290** (2018-05-31 22:55:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 291** (2018-05-31 22:55:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 292** (2018-05-31 22:55:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 293** (2018-06-01 08:37:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 294** (2018-06-01 08:37:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 295** (2018-06-01 08:37:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 296** (2018-06-01 08:37:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 297** (2018-06-01 09:35:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 298** (2018-06-01 09:35:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 299** (2018-06-01 09:35:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 300** (2018-06-01 09:35:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 301** (2018-06-01 10:20:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 302** (2018-06-01 10:20:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 303** (2018-06-01 10:20:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 304** (2018-06-01 10:20:42.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 305** (2018-06-01 12:04:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 306** (2018-06-01 12:04:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 307** (2018-06-01 12:04:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 308** (2018-06-01 12:04:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 309** (2018-06-01 14:19:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 310** (2018-06-01 14:19:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 311** (2018-06-01 14:19:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 312** (2018-06-01 14:19:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 313** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 314** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 315** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 316** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 317** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 318** (2018-06-01 17:07:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 319** (2018-06-01 17:18:51.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 320** (2018-06-01 17:18:51.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 321** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 322** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 323** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 324** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 325** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 326** (2018-06-01 18:55:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 327** (2018-06-01 21:30:36.000):
+- Category: Clinical Note
+- Type: Transfer Note
+- Title: 
+
+**Note 328** (2018-06-01 21:30:36.000):
+- Category: Clinical Note
+- Type: Transfer Note
+- Title: 
+
+**Note 329** (2018-06-01 21:30:36.000):
+- Category: Clinical Note
+- Type: Transfer Note
+- Title: 
+
+**Note 330** (2018-06-01 21:30:36.000):
+- Category: Clinical Note
+- Type: Transfer Note
+- Title: 
+
+**Note 331** (2018-06-01 22:39:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 332** (2018-06-01 22:39:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 333** (2018-06-01 22:39:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 334** (2018-06-01 22:39:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 335** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 336** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 337** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 338** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 339** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 340** (2018-06-02 00:24:26.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 341** (2018-06-02 10:36:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 342** (2018-06-02 10:36:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 343** (2018-06-02 10:36:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 344** (2018-06-02 10:36:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 345** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 346** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 347** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 348** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 349** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 350** (2018-06-02 11:45:39.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 351** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 352** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 353** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 354** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 355** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 356** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 357** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 358** (2018-06-02 13:25:53.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 359** (2018-06-02 13:26:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 360** (2018-06-02 13:26:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 361** (2018-06-02 13:26:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 362** (2018-06-02 13:26:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 363** (2018-06-02 16:20:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 364** (2018-06-02 16:20:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 365** (2018-06-02 16:20:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 366** (2018-06-02 16:20:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 367** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 368** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 369** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 370** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 371** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 372** (2018-06-02 17:05:43.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 373** (2018-06-02 17:06:08.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 374** (2018-06-02 17:06:08.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 375** (2018-06-02 17:06:08.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 376** (2018-06-02 17:06:08.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 377** (2018-06-02 17:07:15.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 378** (2018-06-02 17:07:15.000):
+- Category: Clinical Note
+- Type: Diagnostic imaging study
+- Title: 
+
+**Note 379** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 380** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 381** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 382** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 383** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 384** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 385** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 386** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 387** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 388** (2018-06-02 18:04:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 389** (2018-06-02 23:32:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 390** (2018-06-02 23:32:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 391** (2018-06-02 23:32:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 392** (2018-06-02 23:32:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 393** (2018-06-03 01:33:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 394** (2018-06-03 01:33:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 395** (2018-06-03 01:33:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 396** (2018-06-03 01:33:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 397** (2018-06-03 08:54:10.000):
+- Category: Clinical Note
+- Type: Downtime Event
+- Title: 
+
+**Note 398** (2018-06-03 08:54:10.000):
+- Category: Clinical Note
+- Type: Downtime Event
+- Title: 
+
+**Note 399** (2018-06-03 08:54:10.000):
+- Category: Clinical Note
+- Type: Downtime Event
+- Title: 
+
+**Note 400** (2018-06-03 08:54:10.000):
+- Category: Clinical Note
+- Type: Downtime Event
+- Title: 
+
+**Note 401** (2018-06-03 10:27:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 402** (2018-06-03 10:27:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 403** (2018-06-03 10:27:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 404** (2018-06-03 10:27:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 405** (2018-06-03 10:34:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 406** (2018-06-03 10:34:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 407** (2018-06-03 10:34:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 408** (2018-06-03 10:34:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 409** (2018-06-03 12:04:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 410** (2018-06-03 12:04:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 411** (2018-06-03 12:04:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 412** (2018-06-03 12:04:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 413** (2018-06-03 13:49:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 414** (2018-06-03 13:49:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 415** (2018-06-03 13:49:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 416** (2018-06-03 13:49:51.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 417** (2018-06-03 13:53:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 418** (2018-06-03 13:53:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 419** (2018-06-03 13:53:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 420** (2018-06-03 13:53:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 421** (2018-06-03 19:19:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 422** (2018-06-03 19:19:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 423** (2018-06-03 19:19:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 424** (2018-06-03 19:19:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 425** (2018-06-03 23:24:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 426** (2018-06-03 23:24:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 427** (2018-06-03 23:24:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 428** (2018-06-03 23:24:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 429** (2018-06-04 03:27:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 430** (2018-06-04 03:27:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 431** (2018-06-04 03:27:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 432** (2018-06-04 03:27:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 433** (2018-06-04 03:30:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 434** (2018-06-04 03:30:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 435** (2018-06-04 03:30:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 436** (2018-06-04 03:30:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 437** (2018-06-04 12:28:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 438** (2018-06-04 12:28:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 439** (2018-06-04 12:28:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 440** (2018-06-04 12:28:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 441** (2018-06-04 13:42:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 442** (2018-06-04 13:42:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 443** (2018-06-04 13:42:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 444** (2018-06-04 13:42:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 445** (2018-06-04 16:34:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 446** (2018-06-04 16:34:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 447** (2018-06-04 16:34:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 448** (2018-06-04 16:34:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 449** (2018-06-04 16:59:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 450** (2018-06-04 16:59:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 451** (2018-06-04 16:59:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 452** (2018-06-04 16:59:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 453** (2018-06-04 17:11:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 454** (2018-06-04 17:11:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 455** (2018-06-04 17:11:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 456** (2018-06-04 17:11:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 457** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 458** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 459** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 460** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 461** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 462** (2018-06-04 17:28:16.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 463** (2018-06-04 18:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 464** (2018-06-04 18:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 465** (2018-06-04 18:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 466** (2018-06-04 18:26:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 467** (2018-06-04 19:29:43.000):
+- Category: Correspondence
+- Type: Instructions
+- Title: 
+
+**Note 468** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 469** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 470** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 471** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 472** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 473** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 474** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 475** (2018-06-04 20:51:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 476** (2018-06-05 07:15:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 477** (2018-06-05 07:15:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 478** (2018-06-05 07:15:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 479** (2018-06-05 07:15:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 480** (2018-06-05 09:17:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 481** (2018-06-05 09:17:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 482** (2018-06-05 09:17:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 483** (2018-06-05 09:17:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 484** (2018-06-05 13:48:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 485** (2018-06-05 13:48:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 486** (2018-06-05 13:48:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 487** (2018-06-05 13:48:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 488** (2018-06-05 16:59:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 489** (2018-06-05 16:59:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 490** (2018-06-05 16:59:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 491** (2018-06-05 16:59:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 492** (2018-06-05 17:28:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 493** (2018-06-05 17:28:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 494** (2018-06-05 17:28:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 495** (2018-06-05 17:28:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 496** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 497** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 498** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 499** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 500** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 501** (2018-06-05 18:22:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 502** (2018-06-05 19:03:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 503** (2018-06-05 19:03:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 504** (2018-06-05 19:03:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 505** (2018-06-05 19:03:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 506** (2018-06-05 20:06:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 507** (2018-06-05 20:06:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 508** (2018-06-05 20:06:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 509** (2018-06-05 20:06:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 510** (2018-06-05 20:49:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 511** (2018-06-05 20:49:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 512** (2018-06-05 20:49:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 513** (2018-06-05 20:49:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 514** (2018-06-06 02:04:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 515** (2018-06-06 02:04:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 516** (2018-06-06 02:04:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 517** (2018-06-06 02:04:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 518** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 519** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 520** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 521** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 522** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 523** (2018-06-06 02:25:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 524** (2018-06-06 09:10:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 525** (2018-06-06 09:10:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 526** (2018-06-06 09:10:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 527** (2018-06-06 09:10:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 528** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 529** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 530** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 531** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 532** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 533** (2018-06-06 11:50:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 534** (2018-06-06 11:53:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 535** (2018-06-06 11:53:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 536** (2018-06-06 11:53:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 537** (2018-06-06 11:53:57.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 538** (2018-06-06 12:03:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 539** (2018-06-06 12:03:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 540** (2018-06-06 12:03:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 541** (2018-06-06 12:03:09.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 542** (2018-06-06 12:43:26.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 543** (2018-06-06 12:43:26.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 544** (2018-06-06 12:43:26.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 545** (2018-06-06 12:43:26.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 546** (2018-06-06 14:17:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 547** (2018-06-06 14:17:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 548** (2018-06-06 14:17:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 549** (2018-06-06 14:17:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 550** (2018-06-06 14:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 551** (2018-06-06 14:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 552** (2018-06-06 14:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 553** (2018-06-06 14:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 554** (2018-06-06 14:27:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 555** (2018-06-06 14:27:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 556** (2018-06-06 14:27:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 557** (2018-06-06 14:27:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 558** (2018-06-06 14:33:35.000):
+- Category: Correspondence
+- Type: Instructions
+- Title: 
+
+**Note 559** (2018-06-06 16:04:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 560** (2018-06-06 16:04:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 561** (2018-06-06 16:04:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 562** (2018-06-06 16:04:31.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 563** (2018-06-06 19:19:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 564** (2018-06-06 19:19:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 565** (2018-06-06 19:19:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 566** (2018-06-06 19:19:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 567** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 568** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 569** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 570** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 571** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 572** (2018-06-06 19:55:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 573** (2018-06-06 20:25:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 574** (2018-06-06 20:25:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 575** (2018-06-06 20:25:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 576** (2018-06-06 20:25:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 577** (2018-06-06 22:34:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 578** (2018-06-06 22:34:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 579** (2018-06-06 22:34:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 580** (2018-06-06 22:34:08.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 581** (2018-06-06 22:36:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 582** (2018-06-06 22:36:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 583** (2018-06-06 22:36:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 584** (2018-06-06 22:36:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 585** (2018-06-07 01:34:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 586** (2018-06-07 01:34:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 587** (2018-06-07 01:34:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 588** (2018-06-07 01:34:33.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 589** (2018-06-07 09:34:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 590** (2018-06-07 09:34:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 591** (2018-06-07 09:34:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 592** (2018-06-07 09:34:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 593** (2018-06-07 11:22:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 594** (2018-06-07 11:22:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 595** (2018-06-07 11:22:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 596** (2018-06-07 11:22:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 597** (2018-06-07 14:18:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 598** (2018-06-07 14:18:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 599** (2018-06-07 14:18:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 600** (2018-06-07 14:18:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 601** (2018-06-07 15:08:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 602** (2018-06-07 15:08:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 603** (2018-06-07 15:08:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 604** (2018-06-07 15:08:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 605** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 606** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 607** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 608** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 609** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 610** (2018-06-07 15:09:09.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 611** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 612** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 613** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 614** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 615** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 616** (2018-06-07 16:25:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 617** (2018-06-07 19:46:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 618** (2018-06-07 19:46:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 619** (2018-06-07 19:46:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 620** (2018-06-07 19:46:41.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 621** (2018-06-07 19:49:43.000):
+- Category: Correspondence
+- Type: Instructions
+- Title: 
+
+**Note 622** (2018-06-07 19:49:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 623** (2018-06-07 19:49:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 624** (2018-06-07 19:49:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 625** (2018-06-07 19:49:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 626** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 627** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 628** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 629** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 630** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 631** (2018-06-07 20:13:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 632** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 633** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 634** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 635** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 636** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 637** (2018-06-07 20:27:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 638** (2018-06-07 23:43:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 639** (2018-06-07 23:43:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 640** (2018-06-07 23:43:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 641** (2018-06-07 23:43:52.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 642** (2018-06-08 02:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 643** (2018-06-08 02:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 644** (2018-06-08 02:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 645** (2018-06-08 02:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 646** (2018-06-08 02:31:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 647** (2018-06-08 02:31:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 648** (2018-06-08 02:31:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 649** (2018-06-08 02:31:06.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 650** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 651** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 652** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 653** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 654** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 655** (2018-06-08 05:43:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 656** (2018-06-08 09:38:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 657** (2018-06-08 09:38:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 658** (2018-06-08 09:38:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 659** (2018-06-08 09:38:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 660** (2018-06-08 12:34:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 661** (2018-06-08 12:34:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 662** (2018-06-08 12:34:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 663** (2018-06-08 12:34:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 664** (2018-06-08 12:40:59.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 665** (2018-06-08 12:40:59.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 666** (2018-06-08 12:40:59.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 667** (2018-06-08 12:40:59.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 668** (2018-06-08 14:29:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 669** (2018-06-08 14:29:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 670** (2018-06-08 14:29:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 671** (2018-06-08 14:29:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 672** (2018-06-08 14:34:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 673** (2018-06-08 14:34:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 674** (2018-06-08 14:34:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 675** (2018-06-08 14:34:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 676** (2018-06-08 17:59:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 677** (2018-06-08 17:59:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 678** (2018-06-08 17:59:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 679** (2018-06-08 17:59:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 680** (2018-06-08 18:00:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 681** (2018-06-08 18:00:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 682** (2018-06-08 18:00:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 683** (2018-06-08 18:00:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 684** (2018-06-08 18:44:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 685** (2018-06-08 18:44:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 686** (2018-06-08 18:44:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 687** (2018-06-08 18:44:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 688** (2018-06-08 19:04:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 689** (2018-06-08 19:04:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 690** (2018-06-08 19:04:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 691** (2018-06-08 19:04:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 692** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 693** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 694** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 695** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 696** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 697** (2018-06-08 21:25:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 698** (2018-06-08 23:24:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 699** (2018-06-08 23:24:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 700** (2018-06-08 23:24:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 701** (2018-06-08 23:24:17.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 702** (2018-06-09 07:17:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 703** (2018-06-09 07:17:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 704** (2018-06-09 07:17:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 705** (2018-06-09 07:17:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 706** (2018-06-09 09:38:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 707** (2018-06-09 09:38:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 708** (2018-06-09 09:38:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 709** (2018-06-09 09:38:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 710** (2018-06-09 12:28:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 711** (2018-06-09 12:28:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 712** (2018-06-09 12:28:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 713** (2018-06-09 12:28:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 714** (2018-06-09 17:09:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 715** (2018-06-09 17:09:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 716** (2018-06-09 17:09:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 717** (2018-06-09 17:09:38.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 718** (2018-06-09 17:19:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 719** (2018-06-09 17:19:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 720** (2018-06-09 17:19:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 721** (2018-06-09 17:19:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 722** (2018-06-09 23:23:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 723** (2018-06-09 23:23:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 724** (2018-06-09 23:23:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 725** (2018-06-09 23:23:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 726** (2018-06-10 07:19:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 727** (2018-06-10 07:19:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 728** (2018-06-10 07:19:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 729** (2018-06-10 07:19:18.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 730** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 731** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 732** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 733** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 734** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 735** (2018-06-10 07:59:32.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 736** (2018-06-10 14:16:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 737** (2018-06-10 14:16:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 738** (2018-06-10 14:16:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 739** (2018-06-10 14:16:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 740** (2018-06-10 14:48:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 741** (2018-06-10 14:48:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 742** (2018-06-10 14:48:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 743** (2018-06-10 14:48:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 744** (2018-06-10 15:06:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 745** (2018-06-10 15:06:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 746** (2018-06-10 15:06:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 747** (2018-06-10 15:06:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 748** (2018-06-10 15:22:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 749** (2018-06-10 15:22:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 750** (2018-06-10 15:22:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 751** (2018-06-10 15:22:36.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 752** (2018-06-11 02:12:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 753** (2018-06-11 02:12:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 754** (2018-06-11 02:12:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 755** (2018-06-11 02:12:54.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 756** (2018-06-11 09:25:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 757** (2018-06-11 09:25:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 758** (2018-06-11 09:25:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 759** (2018-06-11 09:25:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 760** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 761** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 762** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 763** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 764** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 765** (2018-06-11 09:42:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 766** (2018-06-11 12:32:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 767** (2018-06-11 12:32:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 768** (2018-06-11 12:32:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 769** (2018-06-11 12:32:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 770** (2018-06-11 17:42:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 771** (2018-06-11 17:42:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 772** (2018-06-11 17:42:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 773** (2018-06-11 17:42:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 774** (2018-06-11 18:20:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 775** (2018-06-11 18:20:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 776** (2018-06-11 18:20:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 777** (2018-06-11 18:20:58.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 778** (2018-06-11 19:23:00.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 779** (2018-06-11 19:23:00.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 780** (2018-06-11 19:23:00.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 781** (2018-06-11 19:23:00.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 782** (2018-06-11 20:02:32.000):
+- Category: Correspondence
+- Type: Instructions
+- Title: 
+
+**Note 783** (2018-06-11 20:38:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 784** (2018-06-11 20:38:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 785** (2018-06-11 20:38:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 786** (2018-06-11 20:38:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 787** (2018-06-11 20:40:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 788** (2018-06-11 20:40:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 789** (2018-06-11 20:40:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 790** (2018-06-11 20:40:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 791** (2018-06-11 22:49:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 792** (2018-06-11 22:49:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 793** (2018-06-11 22:49:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 794** (2018-06-11 22:49:37.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 795** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 796** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 797** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 798** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 799** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 800** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 801** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 802** (2018-06-12 05:16:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 803** (2018-06-12 09:37:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 804** (2018-06-12 09:37:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 805** (2018-06-12 09:37:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 806** (2018-06-12 09:37:49.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 807** (2018-06-12 14:33:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 808** (2018-06-12 14:33:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 809** (2018-06-12 14:33:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 810** (2018-06-12 14:33:34.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 811** (2018-06-12 15:58:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 812** (2018-06-12 15:58:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 813** (2018-06-12 15:58:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 814** (2018-06-12 15:58:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 815** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 816** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 817** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 818** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 819** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 820** (2018-06-12 16:56:11.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 821** (2018-06-12 19:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 822** (2018-06-12 19:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 823** (2018-06-12 19:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 824** (2018-06-12 19:17:27.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 825** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 826** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 827** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 828** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 829** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 830** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 831** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 832** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 833** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 834** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 835** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 836** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 837** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 838** (2018-06-12 19:27:23.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 839** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 840** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 841** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 842** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 843** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 844** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 845** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 846** (2018-06-12 19:28:58.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 847** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 848** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 849** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 850** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 851** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 852** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 853** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 854** (2018-06-12 19:30:48.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 855** (2018-06-12 19:39:45.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 856** (2018-06-12 19:39:45.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 857** (2018-06-12 19:39:45.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 858** (2018-06-12 19:39:45.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 859** (2018-06-12 20:06:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 860** (2018-06-12 20:06:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 861** (2018-06-12 20:06:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 862** (2018-06-12 20:06:02.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 863** (2018-06-12 23:28:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 864** (2018-06-12 23:28:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 865** (2018-06-12 23:28:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 866** (2018-06-12 23:28:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 867** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 868** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 869** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 870** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 871** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 872** (2018-06-13 07:49:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 873** (2018-06-13 08:46:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 874** (2018-06-13 08:46:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 875** (2018-06-13 08:46:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 876** (2018-06-13 08:46:29.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 877** (2018-06-13 12:17:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 878** (2018-06-13 12:17:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 879** (2018-06-13 12:17:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 880** (2018-06-13 12:17:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 881** (2018-06-13 15:35:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 882** (2018-06-13 15:35:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 883** (2018-06-13 15:35:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 884** (2018-06-13 15:35:13.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 885** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 886** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 887** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 888** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 889** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 890** (2018-06-13 15:37:04.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 891** (2018-06-13 19:30:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 892** (2018-06-13 19:30:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 893** (2018-06-13 19:30:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 894** (2018-06-13 19:30:55.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 895** (2018-06-13 21:43:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 896** (2018-06-13 21:43:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 897** (2018-06-13 21:43:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 898** (2018-06-13 21:43:56.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 899** (2018-06-13 23:46:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 900** (2018-06-13 23:46:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 901** (2018-06-13 23:46:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 902** (2018-06-13 23:46:21.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 903** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 904** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 905** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 906** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 907** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 908** (2018-06-14 08:59:20.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 909** (2018-06-14 12:17:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 910** (2018-06-14 12:17:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 911** (2018-06-14 12:17:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 912** (2018-06-14 12:17:19.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 913** (2018-06-14 12:28:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 914** (2018-06-14 12:28:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 915** (2018-06-14 12:28:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 916** (2018-06-14 12:28:07.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 917** (2018-06-14 15:29:30.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 918** (2018-06-14 15:29:30.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 919** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 920** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 921** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 922** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 923** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 924** (2018-06-14 15:34:22.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 925** (2018-06-14 15:54:44.000):
+- Category: Clinical Note
+- Type: Discharge Instructions
+- Title: 
+
+**Note 926** (2018-06-14 15:54:44.000):
+- Category: Clinical Note
+- Type: Discharge Instructions
+- Title: 
+
+**Note 927** (2018-06-14 15:54:44.000):
+- Category: Clinical Note
+- Type: Discharge Instructions
+- Title: 
+
+**Note 928** (2018-06-14 15:54:44.000):
+- Category: Clinical Note
+- Type: Discharge Instructions
+- Title: 
+
+**Note 929** (2018-06-14 15:58:04.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 930** (2018-06-14 15:58:04.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 931** (2018-06-14 16:12:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 932** (2018-06-14 16:12:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 933** (2018-06-14 16:12:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 934** (2018-06-14 16:12:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 935** (2018-06-14 20:11:23.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 936** (2018-06-14 20:11:23.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 937** (2018-06-14 21:30:59.000):
+- Category: Correspondence
+- Type: MyCHOP Activation
+- Title: 
+
+**Note 938** (2018-06-14 23:26:40.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 939** (2018-06-14 23:26:40.000):
+- Category: Clinical Note
+- Type: Discharge Summary
+- Title: 
+
+**Note 940** (2018-06-15 04:34:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 941** (2018-06-15 04:34:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 942** (2018-06-15 09:27:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 943** (2018-06-15 09:27:35.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 944** (2018-06-15 11:42:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 945** (2018-06-15 11:42:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 946** (2018-06-15 11:47:58.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 947** (2018-06-15 11:47:58.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 948** (2018-06-15 12:32:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 949** (2018-06-15 12:32:25.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 950** (2018-06-15 12:32:45.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 951** (2018-06-15 12:32:45.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 952** (2018-06-15 14:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 953** (2018-06-15 14:28:16.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 954** (2018-06-15 20:27:16.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 955** (2018-06-15 20:27:16.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 956** (2018-06-15 20:28:15.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 957** (2018-06-15 20:28:15.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 958** (2018-06-15 20:28:35.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 959** (2018-06-15 20:28:35.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 960** (2018-06-15 20:29:01.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 961** (2018-06-15 20:29:01.000):
+- Category: Clinical Note
+- Type: Assessment & Plan Note
+- Title: 
+
+**Note 962** (2018-06-15 20:30:11.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 963** (2018-06-15 20:30:11.000):
+- Category: Clinical Note
+- Type: H&P
+- Title: 
+
+**Note 964** (2018-06-15 21:01:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 965** (2018-06-15 21:01:10.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 966** (2018-06-15 21:01:42.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 967** (2018-06-15 21:01:42.000):
+- Category: Clinical Note
+- Type: Consult Note
+- Title: 
+
+**Note 968** (2018-06-16 02:19:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 969** (2018-06-16 02:19:12.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 970** (2018-06-16 08:58:50.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 971** (2018-06-16 08:58:50.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 972** (2018-06-16 13:49:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 973** (2018-06-16 13:49:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 974** (2018-06-16 16:04:23.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 975** (2018-06-16 16:04:23.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 976** (2018-06-16 19:10:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 977** (2018-06-16 19:10:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 978** (2018-06-16 19:14:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 979** (2018-06-16 19:14:45.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 980** (2018-06-16 22:13:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 981** (2018-06-16 22:13:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 982** (2018-06-17 05:44:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 983** (2018-06-17 05:44:24.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 984** (2018-06-17 09:37:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 985** (2018-06-17 09:37:30.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 986** (2018-06-17 12:55:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 987** (2018-06-17 12:55:59.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 988** (2018-06-17 14:26:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 989** (2018-06-17 14:26:47.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 990** (2018-06-17 18:02:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 991** (2018-06-17 18:02:53.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 992** (2018-06-17 19:28:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 993** (2018-06-17 19:28:01.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 994** (2018-06-17 22:24:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 995** (2018-06-17 22:24:05.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 996** (2018-06-18 02:03:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 997** (2018-06-18 02:03:40.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 998** (2018-06-18 08:40:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+**Note 999** (2018-06-18 08:40:48.000):
+- Category: Clinical Note
+- Type: Progress Notes
+- Title: 
+
+
+## Agent 1's Questions for Agent 2
+
+Based on reviewing ALL sources above, please provide:
+
+1. **Clinical Plausibility Assessment**:
+   - Is a status change from Increased→Decreased in 2 days clinically plausible?
+   - What evidence from the sources supports or refutes this?
+
+2. **Duplicate Scan Hypothesis**:
+   - Could these be the same imaging study extracted twice?
+   - Are there identical study dates, accession numbers, or descriptions?
+
+3. **Misclassification Hypothesis**:
+   - After reviewing ALL sources (text reports + PDFs + notes + procedures), do you believe either classification was incorrect?
+   - If so, which one and why?
+
+4. **Treatment Intervention Assessment**:
+   - Do the operative reports show surgical intervention between the two imaging events?
+   - Do progress notes mention treatment changes (steroids, chemo, etc.)?
+
+5. **Multi-Source Reconciliation**:
+   - Which source provides the most reliable tumor status assessment?
+   - Source hierarchy: Oncology note + exam > Imaging PDF > Imaging text
+   - Do sources agree or conflict?
+
+6. **Recommended Resolution**:
+   - keep_both (if both extractions are correct)
+   - mark_duplicate (if same imaging study)
+   - revise_event_1 (if first classification incorrect)
+   - revise_event_2 (if second classification incorrect)
+   - escalate (if complex/uncertain - requires human review)
+
+## Output Format
+
+Please provide a structured JSON response:
+
+```json
+{
+    "clinical_plausibility": "plausible|implausible|uncertain",
+    "duplicate_scan_assessment": "yes|no|possible",
+    "treatment_intervention_found": "yes|no",
+    "treatment_details": "Description of any surgical/medical interventions found",
+    "misclassification_assessment": {
+        "event_1_correct": "yes|no|uncertain",
+        "event_2_correct": "yes|no|uncertain",
+        "reasoning": "..."
+    },
+    "multi_source_findings": {
+        "text_reports_assessment": "summary of text report findings",
+        "pdf_reports_assessment": "summary of PDF findings",
+        "progress_notes_assessment": "summary of clinical notes",
+        "operative_reports_assessment": "summary of surgical findings",
+        "gold_standard_source": "operative_report|progress_note|imaging_pdf|imaging_text|none",
+        "sources_agree": "yes|no|partial"
+    },
+    "recommended_resolution": {
+        "action": "keep_both|mark_duplicate|revise_event_1|revise_event_2|escalate",
+        "revised_tumor_status_event_1": "NED|Stable|Increased|Decreased|New_Malignancy|null",
+        "revised_tumor_status_event_2": "NED|Stable|Increased|Decreased|New_Malignancy|null",
+        "confidence": 0.0-1.0,
+        "reasoning": "..."
+    },
+    "agent2_explanation": "Detailed explanation of your comprehensive multi-source assessment..."
+}
+```
+
+Thank you, Agent 2. Agent 1 will use your assessment to adjudicate this inconsistency.
