@@ -364,9 +364,9 @@ def main():
                 SELECT
                     event_id,
                     event_date,
-                    event_description
-                FROM unified_patient_timeline
-                WHERE patient_fhir_id = '{args.patient_id}'
+                    description as event_description
+                FROM events
+                WHERE patient_id = '{args.patient_id}'
                     AND event_type = 'Medication'
                     AND event_category = 'Chemotherapy'
                 ORDER BY event_date
