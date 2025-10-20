@@ -36,8 +36,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.master_agent import MasterAgent
 from agents.medgemma_agent import MedGemmaAgent
+from agents.binary_file_agent import BinaryFileAgent
 from timeline_query_interface import TimelineQueryInterface
 from utils.progress_note_filters import filter_oncology_notes, get_note_filtering_stats
+from utils.progress_note_prioritization import ProgressNotePrioritizer
+from utils.document_text_cache import DocumentTextCache
+from utils.workflow_monitoring import WorkflowLogger, WorkflowMetrics
 from agents.extraction_prompts import (
     build_operative_report_eor_extraction_prompt,
     build_progress_note_disease_state_prompt,
@@ -179,21 +183,48 @@ def main():
     print("="*80)
     print()
 
+    # Initialize workflow monitoring
+    workflow_logger = WorkflowLogger(
+        workflow_name="full_multi_source_abstraction",
+        log_dir=output_dir,
+        patient_id=args.patient_id,
+        enable_json=True,
+        enable_notifications=False  # Can be enabled via config
+    )
+    workflow_logger.log_info("Starting full multi-source comprehensive abstraction workflow")
+
     # Initialize agents
     try:
         print("Initializing agents...")
+        workflow_logger.log_info(f"Starting phase: {"initialization"}")
+
         medgemma = MedGemmaAgent(model_name="gemma2:27b")
         print("✅ Agent 2 (MedGemma) initialized")
 
         timeline = TimelineQueryInterface(args.timeline_db)
         print("✅ Timeline database loaded")
 
+        # Initialize BinaryFileAgent for PDF/HTML extraction
+        binary_agent = BinaryFileAgent()
+        print("✅ Binary file agent initialized")
+
+        # Initialize DocumentTextCache
+        doc_cache = DocumentTextCache(db_path="data/document_text_cache.duckdb")
+        print("✅ Document text cache initialized")
+
+        # Initialize ProgressNotePrioritizer
+        note_prioritizer = ProgressNotePrioritizer()
+        print("✅ Progress note prioritizer initialized")
+
         eor_adjudicator = EORAdjudicator(medgemma_agent=medgemma)
         event_classifier = EventTypeClassifier(timeline_query_interface=timeline)
         print("✅ Agent 1 (Master orchestrator) initialized")
         print()
 
+        workflow_logger.log_info(f"Completed phase: {"initialization"}")
+
     except Exception as e:
+        workflow_logger.log_error(f"Failed to initialize: {e}", error_type="initialization_error", stack_trace=str(e))
         logger.error(f"Failed to initialize: {e}", exc_info=True)
         print(f"❌ ERROR: {e}")
         return 1
@@ -325,13 +356,31 @@ def main():
         print(f"  Filtered to oncology-specific: {filtering_results['oncology_notes']} notes ({filtering_results['oncology_percentage']:.1f}%)")
         print(f"  Excluded: {filtering_results['excluded_notes']} notes")
 
+        # Prioritize progress notes based on clinical events
+        print("  Prioritizing progress notes based on clinical events...")
+        prioritized_notes = note_prioritizer.prioritize_notes(
+            progress_notes=oncology_notes,
+            surgeries=operative_reports,
+            imaging_events=imaging_text_reports  # Use imaging text as imaging events
+        )
+        print(f"  Prioritized to {len(prioritized_notes)} key notes ({len(prioritized_notes)/len(oncology_notes)*100:.1f}% of oncology notes)")
+
+        # Get priority reasons summary
+        priority_counts = {}
+        for pn in prioritized_notes:
+            reason = pn.priority_reason
+            priority_counts[reason] = priority_counts.get(reason, 0) + 1
+        print(f"  Priority breakdown: {dict(priority_counts)}")
+
         print()
         comprehensive_summary['phases']['data_query'] = {
             'imaging_text_count': len(imaging_text_reports),
             'imaging_pdf_count': len(imaging_pdfs),
             'operative_report_count': len(operative_reports),
-            'progress_note_count': len(oncology_notes),
-            'total_sources': len(imaging_text_reports) + len(imaging_pdfs) + len(operative_reports) + len(oncology_notes)
+            'progress_note_all_count': len(all_progress_notes),
+            'progress_note_oncology_count': len(oncology_notes),
+            'progress_note_prioritized_count': len(prioritized_notes),
+            'total_sources': len(imaging_text_reports) + len(imaging_pdfs) + len(operative_reports) + len(prioritized_notes)
         }
         save_checkpoint('data_query', 'completed', comprehensive_summary['phases']['data_query'])
 
@@ -393,20 +442,226 @@ def main():
 
         # 2B: Extract from imaging PDFs
         print(f"2B. Extracting from {len(imaging_pdfs)} imaging PDFs...")
-        # TODO: Fetch binary data from S3, extract text, send to Agent 2
-        print(f"  ⚠️  PDF extraction requires S3 binary fetch - skipping for now")
+        workflow_logger.log_info(f"Starting phase: {"phase_2b_imaging_pdfs"}")
+        extraction_count['imaging_pdf'] = 0
+
+        for idx, pdf_doc in enumerate(imaging_pdfs, 1):
+            doc_id = pdf_doc['document_reference_id']
+            binary_id = pdf_doc['binary_id']
+            doc_date = pdf_doc['dr_date']
+
+            # Check cache first
+            cached_doc = doc_cache.get_cached_document(doc_id)
+            if cached_doc:
+                extracted_text = cached_doc.extracted_text
+                workflow_logger.log_info(f"Using cached text for {doc_id}")
+            else:
+                # Extract text from PDF using BinaryFileAgent
+                extracted_text, error = binary_agent.extract_text_from_binary(binary_id, args.patient_id)
+                if error:
+                    workflow_logger.log_warning(f"Failed to extract PDF {doc_id}: {error}")
+                    continue
+
+                # Cache the extracted text
+                doc_cache.cache_document_from_binary(
+                    document_id=doc_id,
+                    patient_fhir_id=args.patient_id,
+                    extracted_text=extracted_text,
+                    extraction_method="pdf_pymupdf",
+                    binary_id=binary_id,
+                    document_date=doc_date
+                )
+
+            # Extract classification and tumor status using MedGemma
+            classification_prompt = build_imaging_classification_prompt(extracted_text)
+            classification_result = medgemma.extract(classification_prompt, "imaging_classification")
+
+            tumor_status_prompt = build_tumor_status_extraction_prompt(extracted_text)
+            tumor_status_result = medgemma.extract(tumor_status_prompt, "tumor_status")
+
+            print(f"  [{idx}/{len(imaging_pdfs)}] {doc_id[:30]}... ({doc_date})")
+            print(f"    Classification: {classification_result.extracted_data.get('imaging_type', 'unknown')}")
+            print(f"    Tumor status: {tumor_status_result.extracted_data.get('overall_status', 'Unknown')}")
+
+            all_extractions.append({
+                'source': 'imaging_pdf',
+                'source_id': doc_id,
+                'date': doc_date,
+                'classification': classification_result.extracted_data if classification_result.success else {'error': classification_result.error},
+                'tumor_status': tumor_status_result.extracted_data if tumor_status_result.success else {'error': tumor_status_result.error},
+                'classification_confidence': classification_result.confidence,
+                'tumor_status_confidence': tumor_status_result.confidence
+            })
+            extraction_count['imaging_pdf'] += 1
+
+        workflow_logger.log_info(f"Completed phase: {"phase_2b_imaging_pdfs"}")
+        print(f"  ✅ Completed {extraction_count['imaging_pdf']} imaging PDF extractions")
         print()
 
         # 2C: Extract from operative reports
         print(f"2C. Extracting from {len(operative_reports)} operative reports...")
-        # TODO: Fetch operative note text, extract EOR
-        print(f"  ⚠️  Operative report extraction requires note text - skipping for now")
+        workflow_logger.log_info(f"Starting phase: {"phase_2c_operative_reports"}")
+        extraction_count['operative_reports'] = 0
+
+        for idx, surgery in enumerate(operative_reports, 1):
+            proc_id = surgery['procedure_fhir_id']
+            proc_date = surgery['proc_performed_date_time']
+            surgery_type = surgery.get('surgery_type', 'unknown')
+
+            print(f"  [{idx}/{len(operative_reports)}] {proc_id[:30]}... ({proc_date}) - {surgery_type}")
+
+            # Query for operative note DocumentReference linked to this procedure
+            # Search for notes created around the time of surgery (±7 days)
+            proc_date_str = proc_date.split()[0] if isinstance(proc_date, str) else str(proc_date)
+
+            op_note_query = f"""
+                SELECT
+                    document_reference_id,
+                    binary_id,
+                    dr_date,
+                    dr_category_text,
+                    dr_type_text,
+                    content_type
+                FROM v_binary_files
+                WHERE patient_fhir_id = '{args.patient_id}'
+                    AND (
+                        LOWER(dr_category_text) LIKE '%operative%'
+                        OR LOWER(dr_category_text) LIKE '%surgery%'
+                        OR LOWER(dr_category_text) LIKE '%procedure%'
+                        OR LOWER(dr_type_text) LIKE '%operative%'
+                        OR LOWER(dr_type_text) LIKE '%surgery%'
+                    )
+                    AND ABS(DATE_DIFF('day', CAST(dr_date AS DATE), DATE '{proc_date_str}')) <= 7
+                ORDER BY ABS(DATE_DIFF('day', CAST(dr_date AS DATE), DATE '{proc_date_str}'))
+                LIMIT 1
+            """
+
+            try:
+                op_notes = query_athena(op_note_query, None)  # Don't print query message
+
+                if not op_notes or len(op_notes) == 0:
+                    print(f"    ⚠️  No operative note found within ±7 days of surgery")
+                    continue
+
+                op_note = op_notes[0]
+                doc_id = op_note['document_reference_id']
+                binary_id = op_note['binary_id']
+                doc_date = op_note['dr_date']
+
+                # Check cache first
+                cached_doc = doc_cache.get_cached_document(doc_id)
+                if cached_doc:
+                    extracted_text = cached_doc.extracted_text
+                    workflow_logger.log_info(f"Using cached text for operative note {doc_id}")
+                else:
+                    # Extract text from operative note
+                    extracted_text, error = binary_agent.extract_text_from_binary(binary_id, args.patient_id)
+                    if error:
+                        workflow_logger.log_warning(f"Failed to extract operative note {doc_id}: {error}")
+                        print(f"    ⚠️  Failed to extract text: {error}")
+                        continue
+
+                    # Determine extraction method based on content type
+                    content_type = op_note['content_type']
+                    extraction_method = "html_beautifulsoup" if "html" in content_type else \
+                                       "pdf_pymupdf" if "pdf" in content_type else "text_plain"
+
+                    # Cache the extracted text
+                    doc_cache.cache_document_from_binary(
+                        document_id=doc_id,
+                        patient_fhir_id=args.patient_id,
+                        extracted_text=extracted_text,
+                        extraction_method=extraction_method,
+                        binary_id=binary_id,
+                        document_date=doc_date
+                    )
+
+                # Extract EOR using MedGemma
+                eor_prompt = build_operative_report_eor_extraction_prompt(extracted_text)
+                eor_result = medgemma.extract(eor_prompt, "operative_report_eor")
+
+                print(f"    EOR: {eor_result.extracted_data.get('extent_of_resection', 'Unknown')}")
+                print(f"    Operative note: {doc_id[:30]}... ({doc_date})")
+
+                all_extractions.append({
+                    'source': 'operative_report',
+                    'source_id': proc_id,
+                    'operative_note_id': doc_id,
+                    'surgery_date': proc_date,
+                    'surgery_type': surgery_type,
+                    'eor': eor_result.extracted_data if eor_result.success else {'error': eor_result.error},
+                    'confidence': eor_result.confidence
+                })
+                extraction_count['operative_reports'] += 1
+
+            except Exception as e:
+                workflow_logger.log_error(f"Failed to process operative report for {proc_id}: {e}",
+                                        error_type="operative_report_extraction_error")
+                print(f"    ⚠️  Error: {e}")
+
+        workflow_logger.log_info(f"Completed phase: {"phase_2c_operative_reports"}")
+        print(f"  ✅ Completed {extraction_count['operative_reports']} operative report extractions")
         print()
 
-        # 2D: Extract from progress notes
-        print(f"2D. Extracting from {len(oncology_notes)} oncology progress notes...")
-        # TODO: Fetch note text, extract disease state
-        print(f"  ⚠️  Progress note extraction requires note text - skipping for now")
+        # 2D: Extract from prioritized progress notes
+        print(f"2D. Extracting from {len(prioritized_notes)} prioritized progress notes...")
+        workflow_logger.log_info(f"Starting phase: {"phase_2d_progress_notes"}")
+        extraction_count['progress_notes'] = 0
+
+        for idx, prioritized_note in enumerate(prioritized_notes, 1):
+            note = prioritized_note.note
+            doc_id = note['document_reference_id']
+            binary_id = note['binary_id']
+            doc_date = note['dr_date']
+            content_type = note['content_type']
+            priority_reason = prioritized_note.priority_reason
+
+            # Check cache first
+            cached_doc = doc_cache.get_cached_document(doc_id)
+            if cached_doc:
+                extracted_text = cached_doc.extracted_text
+                workflow_logger.log_info(f"Using cached text for {doc_id}")
+            else:
+                # Extract text using BinaryFileAgent (handles PDF/HTML/text)
+                extracted_text, error = binary_agent.extract_text_from_binary(binary_id, args.patient_id)
+                if error:
+                    workflow_logger.log_warning(f"Failed to extract progress note {doc_id}: {error}")
+                    continue
+
+                # Determine extraction method based on content type
+                extraction_method = "html_beautifulsoup" if "html" in content_type else \
+                                   "pdf_pymupdf" if "pdf" in content_type else "text_plain"
+
+                # Cache the extracted text
+                doc_cache.cache_document_from_binary(
+                    document_id=doc_id,
+                    patient_fhir_id=args.patient_id,
+                    extracted_text=extracted_text,
+                    extraction_method=extraction_method,
+                    binary_id=binary_id,
+                    document_date=doc_date
+                )
+
+            # Extract disease state using MedGemma
+            disease_state_prompt = build_progress_note_disease_state_prompt(extracted_text)
+            disease_state_result = medgemma.extract(disease_state_prompt, "progress_note_disease_state")
+
+            print(f"  [{idx}/{len(prioritized_notes)}] {doc_id[:30]}... ({doc_date})")
+            print(f"    Priority: {priority_reason}")
+            print(f"    Disease state: {disease_state_result.extracted_data.get('disease_status', 'Unknown')}")
+
+            all_extractions.append({
+                'source': 'progress_note',
+                'source_id': doc_id,
+                'date': doc_date,
+                'priority_reason': priority_reason,
+                'disease_state': disease_state_result.extracted_data if disease_state_result.success else {'error': disease_state_result.error},
+                'confidence': disease_state_result.confidence
+            })
+            extraction_count['progress_notes'] += 1
+
+        workflow_logger.log_info(f"Completed phase: {"phase_2d_progress_notes"}")
+        print(f"  ✅ Completed {extraction_count['progress_notes']} progress note extractions")
         print()
 
         comprehensive_summary['phases']['agent2_extraction'] = {
