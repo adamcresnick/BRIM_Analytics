@@ -282,20 +282,40 @@ class EventTypeClassifier:
             List of EventTypeClassification for all tumor events
         """
         # Query timeline for all tumor events (chronological)
-        tumor_events = self.timeline.get_patient_events(
-            patient_id,
-            event_types=['Imaging']  # Could expand to include clinical assessments
-        )
+        tumor_events_query = """
+            SELECT DISTINCT
+                e.event_id,
+                e.event_date,
+                ev.variable_value as tumor_status
+            FROM events e
+            JOIN extracted_variables ev ON e.event_id = ev.source_event_id
+            WHERE e.patient_id = ?
+                AND ev.variable_name = 'tumor_status'
+            ORDER BY e.event_date
+        """
+        tumor_events_rows = self.timeline.conn.execute(tumor_events_query, [patient_id]).fetchall()
+        tumor_events = [{'event_id': row[0], 'event_date': row[1], 'tumor_status': row[2]} for row in tumor_events_rows]
 
         # Query surgical history
-        surgical_history = self.timeline.get_patient_events(
-            patient_id,
-            event_types=['Procedure']
-        )
-
-        # Sort by date
-        tumor_events.sort(key=lambda e: e.get('event_date'))
-        surgical_history.sort(key=lambda e: e.get('procedure_date'))
+        surgical_history_query = """
+            SELECT DISTINCT
+                e.event_id,
+                e.event_date,
+                e.description,
+                ev.variable_value as eor
+            FROM events e
+            LEFT JOIN extracted_variables ev ON e.event_id = ev.source_event_id AND ev.variable_name = 'extent_of_resection'
+            WHERE e.patient_id = ?
+                AND e.event_type = 'Procedure'
+                AND (
+                    LOWER(e.description) LIKE '%resection%'
+                    OR LOWER(e.description) LIKE '%craniotomy%'
+                    OR LOWER(e.description) LIKE '%craniectomy%'
+                )
+            ORDER BY e.event_date
+        """
+        surgical_history_rows = self.timeline.conn.execute(surgical_history_query, [patient_id]).fetchall()
+        surgical_history = [{'event_id': row[0], 'procedure_date': row[1], 'description': row[2], 'eor': row[3]} for row in surgical_history_rows]
 
         classifications = []
         for i, event in enumerate(tumor_events):

@@ -102,10 +102,19 @@ class EnhancedMasterAgent(MasterAgent):
 
         comprehensive_summary['imaging_extraction'] = imaging_summary
 
+        # If no NEW extractions, load EXISTING extractions from timeline for validation
         if imaging_summary['successful_extractions'] == 0:
-            logger.warning("No successful extractions - skipping validation")
-            comprehensive_summary['end_time'] = datetime.now().isoformat()
-            return comprehensive_summary
+            logger.info("No new extractions - loading existing extractions from timeline for validation")
+            existing_extractions = self._load_existing_extractions(patient_id)
+
+            if len(existing_extractions) == 0:
+                logger.warning("No existing extractions found - nothing to validate")
+                comprehensive_summary['end_time'] = datetime.now().isoformat()
+                return comprehensive_summary
+
+            logger.info(f"Loaded {len(existing_extractions)} existing extractions for validation")
+            imaging_summary['results'] = existing_extractions
+            imaging_summary['successful_extractions'] = len(existing_extractions)
 
         # =====================================================================
         # PHASE 2: TEMPORAL INCONSISTENCY DETECTION
@@ -413,8 +422,17 @@ Please provide your assessment in JSON format:
             [event_id]
         ).fetchone()
 
-        if result:
-            return datetime.fromisoformat(result[0])
+        if result and result[0]:
+            event_date = result[0]
+            # Handle if already datetime object
+            if isinstance(event_date, datetime):
+                return event_date
+            # Handle string
+            elif isinstance(event_date, str):
+                return datetime.fromisoformat(event_date)
+            else:
+                logger.warning(f"Unexpected event_date type for {event_id}: {type(event_date)}")
+                return datetime.min
         else:
             return datetime.min
 
@@ -443,6 +461,48 @@ Please provide your assessment in JSON format:
         ).fetchone()
 
         return result[0] > 0 if result else False
+
+    def _load_existing_extractions(self, patient_id: str) -> List[Dict[str, Any]]:
+        """
+        Load existing tumor_status extractions from timeline database.
+
+        Returns list in same format as orchestrate_imaging_extraction results.
+        """
+        try:
+            results = []
+
+            # Query all tumor_status extractions for this patient
+            query = """
+                SELECT
+                    ev.variable_name,
+                    ev.variable_value,
+                    ev.variable_confidence,
+                    ev.source_event_id,
+                    ev.event_date
+                FROM extracted_variables ev
+                WHERE ev.patient_id = ?
+                    AND ev.variable_name = 'tumor_status'
+                ORDER BY ev.event_date
+            """
+
+            rows = self.timeline.conn.execute(query, [patient_id]).fetchall()
+
+            for row in rows:
+                results.append({
+                    'event_id': row[3],
+                    'extraction_type': row[0],
+                    'success': True,
+                    'value': row[1],
+                    'confidence': float(row[2]) if row[2] else 0.0,
+                    'error': None
+                })
+
+            logger.info(f"Loaded {len(results)} existing extractions from timeline")
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to load existing extractions: {e}", exc_info=True)
+            return []
 
     def _inconsistency_to_dict(self, inconsistency: TemporalInconsistency) -> Dict[str, Any]:
         """Convert TemporalInconsistency to dict for JSON serialization"""

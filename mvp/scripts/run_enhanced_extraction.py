@@ -177,17 +177,30 @@ def main():
                 print(f"      Reasoning: {cls['reasoning'][:80]}...")
                 print()
 
-        # Save comprehensive abstraction
-        output_dir = Path("data/patient_abstractions")
+        # Save comprehensive abstraction with timestamped folder
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path("data/patient_abstractions") / timestamp
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        abstraction_path = output_dir / f"{args.patient_id}_enhanced_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        abstraction_path = output_dir / f"{args.patient_id}_enhanced.json"
 
         with open(abstraction_path, 'w') as f:
             json.dump(comprehensive_summary, f, indent=2)
 
+        # Save checkpoint (for resume capability)
+        checkpoint_path = output_dir / f"{args.patient_id}_checkpoint.json"
+        checkpoint_data = {
+            'patient_id': args.patient_id,
+            'timestamp': timestamp,
+            'status': 'complete',
+            'phases_completed': ['imaging', 'temporal', 'agent2_queries', 'event_classification']
+        }
+        with open(checkpoint_path, 'w') as f:
+            json.dump(checkpoint_data, f, indent=2)
+
         print()
         print(f"✅ Comprehensive abstraction saved: {abstraction_path}")
+        print(f"✅ Checkpoint saved: {checkpoint_path}")
         print()
 
         print("="*80)

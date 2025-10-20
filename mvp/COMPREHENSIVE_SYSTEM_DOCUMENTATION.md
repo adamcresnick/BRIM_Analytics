@@ -1,7 +1,7 @@
 # Comprehensive Multi-Agent Clinical Data Extraction System
 
 **Last Updated:** 2025-10-20
-**System Version:** Enhanced Master Agent v1.0
+**System Version:** Enhanced Master Agent v1.1 with Workflow Monitoring
 
 ---
 
@@ -9,16 +9,17 @@
 
 1. [System Overview](#system-overview)
 2. [Architecture](#architecture)
-3. [Database Schema](#database-schema)
-4. [Agent Responsibilities](#agent-responsibilities)
-5. [Workflows](#workflows)
-6. [Directory Structure](#directory-structure)
-7. [Scripts & Tools](#scripts--tools)
-8. [Data Models](#data-models)
-9. [Setup & Installation](#setup--installation)
-10. [Step-by-Step Workflows](#step-by-step-workflows)
-11. [Troubleshooting](#troubleshooting)
-12. [Future Work](#future-work)
+3. [Workflow Monitoring & Notifications](#workflow-monitoring--notifications)
+4. [Database Schema](#database-schema)
+5. [Agent Responsibilities](#agent-responsibilities)
+6. [Workflows](#workflows)
+7. [Directory Structure](#directory-structure)
+8. [Scripts & Tools](#scripts--tools)
+9. [Data Models](#data-models)
+10. [Setup & Installation](#setup--installation)
+11. [Step-by-Step Workflows](#step-by-step-workflows)
+12. [Troubleshooting](#troubleshooting)
+13. [Future Work](#future-work)
 
 ---
 
@@ -37,6 +38,9 @@ Extract and validate clinical variables from pediatric brain tumor patient recor
 - **Multi-source adjudication**: Reconciles operative reports vs imaging
 - **Event type classification**: Determines Initial/Recurrence/Progressive/Second Malignancy
 - **Comprehensive QA reports**: Documents all decisions and inconsistencies
+- **Workflow monitoring**: Multi-level logging (console, file, JSON) with error tracking
+- **Automated notifications**: Email, Slack, webhook alerts for critical errors
+- **Timestamped abstractions**: Each run creates dated folder with checkpoints
 
 ### Data Sources
 1. **v_imaging** (Athena): Text imaging reports (DiagnosticReport.conclusion)
@@ -144,6 +148,230 @@ Extract and validate clinical variables from pediatric brain tumor patient recor
    └─> Document event classifications
    └─> Save patient QA report
 ```
+
+---
+
+## Workflow Monitoring & Notifications
+
+### Overview
+
+The system includes comprehensive monitoring and notification capabilities to ensure reliable operation and rapid error detection.
+
+**Key Components:**
+- **Multi-level logging**: Console (human-readable), file (detailed debug), JSON (machine-readable)
+- **Error tracking**: Structured error categorization with severity levels
+- **Performance metrics**: Success rates, extraction counts, phase tracking
+- **Notification channels**: Email (SMTP), Slack (webhook), generic webhook
+- **Automated alerting**: Critical errors trigger immediate notifications
+
+### Logging Architecture
+
+```
+Workflow Execution
+    │
+    ├─> Console Logger (INFO level)
+    │   └─> Real-time human-readable output
+    │
+    ├─> File Logger (DEBUG level)
+    │   └─> logs/workflow_runs/{workflow}_{timestamp}.log
+    │   └─> Includes line numbers, stack traces, full context
+    │
+    ├─> JSON Logger (INFO level)
+    │   └─> logs/workflow_runs/{workflow}_{timestamp}.jsonl
+    │   └─> Machine-readable structured logs
+    │   └─> For ingestion into monitoring tools (ELK, Grafana)
+    │
+    └─> Metrics Logger
+        └─> logs/workflow_runs/{workflow}_{timestamp}_metrics.json
+        └─> Workflow performance and error statistics
+```
+
+### Error Severity Levels
+
+| Level | Description | Notification | Example |
+|-------|-------------|--------------|---------|
+| **INFO** | Normal operation | No | "Starting extraction phase" |
+| **WARNING** | Recoverable issues | Optional | "Missing optional field: tumor_size" |
+| **ERROR** | Failed operation, retryable | Yes (configurable) | "MedGemma extraction timeout" |
+| **CRITICAL** | Workflow failure | Always | "Database connection lost" |
+
+### Usage Example
+
+```python
+from utils.workflow_monitoring import WorkflowLogger
+from pathlib import Path
+
+# Initialize logger
+logger = WorkflowLogger(
+    workflow_name="multi_source_abstraction",
+    log_dir=Path("logs/workflow_runs"),
+    patient_id="patient123",
+    enable_json=True,
+    enable_notifications=True
+)
+
+# Log messages with context
+logger.log_info("Starting extraction", context={"source": "imaging"})
+logger.log_warning("Missing field", context={"field": "tumor_size"})
+logger.log_error(
+    "Extraction failed",
+    error_type="MedGemmaTimeout",
+    stack_trace=traceback.format_exc(),
+    notify=True  # Send notification
+)
+
+# Track workflow progress
+logger.update_phase("temporal_validation")
+logger.record_extraction(success=True)
+
+# Save metrics and print summary
+logger.save_metrics()
+print(logger.get_summary())
+```
+
+### Notification Configuration
+
+**Configuration File:** `config/notification_config.json`
+
+```json
+{
+  "email": {
+    "enabled": true,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "from_address": "alerts@yourorg.com",
+    "recipients": ["team@yourorg.com"]
+  },
+  "slack": {
+    "enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK",
+    "channel": "#workflow-alerts",
+    "notify_on": ["error", "critical"]
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "https://monitoring-service.com/webhook"
+  }
+}
+```
+
+### Timestamped Abstractions
+
+**Every workflow run creates a timestamped folder:**
+
+```
+data/patient_abstractions/20251020_083136/
+├── patient123_enhanced.json           # Comprehensive abstraction
+├── patient123_checkpoint.json         # Recovery checkpoint
+└── logs/
+    ├── multi_source_abstraction_20251020_083136.log        # Detailed logs
+    ├── multi_source_abstraction_20251020_083136.jsonl      # Structured logs
+    └── multi_source_abstraction_20251020_083136_metrics.json  # Performance metrics
+```
+
+**Benefits:**
+- **Reproducibility**: Complete audit trail for each run
+- **Comparison**: Compare extractions across time
+- **Recovery**: Checkpoint allows resume from failure
+- **Debugging**: Full logs preserved per run
+
+### Metrics Tracked
+
+The system automatically tracks:
+
+```json
+{
+  "workflow_id": "multi_source_abstraction_20251020_083136",
+  "patient_id": "patient123",
+  "start_time": "2025-10-20T08:31:36",
+  "current_phase": "temporal_validation",
+  "phases_completed": ["data_query", "extraction"],
+  "total_extractions": 82,
+  "successful_extractions": 79,
+  "failed_extractions": 3,
+  "errors": [
+    {
+      "timestamp": "2025-10-20T08:32:15",
+      "severity": "error",
+      "phase": "extraction",
+      "error_type": "MedGemmaTimeout",
+      "error_message": "Extraction timed out after 30s",
+      "context": {"report_id": "imaging_001"}
+    }
+  ]
+}
+```
+
+### Integration with Workflows
+
+All production workflows now include monitoring:
+
+**Example: Full Multi-Source Abstraction**
+
+```python
+# scripts/run_full_multi_source_abstraction.py
+
+from utils.workflow_monitoring import WorkflowLogger
+import traceback
+
+# Initialize monitoring
+logger = WorkflowLogger(
+    workflow_name="multi_source_abstraction",
+    log_dir=output_dir / "logs",
+    patient_id=args.patient_id,
+    enable_json=True,
+    enable_notifications=True
+)
+
+try:
+    # Phase 1: Data Query
+    logger.update_phase("data_query")
+    logger.log_info("Querying Athena for all data sources")
+
+    imaging_reports = query_athena(imaging_query)
+    logger.log_info(f"Retrieved {len(imaging_reports)} imaging reports")
+
+    # Phase 2: Extraction
+    logger.update_phase("extraction")
+
+    for report in imaging_reports:
+        try:
+            result = medgemma.extract(prompt)
+            logger.record_extraction(success=True)
+        except Exception as e:
+            logger.log_error(
+                f"Extraction failed for report {report['id']}",
+                error_type=type(e).__name__,
+                stack_trace=traceback.format_exc(),
+                context={"report_id": report['id']},
+                notify=True
+            )
+            logger.record_extraction(success=False)
+
+    # Save final metrics
+    logger.save_metrics()
+    logger.log_info("Workflow completed successfully")
+    print(logger.get_summary())
+
+except Exception as e:
+    logger.log_critical(
+        "Workflow failed with critical error",
+        error_type=type(e).__name__,
+        stack_trace=traceback.format_exc()
+    )
+    raise
+```
+
+### Documentation
+
+**Full documentation:** [docs/WORKFLOW_MONITORING.md](docs/WORKFLOW_MONITORING.md)
+
+**Configuration example:** [config/notification_config.example.json](config/notification_config.example.json)
+
+**Key files:**
+- `utils/workflow_monitoring.py` - Core monitoring framework
+- `docs/WORKFLOW_MONITORING.md` - Complete usage guide
+- `config/notification_config.example.json` - Configuration template
 
 ---
 
@@ -455,22 +683,38 @@ mvp/
 │   ├── progress_note_filters.py             # Filter oncology notes
 │   ├── timeline_schema_validator.py         # Validate/fix DB schema
 │   ├── athena_schema_registry.py            # Column name validation
-│   └── query_binary_files.py                # Binary file utilities
+│   ├── query_binary_files.py                # Binary file utilities
+│   └── workflow_monitoring.py               # Logging & notification framework
 │
 ├── data/
 │   ├── timeline.duckdb                      # Timeline database
 │   ├── extraction_results/                   # Extraction run logs/results
-│   ├── patient_abstractions/                 # Comprehensive abstractions
+│   ├── patient_abstractions/                 # Comprehensive abstractions (timestamped)
+│   │   └── 20251020_083136/                  # Example timestamped run
+│   │       ├── patient_enhanced.json         # Comprehensive abstraction
+│   │       ├── patient_checkpoint.json       # Recovery checkpoint
+│   │       └── logs/                         # Run-specific logs
 │   ├── qa_reports/                           # QA/inconsistency reports
 │   └── archive/                              # Archived databases
 │
+├── logs/
+│   └── workflow_runs/                        # Workflow monitoring logs
+│       ├── {workflow}_{timestamp}.log        # Detailed logs
+│       ├── {workflow}_{timestamp}.jsonl      # Structured logs
+│       └── {workflow}_{timestamp}_metrics.json  # Performance metrics
+│
+├── config/
+│   ├── notification_config.json             # Notification settings (user-created)
+│   └── notification_config.example.json     # Configuration template
+│
 ├── timeline_query_interface.py              # DuckDB query interface
 │
-└── Documentation:
+└── docs/
     ├── COMPREHENSIVE_SYSTEM_DOCUMENTATION.md (this file)
     ├── AGENT_WORKFLOW_ENHANCEMENTS.md        # Enhancement history
     ├── PREVENTING_COLUMN_NAME_ERRORS.md      # Best practices
-    └── ATHENA_VIEW_COLUMN_QUICK_REFERENCE.md # Column reference
+    ├── ATHENA_VIEW_COLUMN_QUICK_REFERENCE.md # Column reference
+    └── WORKFLOW_MONITORING.md                # Monitoring framework guide
 ```
 
 ---
@@ -1197,6 +1441,17 @@ conn.execute('DELETE FROM extracted_variables')
 ---
 
 ## Version History
+
+### v1.1 (2025-10-20) - Workflow Monitoring & Notifications
+- ✅ Multi-level logging framework (console, file, JSON)
+- ✅ Structured error tracking with severity levels
+- ✅ Performance metrics and workflow summaries
+- ✅ Notification system (Email, Slack, webhook)
+- ✅ Timestamped abstraction folders with checkpoints
+- ✅ Comprehensive monitoring documentation
+- ✅ Full multi-source abstraction workflow
+- ✅ Progress note filtering (oncology-specific)
+- ✅ Fixed all Athena column name errors
 
 ### v1.0 (2025-10-20) - Enhanced Master Agent
 - ✅ EnhancedMasterAgent with temporal validation
