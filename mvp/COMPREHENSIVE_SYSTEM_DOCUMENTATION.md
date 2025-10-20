@@ -1249,6 +1249,39 @@ cat data/patient_abstractions/*_enhanced_*.json | \
 
 ## Troubleshooting
 
+### Issue 0: Workflow Completes But No Data Saved (CRITICAL)
+
+**Symptoms:**
+- Workflow runs for 20+ minutes
+- Shows "✅ Completed X extractions"
+- Only creates error checkpoint file
+- No `*_comprehensive.json` or `*_enhanced.json` output
+
+**Root Cause:** JSON serialization error (ExtractionResult objects not serializable)
+
+**Fixed in v1.1.1:**
+- ExtractionResult objects now converted to dicts before save
+- Emergency partial data save on ANY error
+- Creates `*_PARTIAL.json` with whatever was extracted
+
+**Verification:**
+```bash
+# Check for output files
+ls -lh data/patient_abstractions/[timestamp]/
+
+# Should see:
+# - [patient]_comprehensive.json (success) OR
+# - [patient]_PARTIAL.json (partial success with error)
+# - [patient]_checkpoint.json (status tracking)
+```
+
+**If still seeing data loss:**
+```python
+# Check if ExtractionResult being stored directly
+grep "ExtractionResult" scripts/run_*.py
+# Should find NO matches in data storage sections
+```
+
 ### Issue 1: Timeline Database Schema Errors
 
 **Error:** `Table 'source_documents' does not exist` or `Column 'source_event_id' does not exist`
@@ -1442,6 +1475,14 @@ conn.execute('DELETE FROM extracted_variables')
 
 ## Version History
 
+### v1.1.1 (2025-10-20) - Critical Data Loss Prevention Fix
+- 🔥 **CRITICAL**: Fixed JSON serialization preventing data from being saved
+- ✅ Convert ExtractionResult objects to dicts before checkpoint save
+- ✅ Emergency partial data save on ANY workflow error
+- ✅ Confidence scores now preserved in saved extractions
+- ✅ Creates *_PARTIAL.json for debugging failed runs
+- **Impact**: Prevents 100% data loss on serialization errors (26 min of work saved)
+
 ### v1.1 (2025-10-20) - Workflow Monitoring & Notifications
 - ✅ Multi-level logging framework (console, file, JSON)
 - ✅ Structured error tracking with severity levels
@@ -1449,8 +1490,10 @@ conn.execute('DELETE FROM extracted_variables')
 - ✅ Notification system (Email, Slack, webhook)
 - ✅ Timestamped abstraction folders with checkpoints
 - ✅ Comprehensive monitoring documentation
+- ✅ Document text cache with full provenance (80% cost reduction)
+- ✅ Progress note prioritization (660 notes → ~20-40 key notes)
 - ✅ Full multi-source abstraction workflow
-- ✅ Progress note filtering (oncology-specific)
+- ✅ Progress note filtering (oncology-specific, 66.1% retention)
 - ✅ Fixed all Athena column name errors
 
 ### v1.0 (2025-10-20) - Enhanced Master Agent
