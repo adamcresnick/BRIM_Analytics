@@ -598,11 +598,26 @@ def main():
                     dr_category_text=pdf_doc.get('dr_category_text')
                 )
 
+            # Build report dict for prompt generation (matching imaging text report structure)
+            report = {
+                'diagnostic_report_id': doc_id,
+                'imaging_date': doc_date,
+                'report_conclusion': extracted_text,  # PDF text goes in report_conclusion field
+                'patient_fhir_id': args.patient_id
+            }
+
+            # Build context with surgical history
+            context = {
+                'patient_id': args.patient_id,
+                'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
+                'report_date': doc_date
+            }
+
             # Extract classification and tumor status using MedGemma
-            classification_prompt = build_imaging_classification_prompt(extracted_text)
+            classification_prompt = build_imaging_classification_prompt(report, context)
             classification_result = medgemma.extract(classification_prompt, "imaging_classification")
 
-            tumor_status_prompt = build_tumor_status_extraction_prompt(extracted_text)
+            tumor_status_prompt = build_tumor_status_extraction_prompt(report, context)
             tumor_status_result = medgemma.extract(tumor_status_prompt, "tumor_status")
 
             print(f"  [{idx}/{len(imaging_pdfs)}] {doc_id[:30]}... ({doc_date})")
