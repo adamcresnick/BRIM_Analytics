@@ -519,16 +519,12 @@ def main():
         all_extractions = []
         extraction_count = {'imaging_text': 0, 'imaging_pdf': 0, 'operative': 0, 'progress_note': 0}
 
-        # Load timeline context for Agent 1 review
-        surgical_history = timeline.conn.execute(f"""
-            SELECT event_id, event_date, description
-            FROM events
-            WHERE patient_id = ? AND event_type = 'Procedure'
-            ORDER BY event_date
-        """, [args.patient_id]).fetchall()
-
-        # Close timeline connection immediately after query
-        timeline.close()
+        # Build surgical history from Athena operative_reports (no timeline needed)
+        surgical_history = [
+            (op['procedure_fhir_id'], op['procedure_date'], op.get('surgery_type', 'Unknown'))
+            for op in operative_reports
+            if op.get('procedure_date')
+        ]
 
         # 2A: Extract from imaging text reports
         print(f"2A. Extracting from {len(imaging_text_reports)} imaging text reports...")
