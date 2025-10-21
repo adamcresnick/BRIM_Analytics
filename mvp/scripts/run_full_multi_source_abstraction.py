@@ -90,21 +90,45 @@ def query_athena(query: str, description: str) -> List[Dict[str, Any]]:
             return []
         time.sleep(1)
 
-    # Get results
-    results = client.get_query_results(QueryExecutionId=query_id)
-    if len(results['ResultSet']['Rows']) <= 1:
-        print(f" ✅ 0 records")
-        return []
-
-    # Parse results
-    header = [col['VarCharValue'] for col in results['ResultSet']['Rows'][0]['Data']]
+    # Get results with pagination to handle large result sets
     rows = []
+    next_token = None
+    header = None
 
-    for row in results['ResultSet']['Rows'][1:]:
-        row_dict = {}
-        for i, col in enumerate(row['Data']):
-            row_dict[header[i]] = col.get('VarCharValue', '')
-        rows.append(row_dict)
+    while True:
+        if next_token:
+            results = client.get_query_results(
+                QueryExecutionId=query_id,
+                NextToken=next_token,
+                MaxResults=1000
+            )
+        else:
+            results = client.get_query_results(
+                QueryExecutionId=query_id,
+                MaxResults=1000
+            )
+
+        # Parse header from first page
+        if header is None:
+            if len(results['ResultSet']['Rows']) <= 1:
+                print(f" ✅ 0 records")
+                return []
+            header = [col['VarCharValue'] for col in results['ResultSet']['Rows'][0]['Data']]
+            result_rows = results['ResultSet']['Rows'][1:]  # Skip header
+        else:
+            result_rows = results['ResultSet']['Rows']  # No header on subsequent pages
+
+        # Parse rows
+        for row in result_rows:
+            row_dict = {}
+            for i, col in enumerate(row['Data']):
+                row_dict[header[i]] = col.get('VarCharValue', '')
+            rows.append(row_dict)
+
+        # Check for more pages
+        next_token = results.get('NextToken')
+        if not next_token:
+            break
 
     print(f" ✅ {len(rows)} records")
     return rows
@@ -196,7 +220,7 @@ def main():
     # Initialize agents
     try:
         print("Initializing agents...")
-        workflow_logger.log_info(f"Starting phase: {"initialization"}")
+        workflow_logger.log_info("Starting phase: initialization")
 
         medgemma = MedGemmaAgent(model_name="gemma2:27b")
         print("✅ Agent 2 (MedGemma) initialized")
@@ -221,7 +245,7 @@ def main():
         print("✅ Agent 1 (Master orchestrator) initialized")
         print()
 
-        workflow_logger.log_info(f"Completed phase: {"initialization"}")
+        workflow_logger.log_info("Completed phase: initialization")
 
     except Exception as e:
         workflow_logger.log_error(f"Failed to initialize: {e}", error_type="initialization_error", stack_trace=str(e))
@@ -351,24 +375,61 @@ def main():
         all_progress_notes = query_athena(progress_notes_query, "Querying progress notes")
 
         # Filter to oncology-specific notes
-        filtering_results = get_note_filtering_stats(all_progress_notes)
-        oncology_notes = filter_oncology_notes(all_progress_notes)
-        print(f"  Filtered to oncology-specific: {filtering_results['oncology_notes']} notes ({filtering_results['oncology_percentage']:.1f}%)")
-        print(f"  Excluded: {filtering_results['excluded_notes']} notes")
+        try:
+            msg = "=== DEBUG: ABOUT TO FILTER ONCOLOGY NOTES ==="
+            print(msg)
+            workflow_logger.log_info(msg)
 
-        # Query chemotherapy starts from timeline for medication-based prioritization
-        print("  Querying chemotherapy events from timeline...")
+            filtering_results = get_note_filtering_stats(all_progress_notes)
+            oncology_notes = filter_oncology_notes(all_progress_notes)
+
+            filtered_msg = (
+                f"  Filtered to oncology-specific: {filtering_results['oncology_notes']} notes "
+                f"({filtering_results['oncology_percentage']:.1f}%)"
+            )
+            print(filtered_msg)
+            workflow_logger.log_info(filtered_msg)
+
+            excluded_msg = f"  Excluded: {filtering_results['excluded_notes']} notes"
+            print(excluded_msg)
+            workflow_logger.log_info(excluded_msg)
+        except Exception as e:
+            error_msg = f"  ❌ ERROR filtering oncology notes: {e}"
+            print(error_msg)
+            import traceback
+            stack = traceback.format_exc()
+            workflow_logger.log_error(
+                error_msg,
+                error_type="oncology_note_filtering_error",
+                stack_trace=stack
+            )
+            oncology_notes = all_progress_notes  # Fallback to all notes
+
+        oncology_count_msg = f"  Oncology notes available for prioritization: {len(oncology_notes)}"
+        print(oncology_count_msg)
+        workflow_logger.log_info(oncology_count_msg)
+
+        # Query chemotherapy/targeted therapy starts from timeline for medication-based prioritization
+        msg = "=== DEBUG: ABOUT TO QUERY CHEMOTHERAPY FROM TIMELINE ==="
+        print(msg)
+        workflow_logger.log_info(msg)
+
+        query_msg = "  Querying chemotherapy/targeted therapy events from timeline..."
+        print(query_msg)
+        workflow_logger.log_info(query_msg)
+
         medication_changes = []
         try:
             chemo_events_df = timeline.conn.execute(f"""
                 SELECT
                     event_id,
                     event_date,
+                    event_category,
                     description as event_description
                 FROM events
                 WHERE patient_id = '{args.patient_id}'
                     AND event_type = 'Medication'
-                    AND event_category = 'Chemotherapy'
+                    AND event_category IN ('Chemotherapy', 'Targeted Therapy')
                 ORDER BY event_date
             """).fetchdf()
 
@@ -378,27 +439,57 @@ def main():
                     'change_date': row['event_date'],
                     'medication_id': row['event_id']
                 })
-            print(f"  Found {len(medication_changes)} chemotherapy start events")
+            found_msg = f"  Found {len(medication_changes)} chemotherapy/targeted therapy start events"
+            print(found_msg)
+            workflow_logger.log_info(found_msg)
         except Exception as e:
-            print(f"  ⚠️  Timeline query failed (timeline not populated): {str(e)[:100]}")
-            print(f"  Continuing without medication-based prioritization...")
+            warn_msg = f"  ⚠️  Timeline query failed (timeline not populated): {str(e)[:100]}"
+            print(warn_msg)
+            workflow_logger.log_warning(warn_msg)
+            cont_msg = "  Continuing without medication-based prioritization..."
+            print(cont_msg)
+            workflow_logger.log_warning(cont_msg)
+        finally:
+            # Close timeline connection to avoid DuckDB lock conflicts
+            timeline.close()
+
+        medication_count_msg = f"  Medication change events available: {len(medication_changes)}"
+        print(medication_count_msg)
+        workflow_logger.log_info(medication_count_msg)
 
         # Prioritize progress notes based on clinical events
-        print("  Prioritizing progress notes based on clinical events...")
+        prioritize_msg = "  Prioritizing progress notes based on clinical events..."
+        print(prioritize_msg)
+        workflow_logger.log_info(prioritize_msg)
+
         prioritized_notes = note_prioritizer.prioritize_notes(
             progress_notes=oncology_notes,
             surgeries=operative_reports,
             imaging_events=imaging_text_reports,  # Use imaging text as imaging events
             medication_changes=medication_changes if medication_changes else None
         )
-        print(f"  Prioritized to {len(prioritized_notes)} key notes ({len(prioritized_notes)/len(oncology_notes)*100:.1f}% of oncology notes)")
+        if len(oncology_notes) > 0:
+            prioritized_msg = (
+                f"  Prioritized to {len(prioritized_notes)} key notes "
+                f"({len(prioritized_notes)/len(oncology_notes)*100:.1f}% of oncology notes)"
+            )
+            print(prioritized_msg)
+            workflow_logger.log_info(prioritized_msg)
+        else:
+            no_onc_msg = (
+                f"  Prioritized to {len(prioritized_notes)} key notes (no oncology notes found)"
+            )
+            print(no_onc_msg)
+            workflow_logger.log_info(no_onc_msg)
 
         # Get priority reasons summary
         priority_counts = {}
         for pn in prioritized_notes:
             reason = pn.priority_reason
             priority_counts[reason] = priority_counts.get(reason, 0) + 1
-        print(f"  Priority breakdown: {dict(priority_counts)}")
+        breakdown_msg = f"  Priority breakdown: {dict(priority_counts)}"
+        print(breakdown_msg)
+        workflow_logger.log_info(breakdown_msg)
 
         print()
         comprehensive_summary['phases']['data_query'] = {
@@ -430,6 +521,9 @@ def main():
             WHERE patient_id = ? AND event_type = 'Procedure'
             ORDER BY event_date
         """, [args.patient_id]).fetchall()
+
+        # Close timeline connection immediately after query
+        timeline.close()
 
         # 2A: Extract from imaging text reports
         print(f"2A. Extracting from {len(imaging_text_reports)} imaging text reports...")
@@ -470,7 +564,7 @@ def main():
 
         # 2B: Extract from imaging PDFs
         print(f"2B. Extracting from {len(imaging_pdfs)} imaging PDFs...")
-        workflow_logger.log_info(f"Starting phase: {"phase_2b_imaging_pdfs"}")
+        workflow_logger.log_info("Starting phase: phase_2b_imaging_pdfs")
         extraction_count['imaging_pdf'] = 0
 
         for idx, pdf_doc in enumerate(imaging_pdfs, 1):
@@ -497,7 +591,11 @@ def main():
                     extracted_text=extracted_text,
                     extraction_method="pdf_pymupdf",
                     binary_id=binary_id,
-                    document_date=doc_date
+                    document_date=doc_date,
+                    content_type=pdf_doc.get('content_type'),
+                    document_type="imaging_report",
+                    dr_type_text=pdf_doc.get('dr_type_text'),
+                    dr_category_text=pdf_doc.get('dr_category_text')
                 )
 
             # Extract classification and tumor status using MedGemma
@@ -522,13 +620,13 @@ def main():
             })
             extraction_count['imaging_pdf'] += 1
 
-        workflow_logger.log_info(f"Completed phase: {"phase_2b_imaging_pdfs"}")
+        workflow_logger.log_info("Completed phase: phase_2b_imaging_pdfs")
         print(f"  ✅ Completed {extraction_count['imaging_pdf']} imaging PDF extractions")
         print()
 
         # 2C: Extract from operative reports
         print(f"2C. Extracting from {len(operative_reports)} operative reports...")
-        workflow_logger.log_info(f"Starting phase: {"phase_2c_operative_reports"}")
+        workflow_logger.log_info("Starting phase: phase_2c_operative_reports")
         extraction_count['operative_reports'] = 0
 
         for idx, surgery in enumerate(operative_reports, 1):
@@ -601,7 +699,12 @@ def main():
                         extracted_text=extracted_text,
                         extraction_method=extraction_method,
                         binary_id=binary_id,
-                        document_date=doc_date
+                        document_date=doc_date,
+                        content_type=content_type,
+                        document_type="operative_report",
+                        dr_type_text=op_note.get('dr_type_text'),
+                        dr_category_text=op_note.get('dr_category_text'),
+                        dr_description=op_note.get('dr_description')
                     )
 
                 # Extract EOR using MedGemma
@@ -627,13 +730,13 @@ def main():
                                         error_type="operative_report_extraction_error")
                 print(f"    ⚠️  Error: {e}")
 
-        workflow_logger.log_info(f"Completed phase: {"phase_2c_operative_reports"}")
+        workflow_logger.log_info("Completed phase: phase_2c_operative_reports")
         print(f"  ✅ Completed {extraction_count['operative_reports']} operative report extractions")
         print()
 
         # 2D: Extract from prioritized progress notes
         print(f"2D. Extracting from {len(prioritized_notes)} prioritized progress notes...")
-        workflow_logger.log_info(f"Starting phase: {"phase_2d_progress_notes"}")
+        workflow_logger.log_info("Starting phase: phase_2d_progress_notes")
         extraction_count['progress_notes'] = 0
 
         for idx, prioritized_note in enumerate(prioritized_notes, 1):
@@ -667,7 +770,12 @@ def main():
                     extracted_text=extracted_text,
                     extraction_method=extraction_method,
                     binary_id=binary_id,
-                    document_date=doc_date
+                    document_date=doc_date,
+                    content_type=content_type,
+                    document_type="progress_note",
+                    dr_type_text=note.get('dr_type_text'),
+                    dr_category_text=note.get('dr_category_text'),
+                    dr_description=note.get('dr_description')
                 )
 
             # Extract disease state using MedGemma
@@ -688,7 +796,7 @@ def main():
             })
             extraction_count['progress_notes'] += 1
 
-        workflow_logger.log_info(f"Completed phase: {"phase_2d_progress_notes"}")
+        workflow_logger.log_info("Completed phase: phase_2d_progress_notes")
         print(f"  ✅ Completed {extraction_count['progress_notes']} progress note extractions")
         print()
 
