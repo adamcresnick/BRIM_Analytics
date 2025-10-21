@@ -48,8 +48,10 @@ from agents.extraction_prompts import (
     build_progress_note_disease_state_prompt,
     build_imaging_classification_prompt,
     build_eor_extraction_prompt,
-    build_tumor_status_extraction_prompt
+    build_tumor_status_extraction_prompt,
+    build_tumor_location_extraction_prompt
 )
+from utils.brain_location_normalizer import BrainTumorLocationNormalizer
 from agents.eor_adjudicator import EORAdjudicator, EORSource
 from agents.event_type_classifier import EventTypeClassifier
 
@@ -306,6 +308,10 @@ def main():
         # Initialize ProgressNotePrioritizer
         note_prioritizer = ProgressNotePrioritizer()
         print("✅ Progress note prioritizer initialized")
+
+        # Initialize BrainTumorLocationNormalizer
+        location_normalizer = BrainTumorLocationNormalizer()
+        print("✅ Tumor location normalizer initialized")
 
         eor_adjudicator = EORAdjudicator(medgemma_agent=medgemma)
         event_classifier = EventTypeClassifier(timeline_query_interface=timeline)
@@ -704,14 +710,40 @@ def main():
             tumor_status_result = medgemma.extract(tumor_status_prompt)
             print(f"    Tumor status: {tumor_status_result.extracted_data.get('tumor_status', 'unknown')}")
 
+            # Tumor location
+            location_prompt = build_tumor_location_extraction_prompt(report, context)
+            location_result = medgemma.extract(location_prompt, "tumor_location")
+
+            # Normalize location to CBTN codes
+            normalized_locations = []
+            if location_result.success and location_result.extracted_data:
+                primary_location = location_result.extracted_data.get('primary_location', '')
+                if primary_location and primary_location != 'Not specified':
+                    normalized = location_normalizer.normalise_label(primary_location)
+                    if normalized:
+                        normalized_locations.append({
+                            'type': 'primary',
+                            'free_text': primary_location,
+                            'cbtn_code': normalized.cbtn_code,
+                            'cbtn_label': normalized.cbtn_label,
+                            'confidence': normalized.confidence,
+                            'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label} for node in normalized.ontology_nodes]
+                        })
+
+            location_display = location_result.extracted_data.get('primary_location', 'Not extracted') if location_result.success else 'Error'
+            print(f"    Location: {location_display}")
+
             all_extractions.append({
                 'source': 'imaging_text',
                 'source_id': report_id,
                 'date': report_date,
                 'classification': classification_result.extracted_data if classification_result.success else {'error': classification_result.error},
                 'tumor_status': tumor_status_result.extracted_data if tumor_status_result.success else {'error': tumor_status_result.error},
+                'tumor_location': location_result.extracted_data if location_result.success else {'error': location_result.error},
+                'tumor_location_normalized': normalized_locations,
                 'classification_confidence': classification_result.confidence,
-                'tumor_status_confidence': tumor_status_result.confidence
+                'tumor_status_confidence': tumor_status_result.confidence,
+                'tumor_location_confidence': location_result.confidence
             })
             extraction_count['imaging_text'] += 1
 
@@ -787,9 +819,49 @@ def main():
             tumor_status_prompt = build_tumor_status_extraction_prompt(report, context)
             tumor_status_result = medgemma.extract(tumor_status_prompt, "tumor_status")
 
+            # Tumor location
+            location_prompt = build_tumor_location_extraction_prompt(report, context)
+            location_result = medgemma.extract(location_prompt, "tumor_location")
+
+            # Normalize location to CBTN codes
+            normalized_locations = []
+            if location_result.success and location_result.extracted_data:
+                primary_location = location_result.extracted_data.get('primary_location', '')
+                if primary_location and primary_location != 'Not specified':
+                    normalized = location_normalizer.normalise_label(primary_location)
+                    if normalized:
+                        normalized_locations.append({
+                            'type': 'primary',
+                            'free_text': primary_location,
+                            'cbtn_code': normalized.cbtn_code,
+                            'cbtn_label': normalized.cbtn_label,
+                            'confidence': normalized.confidence,
+                            'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                            for node in normalized.ontology_nodes]
+                        })
+
+                # Also normalize additional locations if present
+                additional_locs = location_result.extracted_data.get('all_locations_mentioned', [])
+                for loc_text in additional_locs:
+                    if loc_text and loc_text != primary_location and loc_text != 'Not specified':
+                        normalized = location_normalizer.normalise_label(loc_text)
+                        if normalized:
+                            normalized_locations.append({
+                                'type': 'additional',
+                                'free_text': loc_text,
+                                'cbtn_code': normalized.cbtn_code,
+                                'cbtn_label': normalized.cbtn_label,
+                                'confidence': normalized.confidence,
+                                'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                                for node in normalized.ontology_nodes]
+                            })
+
+            location_display = location_result.extracted_data.get('primary_location', 'Not extracted') if location_result.success else 'Error'
+
             print(f"  [{idx}/{len(imaging_pdfs)}] {doc_id[:30]}... ({doc_date})")
             print(f"    Classification: {classification_result.extracted_data.get('imaging_type', 'unknown')}")
             print(f"    Tumor status: {tumor_status_result.extracted_data.get('overall_status', 'Unknown')}")
+            print(f"    Location: {location_display}")
 
             all_extractions.append({
                 'source': 'imaging_pdf',
@@ -797,8 +869,11 @@ def main():
                 'date': doc_date,
                 'classification': classification_result.extracted_data if classification_result.success else {'error': classification_result.error},
                 'tumor_status': tumor_status_result.extracted_data if tumor_status_result.success else {'error': tumor_status_result.error},
+                'tumor_location': location_result.extracted_data if location_result.success else {'error': location_result.error},
+                'tumor_location_normalized': normalized_locations,
                 'classification_confidence': classification_result.confidence,
-                'tumor_status_confidence': tumor_status_result.confidence
+                'tumor_status_confidence': tumor_status_result.confidence,
+                'tumor_location_confidence': location_result.confidence
             })
             extraction_count['imaging_pdf'] += 1
 
@@ -920,7 +995,47 @@ def main():
                 eor_prompt = build_operative_report_eor_extraction_prompt(operative_report, context)
                 eor_result = medgemma.extract(eor_prompt, "operative_report_eor")
 
+                # Tumor location
+                location_prompt = build_tumor_location_extraction_prompt(operative_report, context)
+                location_result = medgemma.extract(location_prompt, "tumor_location")
+
+                # Normalize location to CBTN codes
+                normalized_locations = []
+                if location_result.success and location_result.extracted_data:
+                    primary_location = location_result.extracted_data.get('primary_location', '')
+                    if primary_location and primary_location != 'Not specified':
+                        normalized = location_normalizer.normalise_label(primary_location)
+                        if normalized:
+                            normalized_locations.append({
+                                'type': 'primary',
+                                'free_text': primary_location,
+                                'cbtn_code': normalized.cbtn_code,
+                                'cbtn_label': normalized.cbtn_label,
+                                'confidence': normalized.confidence,
+                                'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                                for node in normalized.ontology_nodes]
+                            })
+
+                    # Also normalize additional locations if present
+                    additional_locs = location_result.extracted_data.get('all_locations_mentioned', [])
+                    for loc_text in additional_locs:
+                        if loc_text and loc_text != primary_location and loc_text != 'Not specified':
+                            normalized = location_normalizer.normalise_label(loc_text)
+                            if normalized:
+                                normalized_locations.append({
+                                    'type': 'additional',
+                                    'free_text': loc_text,
+                                    'cbtn_code': normalized.cbtn_code,
+                                    'cbtn_label': normalized.cbtn_label,
+                                    'confidence': normalized.confidence,
+                                    'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                                    for node in normalized.ontology_nodes]
+                                })
+
+                location_display = location_result.extracted_data.get('primary_location', 'Not extracted') if location_result.success else 'Error'
+
                 print(f"    EOR: {eor_result.extracted_data.get('extent_of_resection', 'Unknown')}")
+                print(f"    Location: {location_display}")
                 print(f"    Operative note: {doc_id[:30]}... ({doc_date})")
 
                 all_extractions.append({
@@ -930,7 +1045,10 @@ def main():
                     'surgery_date': proc_date,
                     'surgery_type': surgery_type,
                     'eor': eor_result.extracted_data if eor_result.success else {'error': eor_result.error},
-                    'confidence': eor_result.confidence
+                    'tumor_location': location_result.extracted_data if location_result.success else {'error': location_result.error},
+                    'tumor_location_normalized': normalized_locations,
+                    'confidence': eor_result.confidence,
+                    'tumor_location_confidence': location_result.confidence
                 })
                 extraction_count['operative_reports'] += 1
 
@@ -1017,9 +1135,49 @@ def main():
             disease_state_prompt = build_progress_note_disease_state_prompt(progress_note, context)
             disease_state_result = medgemma.extract(disease_state_prompt, "progress_note_disease_state")
 
+            # Tumor location
+            location_prompt = build_tumor_location_extraction_prompt(progress_note, context)
+            location_result = medgemma.extract(location_prompt, "tumor_location")
+
+            # Normalize location to CBTN codes
+            normalized_locations = []
+            if location_result.success and location_result.extracted_data:
+                primary_location = location_result.extracted_data.get('primary_location', '')
+                if primary_location and primary_location != 'Not specified':
+                    normalized = location_normalizer.normalise_label(primary_location)
+                    if normalized:
+                        normalized_locations.append({
+                            'type': 'primary',
+                            'free_text': primary_location,
+                            'cbtn_code': normalized.cbtn_code,
+                            'cbtn_label': normalized.cbtn_label,
+                            'confidence': normalized.confidence,
+                            'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                            for node in normalized.ontology_nodes]
+                        })
+
+                # Also normalize additional locations if present
+                additional_locs = location_result.extracted_data.get('all_locations_mentioned', [])
+                for loc_text in additional_locs:
+                    if loc_text and loc_text != primary_location and loc_text != 'Not specified':
+                        normalized = location_normalizer.normalise_label(loc_text)
+                        if normalized:
+                            normalized_locations.append({
+                                'type': 'additional',
+                                'free_text': loc_text,
+                                'cbtn_code': normalized.cbtn_code,
+                                'cbtn_label': normalized.cbtn_label,
+                                'confidence': normalized.confidence,
+                                'ontology_ids': [{'source': node.source, 'id': node.id, 'label': node.label}
+                                                for node in normalized.ontology_nodes]
+                            })
+
+            location_display = location_result.extracted_data.get('primary_location', 'Not extracted') if location_result.success else 'Error'
+
             print(f"  [{idx}/{len(prioritized_notes)}] {doc_id[:30]}... ({doc_date})")
             print(f"    Priority: {priority_reason}")
             print(f"    Disease state: {disease_state_result.extracted_data.get('disease_status', 'Unknown')}")
+            print(f"    Location: {location_display}")
 
             all_extractions.append({
                 'source': 'progress_note',
@@ -1027,7 +1185,10 @@ def main():
                 'date': doc_date,
                 'priority_reason': priority_reason,
                 'disease_state': disease_state_result.extracted_data if disease_state_result.success else {'error': disease_state_result.error},
-                'confidence': disease_state_result.confidence
+                'tumor_location': location_result.extracted_data if location_result.success else {'error': location_result.error},
+                'tumor_location_normalized': normalized_locations,
+                'confidence': disease_state_result.confidence,
+                'tumor_location_confidence': location_result.confidence
             })
             extraction_count['progress_notes'] += 1
 

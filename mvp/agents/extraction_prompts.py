@@ -572,11 +572,166 @@ Type: {note_type}
     return prompt
 
 
+def build_tumor_location_extraction_prompt(
+    report: Dict[str, Any],
+    context: Dict[str, Any]
+) -> str:
+    """
+    Build prompt for tumor location extraction from clinical reports.
+
+    Extracts anatomical location(s) from imaging, operative, or progress note text.
+    MedGemma returns free-text location mentions which are then normalized to CBTN codes.
+
+    Args:
+        report: Report dict with document_text, report_text, or note_text
+        context: Context dict with patient_id, report_date, events_before/after
+
+    Returns:
+        Formatted prompt string for MedGemma
+    """
+    import json
+
+    # Extract report text with multiple fallbacks
+    report_text = report.get('document_text',
+                             report.get('radiology_report_text',
+                             report.get('note_text', '')))
+
+    report_date = report.get('document_date',
+                            report.get('imaging_date',
+                            report.get('dr_date',
+                            report.get('procedure_date', 'Unknown'))))
+
+    report_type = report.get('report_type', 'clinical report')
+
+    # Format complete report as JSON
+    report_json = json.dumps(report, indent=2, default=str)
+
+    prompt = f"""You are a neuro-oncology AI assistant analyzing a {report_type} to extract brain tumor location information.
+
+**TASK:** Extract ALL anatomical locations where tumor is mentioned in this report. Be comprehensive - include primary location, areas of extension, and any metastatic sites.
+
+**REPORT INFORMATION:**
+Date: {report_date}
+Type: {report_type}
+
+**COMPLETE REPORT DATA (JSON):**
+```json
+{report_json}
+```
+
+**REPORT TEXT:**
+{report_text}
+
+**EXTRACTION TARGETS:**
+
+Extract ALL locations mentioned using anatomically precise terminology:
+
+**Supratentorial Locations:**
+- Frontal lobe (specify: superior, middle, inferior, precentral, orbitofrontal, etc.)
+- Temporal lobe (specify: superior, middle, inferior, mesial, temporal pole, etc.)
+- Parietal lobe (specify: superior, inferior, postcentral, etc.)
+- Occipital lobe (specify: calcarine, occipital pole, cuneus, etc.)
+- Thalamus (specify: anterior, medial, lateral, pulvinar, etc.)
+- Basal ganglia (specify: caudate, putamen, globus pallidus, etc.)
+- Corpus callosum (specify: genu, body, splenium)
+- Insula
+- Internal capsule
+- Lateral ventricles, third ventricle, fourth ventricle
+- Suprasellar region, hypothalamus, pituitary region
+- Pineal gland
+
+**Infratentorial/Posterior Fossa:**
+- Cerebellum (specify: vermis, hemisphere, peduncle)
+- Brain stem - Midbrain/tectum (specify: tectum, tegmentum, cerebral peduncle)
+- Brain stem - Pons
+- Brain stem - Medulla
+- Fourth ventricle
+- Cerebellopontine angle
+
+**Spinal Locations:**
+- Cervical spine (specify level if mentioned: C1-C7)
+- Thoracic spine (specify level if mentioned: T1-T12)
+- Lumbar spine (specify level if mentioned: L1-L5)
+- Sacral spine
+- Thecal sac
+- Conus medullaris
+- Cauda equina
+
+**Special Regions:**
+- Optic pathway (optic nerve, chiasm, tract)
+- Cranial nerves (specify: CN II, CN III, etc.)
+- Meninges/dura
+- Leptomeninges
+- Skull base
+
+**LATERALITY:**
+Always specify if mentioned:
+- Left, Right, Bilateral
+- Midline
+- Crossing midline
+
+**EXTRACTION RULES:**
+
+1. **Primary Location**: The main anatomical site of the tumor
+2. **Areas of Extension**: Any regions tumor extends into
+3. **Multifocal Sites**: If multiple separate lesions, list each location
+4. **Precise Terminology**: Use the exact anatomical terms from the report
+5. **Include Descriptors**: "left frontal lobe", "right cerebellar hemisphere", "bilateral thalami"
+6. **Quote Evidence**: Provide exact phrases supporting each location
+
+**OUTPUT FORMAT (JSON):**
+{{
+  "primary_location": "Main anatomical site (e.g., 'left frontal lobe', 'fourth ventricle')",
+  "laterality": "left" | "right" | "bilateral" | "midline" | "not specified",
+  "additional_locations": [
+    {{
+      "location": "Anatomical site (e.g., 'corpus callosum', 'thalamus')",
+      "relationship": "extension" | "separate lesion" | "leptomeningeal spread",
+      "evidence": "Quote from report mentioning this location"
+    }}
+  ],
+  "all_locations_mentioned": [
+    "List of all distinct anatomical locations mentioned (free text)"
+  ],
+  "confidence": 0.0-1.0,
+  "extraction_notes": "Any ambiguities or clarifications about location determination"
+}}
+
+**IMPORTANT:**
+- Extract locations EXACTLY as described in the report (preserve clinical terminology)
+- If multiple areas involved, list ALL locations
+- Higher confidence (>0.9) if explicit anatomical location statements present
+- Lower confidence (<0.7) if location is inferred or vague
+- If no location mentioned, return primary_location: "Not specified"
+- Return ONLY valid JSON, no additional text
+
+**EXAMPLES:**
+
+Example 1: "Large heterogeneous mass in the left frontal lobe extending into the corpus callosum and crossing midline"
+→ primary_location: "left frontal lobe"
+→ laterality: "left"
+→ additional_locations: [{{"location": "corpus callosum", "relationship": "extension"}}, {{"location": "right frontal lobe", "relationship": "extension"}}]
+
+Example 2: "Fourth ventricular mass with extension into the cerebellar vermis"
+→ primary_location: "fourth ventricle"
+→ laterality: "midline"
+→ additional_locations: [{{"location": "cerebellar vermis", "relationship": "extension"}}]
+
+Example 3: "Enhancing lesion in the left midbrain and left thalamus"
+→ primary_location: "left midbrain"
+→ laterality: "left"
+→ additional_locations: [{{"location": "left thalamus", "relationship": "extension or separate lesion"}}]
+"""
+
+    return prompt
+
+
 # Export functions for MasterAgent to use
 __all__ = [
     'build_imaging_classification_prompt',
     'build_eor_extraction_prompt',
     'build_tumor_status_extraction_prompt',
     'build_operative_report_eor_extraction_prompt',
-    'build_progress_note_disease_state_prompt'
+    'build_progress_note_disease_state_prompt',
+    'build_tumor_location_extraction_prompt'
 ]
