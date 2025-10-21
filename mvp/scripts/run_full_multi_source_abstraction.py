@@ -293,6 +293,9 @@ def main():
         print("="*80)
         print()
 
+        # Strip "Patient/" prefix for Athena queries (views store IDs without prefix)
+        athena_patient_id = args.patient_id.replace('Patient/', '')
+
         # 1A: Imaging text reports
         print("1A. Imaging text reports (v_imaging):")
         imaging_text_query = f"""
@@ -303,7 +306,7 @@ def main():
                 report_conclusion,
                 patient_fhir_id
             FROM v_imaging
-            WHERE patient_fhir_id = '{args.patient_id}'
+            WHERE patient_fhir_id = '{athena_patient_id}'
             ORDER BY imaging_date
         """
         imaging_text_reports = query_athena(imaging_text_query, "Querying imaging text reports")
@@ -320,7 +323,7 @@ def main():
                 content_type,
                 patient_fhir_id
             FROM v_binary_files
-            WHERE patient_fhir_id = '{args.patient_id}'
+            WHERE patient_fhir_id = '{athena_patient_id}'
                 AND content_type = 'application/pdf'
                 AND (
                     LOWER(dr_category_text) LIKE '%imaging%'
@@ -342,7 +345,7 @@ def main():
                 surgery_type,
                 patient_fhir_id
             FROM v_procedures_tumor
-            WHERE patient_fhir_id = '{args.patient_id}'
+            WHERE patient_fhir_id = '{athena_patient_id}'
                 AND is_tumor_surgery = true
             ORDER BY proc_performed_date_time
         """
@@ -360,7 +363,7 @@ def main():
                 content_type,
                 patient_fhir_id
             FROM v_binary_files
-            WHERE patient_fhir_id = '{args.patient_id}'
+            WHERE patient_fhir_id = '{athena_patient_id}'
                 AND (
                     content_type = 'text/plain'
                     OR content_type = 'text/html'
