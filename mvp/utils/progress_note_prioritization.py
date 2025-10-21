@@ -12,7 +12,7 @@ the most clinically relevant disease state assessments.
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dataclasses import dataclass
 import logging
 
@@ -157,11 +157,18 @@ class ProgressNotePrioritizer:
         # 3. Notes around medication changes (if provided)
         # Include notes both BEFORE and AFTER medication start
         if medication_changes:
-            for med_change in medication_changes:
+            logger.info(f"Processing {len(medication_changes)} medication changes for note prioritization")
+            for idx, med_change in enumerate(medication_changes, 1):
                 try:
-                    change_date = self._parse_date(med_change.get('change_date'))
+                    raw_change_date = med_change.get('change_date')
+                    logger.debug(f"Med change {idx}/{len(medication_changes)}: raw_date={raw_change_date} (type={type(raw_change_date).__name__})")
+
+                    change_date = self._parse_date(raw_change_date)
                     if not change_date:
+                        logger.warning(f"Med change {idx}: Failed to parse date from {raw_change_date}")
                         continue
+
+                    logger.info(f"Med change {idx}: Searching for notes around {change_date.date()} (parsed from {raw_change_date})")
 
                     # Find last note BEFORE medication change (baseline)
                     pre_med_change_note = self._find_last_note_before_event(
@@ -169,6 +176,8 @@ class ProgressNotePrioritizer:
                         change_date,
                         self.post_event_window_days
                     )
+
+                    logger.info(f"Med change {idx}: Pre-med search result: {pre_med_change_note is not None}")
 
                     if pre_med_change_note and pre_med_change_note['note'].get('document_reference_id') not in note_ids_seen:
                         prioritized.append(PrioritizedNote(
@@ -188,6 +197,8 @@ class ProgressNotePrioritizer:
                         change_date,
                         self.post_event_window_days
                     )
+
+                    logger.info(f"Med change {idx}: Post-med search result: {post_med_change_note is not None}")
 
                     if post_med_change_note and post_med_change_note['note'].get('document_reference_id') not in note_ids_seen:
                         prioritized.append(PrioritizedNote(
@@ -249,17 +260,42 @@ class ProgressNotePrioritizer:
         Returns:
             Dictionary with 'note' and 'days_from_event', or None
         """
+        # Convert pandas Timestamp to datetime BEFORE calculations
+        if hasattr(event_date, 'to_pydatetime'):
+            event_date = event_date.to_pydatetime()
+
         window_end = event_date + timedelta(days=window_days)
 
+        logger.info(f"_find_first_note_after_event: event_date={event_date} (type={type(event_date).__name__}), window_end={window_end}, checking {len(notes_with_dates)} notes")
+
+        # Log first note date for comparison
+        if notes_with_dates:
+            first_note_date = notes_with_dates[0][1]
+            logger.info(f"  First note date: {first_note_date} (type={type(first_note_date).__name__})")
+
+        checked_count = 0
         for note, note_date in notes_with_dates:
-            # Note must be AFTER event and within window
-            if event_date < note_date <= window_end:
+            checked_count += 1
+
+            # Convert pandas Timestamp to datetime if needed
+            if hasattr(note_date, 'to_pydatetime'):
+                note_date = note_date.to_pydatetime()
+
+            # Type checking for debugging
+            if not isinstance(event_date, datetime) or not isinstance(note_date, datetime):
+                logger.warning(f"TYPE MISMATCH at note {checked_count}: event_date is {type(event_date).__name__}, note_date is {type(note_date).__name__}")
+                continue
+
+            # Note must be ON/AFTER event and within window
+            if event_date <= note_date <= window_end:
                 days_from_event = (note_date - event_date).days
+                logger.info(f"MATCH FOUND: note_date={note_date.date()}, days_from_event={days_from_event}")
                 return {
                     'note': note,
                     'days_from_event': days_from_event
                 }
 
+        logger.info(f"No matching note found after event_date={event_date.date()}, checked {checked_count} notes")
         return None
 
     def _find_last_note_before_event(
@@ -279,10 +315,18 @@ class ProgressNotePrioritizer:
         Returns:
             Dictionary with 'note' and 'days_from_event' (negative), or None
         """
+        # Convert pandas Timestamp to datetime if needed
+        if hasattr(event_date, 'to_pydatetime'):
+            event_date = event_date.to_pydatetime()
+
         window_start = event_date - timedelta(days=window_days)
 
         # Search backwards from event date
         for note, note_date in reversed(notes_with_dates):
+            # Convert pandas Timestamp to datetime if needed
+            if hasattr(note_date, 'to_pydatetime'):
+                note_date = note_date.to_pydatetime()
+
             # Note must be BEFORE event and within window
             if window_start <= note_date < event_date:
                 days_from_event = (note_date - event_date).days  # Will be negative
@@ -300,6 +344,9 @@ class ProgressNotePrioritizer:
 
         if isinstance(date_value, datetime):
             return date_value
+
+        if isinstance(date_value, date):
+            return datetime.combine(date_value, datetime.min.time())
 
         if isinstance(date_value, str):
             try:
