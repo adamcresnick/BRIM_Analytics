@@ -265,7 +265,9 @@ def main():
 
     # Save checkpoint function
     def save_checkpoint(phase: str, status: str, data: Dict = None):
-        checkpoint_path = output_dir / f"{args.patient_id}_checkpoint.json"
+        # Sanitize patient_id for filename (replace / with _)
+        safe_patient_id = args.patient_id.replace('/', '_')
+        checkpoint_path = output_dir / f"{safe_patient_id}_checkpoint.json"
         checkpoint_data = {
             'patient_id': args.patient_id,
             'timestamp': timestamp,
@@ -915,7 +917,9 @@ def main():
         # ================================================================
         comprehensive_summary['end_time'] = datetime.now().isoformat()
 
-        abstraction_path = output_dir / f"{args.patient_id}_comprehensive.json"
+        # Sanitize patient_id for filename
+        safe_patient_id = args.patient_id.replace('/', '_')
+        abstraction_path = output_dir / f"{safe_patient_id}_comprehensive.json"
         with open(abstraction_path, 'w') as f:
             json.dump(comprehensive_summary, f, indent=2)
 
@@ -948,7 +952,9 @@ def main():
             comprehensive_summary['status'] = 'failed_with_partial_data'
             comprehensive_summary['error'] = str(e)
 
-            emergency_path = output_dir / f"{args.patient_id}_PARTIAL.json"
+            # Sanitize patient_id for filename
+            safe_patient_id = args.patient_id.replace('/', '_')
+            emergency_path = output_dir / f"{safe_patient_id}_PARTIAL.json"
             with open(emergency_path, 'w') as f:
                 json.dump(comprehensive_summary, f, indent=2)
 
