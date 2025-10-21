@@ -584,7 +584,12 @@ def main():
                 workflow_logger.log_info(f"Using cached text for {doc_id}")
             else:
                 # Extract text from PDF using BinaryFileAgent
-                extracted_text, error = binary_agent.extract_text_from_binary(binary_id, args.patient_id)
+                extracted_text, error = binary_agent.extract_text_from_binary(
+                    binary_id=binary_id,
+                    patient_fhir_id=args.patient_id,
+                    content_type=pdf_doc.get('content_type'),
+                    document_reference_id=doc_id
+                )
                 if error:
                     workflow_logger.log_warning(f"Failed to extract PDF {doc_id}: {error}")
                     continue
