@@ -340,14 +340,14 @@ def main():
         operative_query = f"""
             SELECT
                 procedure_fhir_id,
-                proc_performed_date_time,
+                procedure_date,
                 proc_code_text,
                 surgery_type,
                 patient_fhir_id
             FROM v_procedures_tumor
             WHERE patient_fhir_id = '{athena_patient_id}'
                 AND is_tumor_surgery = true
-            ORDER BY proc_performed_date_time
+            ORDER BY procedure_date
         """
         operative_reports = query_athena(operative_query, "Querying operative reports")
 
@@ -656,13 +656,13 @@ def main():
 
         for idx, surgery in enumerate(operative_reports, 1):
             proc_id = surgery['procedure_fhir_id']
-            proc_date = surgery['proc_performed_date_time']
+            proc_date = surgery['procedure_date']
             surgery_type = surgery.get('surgery_type', 'unknown')
 
             print(f"  [{idx}/{len(operative_reports)}] {proc_id[:30]}... ({proc_date}) - {surgery_type}")
 
             # Skip procedures with missing date
-            if not proc_date or proc_date.strip() == '':
+            if not proc_date or (isinstance(proc_date, str) and proc_date.strip() == ''):
                 print(f"    ⚠️  Skipping procedure with missing date")
                 continue
 
