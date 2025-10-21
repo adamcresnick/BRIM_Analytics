@@ -44,10 +44,28 @@ class TimelineQueryInterface:
 
     @property
     def conn(self):
-        """Lazy connection - only connect when needed"""
+        """
+        Lazy connection - only connect when needed
+
+        Note: For DuckDB, we create a fresh connection each time to avoid
+        lock conflicts when the same database is accessed from multiple
+        parts of the code. DuckDB connections are lightweight.
+        """
         if self._conn is None:
             self._conn = duckdb.connect(self.db_path, read_only=False)
         return self._conn
+
+    def get_connection(self):
+        """
+        Get a fresh connection for a single query operation
+
+        This method creates a new connection that should be closed after use.
+        Use this for one-off queries to avoid lock conflicts.
+
+        Returns:
+            DuckDB connection object
+        """
+        return duckdb.connect(self.db_path, read_only=False)
 
     def close(self):
         """Close database connection"""
