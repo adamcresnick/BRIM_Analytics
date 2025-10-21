@@ -851,12 +851,99 @@ def main():
         print()
 
         inconsistencies = []
-        # TODO: Implement temporal inconsistency detection
+
+        # Build list of tumor status extractions from imaging for temporal analysis
+        imaging_extractions = []
+        for extraction in all_extractions:
+            if extraction['source'] in ['imaging_text', 'imaging_pdf']:
+                tumor_status = None
+                if 'tumor_status' in extraction:
+                    ts = extraction['tumor_status']
+                    if isinstance(ts, dict) and not ts.get('error'):
+                        tumor_status = ts.get('overall_status') or ts.get('tumor_status')
+
+                if tumor_status:
+                    imaging_extractions.append({
+                        'source_id': extraction['source_id'],
+                        'date': extraction['date'],
+                        'tumor_status': tumor_status,
+                        'confidence': extraction.get('tumor_status_confidence', 0.0)
+                    })
+
+        # Sort by date
+        imaging_extractions.sort(key=lambda x: x['date'] if x['date'] else '')
+
+        # Detect inconsistencies in consecutive pairs
+        for i in range(len(imaging_extractions) - 1):
+            prior = imaging_extractions[i]
+            current = imaging_extractions[i + 1]
+
+            try:
+                prior_date = datetime.fromisoformat(str(prior['date']))
+                current_date = datetime.fromisoformat(str(current['date']))
+                days_diff = (current_date - prior_date).days
+
+                prior_status = prior['tumor_status']
+                current_status = current['tumor_status']
+
+                # RULE 1: Rapid improvement (Increased→Decreased in <14 days without surgery)
+                if prior_status == 'Increased' and current_status == 'Decreased' and days_diff < 14:
+                    # Check if surgery explains this
+                    surgery_between = any(
+                        ext for ext in all_extractions
+                        if ext['source'] == 'operative_report'
+                        and prior_date <= datetime.fromisoformat(str(ext.get('surgery_date', ''))) <= current_date
+                    ) if all_extractions else False
+
+                    if not surgery_between:
+                        inconsistencies.append({
+                            'inconsistency_id': f"rapid_improvement_{prior['source_id']}_{current['source_id']}",
+                            'type': 'rapid_improvement',
+                            'severity': 'high',
+                            'description': f"Tumor status improved from Increased to Decreased in {days_diff} days without documented surgery",
+                            'prior_date': str(prior_date.date()),
+                            'current_date': str(current_date.date()),
+                            'days_between': days_diff,
+                            'prior_status': prior_status,
+                            'current_status': current_status,
+                            'requires_agent2_query': True
+                        })
+
+                # RULE 2: Unexplained progression (NED→Increased in <90 days)
+                if prior_status == 'NED' and current_status == 'Increased' and days_diff < 90:
+                    inconsistencies.append({
+                        'inconsistency_id': f"unexpected_progression_{prior['source_id']}_{current['source_id']}",
+                        'type': 'unexpected_progression',
+                        'severity': 'medium',
+                        'description': f"Disease detected {days_diff} days after NED (possible recurrence)",
+                        'prior_date': str(prior_date.date()),
+                        'current_date': str(current_date.date()),
+                        'days_between': days_diff,
+                        'prior_status': prior_status,
+                        'current_status': current_status,
+                        'requires_agent2_query': False  # Expected pattern
+                    })
+
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to compare dates for inconsistency detection: {e}")
+                continue
+
         print(f"  Detected {len(inconsistencies)} temporal inconsistencies")
+        if inconsistencies:
+            high_severity = [i for i in inconsistencies if i['severity'] == 'high']
+            medium_severity = [i for i in inconsistencies if i['severity'] == 'medium']
+            print(f"    High severity: {len(high_severity)}")
+            print(f"    Medium severity: {len(medium_severity)}")
+
+            # Show samples
+            for inc in inconsistencies[:3]:
+                print(f"    - {inc['type']}: {inc['description']}")
         print()
 
         comprehensive_summary['phases']['temporal_inconsistencies'] = {
             'count': len(inconsistencies),
+            'high_severity': len([i for i in inconsistencies if i['severity'] == 'high']),
+            'requiring_agent2_query': len([i for i in inconsistencies if i.get('requires_agent2_query')]),
             'details': inconsistencies
         }
         save_checkpoint('temporal_inconsistencies', 'completed')

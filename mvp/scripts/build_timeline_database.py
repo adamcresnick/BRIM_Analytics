@@ -14,8 +14,13 @@ import pandas as pd
 import json
 import boto3
 import time
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Add path to ChemotherapyFilter
+sys.path.append('/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_views/data_dictionary')
+from chemotherapy_filter import ChemotherapyFilter
 
 # Configuration
 TEST_PATIENT_ID = "e4BwD8ZYDBccepXcJ.Ilo3w3"
@@ -89,6 +94,91 @@ def execute_athena_query(query, database=ATHENA_DATABASE):
     return df
 
 
+def query_medications_for_patient(patient_id):
+    """
+    Query v_medications directly to get medication name and RxNorm codes
+    """
+    print(f"\n{'='*80}")
+    print(f"Querying medications for ChemotherapyFilter")
+    print(f"{'='*80}\n")
+
+    query = f"""
+    SELECT
+        medication_request_id,
+        medication_name,
+        rx_norm_codes,
+        medication_start_date
+    FROM {ATHENA_DATABASE}.v_medications
+    WHERE patient_fhir_id = '{patient_id}'
+    """
+
+    df = execute_athena_query(query)
+    print(f"Retrieved {len(df)} medications from v_medications")
+
+    return df
+
+
+def apply_chemotherapy_filter(medications_df):
+    """
+    Apply ChemotherapyFilter to classify medications as chemotherapy/targeted therapy
+    Returns dict mapping medication_request_id to corrected event_category
+    """
+    print(f"\n{'='*80}")
+    print(f"Applying ChemotherapyFilter to medications")
+    print(f"{'='*80}\n")
+
+    # Initialize filter
+    chemo_filter = ChemotherapyFilter()
+
+    # Print statistics
+    stats = chemo_filter.get_statistics()
+    print("ChemotherapyFilter loaded:")
+    for key, value in stats.items():
+        print(f"  {key}: {value}")
+
+    # Apply filter to each medication
+    category_map = {}
+    chemo_count = 0
+    targeted_count = 0
+    other_count = 0
+
+    for idx, row in medications_df.iterrows():
+        med_name = row['medication_name']
+        rx_codes = row['rx_norm_codes']
+        med_id = row['medication_request_id']
+
+        result = chemo_filter.is_chemotherapy(med_name, rx_codes)
+
+        if result['is_chemo']:
+            # Check if it's targeted therapy based on drug properties
+            # For now, use simple heuristic: if matched by name alias with medium confidence,
+            # it might be targeted therapy (selumetinib, dabrafenib, trametinib)
+            # Otherwise classify as Chemotherapy
+
+            # Simple classification: drugs matched by name that are known targeted therapies
+            med_name_lower = med_name.lower()
+            if any(drug in med_name_lower for drug in ['selumetinib', 'dabrafenib', 'trametinib',
+                                                         'vemurafenib', 'everolimus', 'temsirolimus']):
+                category_map[med_id] = 'Targeted Therapy'
+                targeted_count += 1
+            else:
+                category_map[med_id] = 'Chemotherapy'
+                chemo_count += 1
+
+            print(f"  ✓ {med_name} → {category_map[med_id]} ({result['strategy']}, {result['confidence']} confidence)")
+        else:
+            # Not chemotherapy - keep original categorization
+            category_map[med_id] = None  # Will use original from v_unified_patient_timeline
+            other_count += 1
+
+    print(f"\nChemotherapyFilter results:")
+    print(f"  Chemotherapy: {chemo_count}")
+    print(f"  Targeted Therapy: {targeted_count}")
+    print(f"  Other medications: {other_count}")
+
+    return category_map
+
+
 def export_unified_timeline_for_patient(patient_id):
     """
     Export v_unified_patient_timeline from Athena for specific patient
@@ -136,8 +226,35 @@ def export_unified_timeline_for_patient(patient_id):
     df['event_date'] = pd.to_datetime(df['event_date'])
     df = df.sort_values('event_date').reset_index(drop=True)
 
-    print(f"\nEvent type distribution:")
+    print(f"\nEvent type distribution (BEFORE ChemotherapyFilter):")
     print(df['event_type'].value_counts())
+
+    # Apply ChemotherapyFilter to correct medication categories
+    print(f"\nApplying ChemotherapyFilter to correct medication categorization...")
+    medications_df = query_medications_for_patient(patient_id)
+    category_map = apply_chemotherapy_filter(medications_df)
+
+    # Update medication event categories
+    updated_count = 0
+    for idx, row in df.iterrows():
+        if row['event_type'] == 'Medication':
+            # Extract medication_request_id from event_id (format: 'med_<medication_request_id>')
+            med_id = row['event_id'].replace('med_', '')
+
+            if med_id in category_map and category_map[med_id] is not None:
+                old_category = row['event_category']
+                new_category = category_map[med_id]
+                df.at[idx, 'event_category'] = new_category
+                if old_category != new_category:
+                    updated_count += 1
+                    print(f"  Updated: {row['event_description'][:50]} | {old_category} → {new_category}")
+
+    print(f"\n✓ Updated {updated_count} medication categories using ChemotherapyFilter")
+
+    print(f"\nEvent type distribution (AFTER ChemotherapyFilter):")
+    medication_events = df[df['event_type'] == 'Medication']
+    if not medication_events.empty:
+        print(medication_events['event_category'].value_counts())
 
     return df
 

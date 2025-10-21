@@ -13,6 +13,7 @@ import requests
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,12 @@ class MedGemmaAgent:
 
     def _call_ollama(self, prompt: str, temperature: float) -> str:
         """Call Ollama API and return response text"""
+        prompt_length = len(prompt)
+        preview = prompt[:200].replace("\n", " ") if prompt_length > 200 else prompt.replace("\n", " ")
+        logger.info(f"MedGemma prompt length: {prompt_length} chars | preview: {preview[:200]}")
+
+        start_time = time.perf_counter()
+
         payload = {
             "model": self.model_name,
             "prompt": prompt,
@@ -191,9 +198,15 @@ class MedGemmaAgent:
             json=payload,
             timeout=120  # 2 minute timeout for large models
         )
+
         response.raise_for_status()
 
         result = response.json()
+
+        elapsed = time.perf_counter() - start_time
+        response_preview = result.get('response', '')[:200].replace("\n", " ")
+        logger.info(f"Ollama responded in {elapsed:.1f}s | response preview: {response_preview}")
+
         return result.get('response', '')
 
     def _parse_response(self, response: str) -> Dict[str, Any]:

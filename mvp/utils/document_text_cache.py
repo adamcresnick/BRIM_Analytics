@@ -174,9 +174,18 @@ class DocumentTextCache:
                 logger.info(f"Document already cached: {doc.document_id}")
                 return False
 
-            # Insert into cache
+            # Insert into cache (explicitly list columns to avoid DEFAULT column issues)
             self.conn.execute("""
-                INSERT INTO extracted_document_text VALUES (
+                INSERT INTO extracted_document_text (
+                    document_id, patient_fhir_id, binary_id,
+                    document_type, document_date, content_type,
+                    dr_type_text, dr_category_text, dr_description,
+                    extracted_text, text_length, text_hash,
+                    extraction_timestamp, extraction_method, extraction_version, extractor_agent,
+                    s3_bucket, s3_key, s3_last_modified,
+                    extraction_success, extraction_error,
+                    age_at_document_days, additional_metadata
+                ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
             """, [
@@ -211,6 +220,116 @@ class DocumentTextCache:
         except Exception as e:
             logger.error(f"Error caching document {doc.document_id}: {e}")
             raise
+
+    def cache_document_from_binary(
+        self,
+        document_id: str,
+        patient_fhir_id: str,
+        extracted_text: str,
+        extraction_method: str,
+        binary_id: Optional[str] = None,
+        document_date: Optional[str] = None,
+        content_type: Optional[str] = None,
+        document_type: Optional[str] = None,
+        dr_type_text: Optional[str] = None,
+        dr_category_text: Optional[str] = None,
+        dr_description: Optional[str] = None,
+        extractor_agent: str = "binary_file_agent",
+        s3_bucket: Optional[str] = None,
+        s3_key: Optional[str] = None,
+        s3_last_modified: Optional[str] = None,
+        age_at_document_days: Optional[int] = None,
+        additional_metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Convenience helper to cache extracted text that originated from a binary document.
+        """
+        if not extracted_text:
+            raise ValueError("extracted_text must be non-empty when caching a document")
+
+        normalized_date = self._normalize_document_date(document_date)
+        resolved_content_type = content_type or "application/octet-stream"
+        inferred_document_type = document_type or self._infer_document_type(
+            dr_type_text,
+            dr_category_text,
+            resolved_content_type
+        )
+
+        text_hash = hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
+
+        cached_doc = CachedDocument(
+            document_id=document_id,
+            patient_fhir_id=patient_fhir_id,
+            binary_id=binary_id,
+            document_type=inferred_document_type,
+            document_date=normalized_date,
+            content_type=resolved_content_type,
+            dr_type_text=dr_type_text,
+            dr_category_text=dr_category_text,
+            dr_description=dr_description,
+            extracted_text=extracted_text,
+            text_length=len(extracted_text),
+            text_hash=text_hash,
+            extraction_timestamp=datetime.utcnow().isoformat(),
+            extraction_method=extraction_method,
+            extraction_version=self.EXTRACTION_VERSION,
+            extractor_agent=extractor_agent,
+            s3_bucket=s3_bucket,
+            s3_key=s3_key,
+            s3_last_modified=s3_last_modified,
+            extraction_success=True,
+            extraction_error=None,
+            age_at_document_days=age_at_document_days,
+            additional_metadata=json.dumps(additional_metadata) if additional_metadata else None
+        )
+
+        return self.cache_document(cached_doc)
+
+    def _normalize_document_date(self, document_date: Optional[str]) -> str:
+        """Ensure dates are stored in ISO format."""
+        if document_date is None:
+            return datetime.utcnow().isoformat()
+
+        if isinstance(document_date, datetime):
+            return document_date.isoformat()
+
+        try:
+            datetime.fromisoformat(document_date.replace("Z", "+00:00"))
+            return document_date
+        except Exception:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(document_date, fmt)
+                    return parsed.isoformat()
+                except Exception:
+                    continue
+
+        logger.warning(f"Unable to parse document_date '{document_date}', defaulting to now()")
+        return datetime.utcnow().isoformat()
+
+    def _infer_document_type(
+        self,
+        dr_type_text: Optional[str],
+        dr_category_text: Optional[str],
+        content_type: Optional[str]
+    ) -> str:
+        """
+        Basic heuristic to infer document type when not explicitly provided.
+        """
+        combined = " ".join(filter(None, [
+            dr_type_text,
+            dr_category_text,
+            content_type
+        ])).lower()
+
+        if any(keyword in combined for keyword in ("operative", "surgery", "procedur")):
+            return "operative_report"
+        if any(keyword in combined for keyword in ("progress", "clinic", "note")):
+            return "progress_note"
+        if any(keyword in combined for keyword in ("imaging", "radiology", "diagnostic report", "mri", "ct")):
+            return "imaging_report"
+
+        return "clinical_document"
 
     def get_cached_document(self, document_id: str) -> Optional[CachedDocument]:
         """
