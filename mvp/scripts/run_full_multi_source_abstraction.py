@@ -656,9 +656,14 @@ def main():
 
             print(f"  [{idx}/{len(operative_reports)}] {proc_id[:30]}... ({proc_date}) - {surgery_type}")
 
+            # Skip procedures with missing date
+            if not proc_date or proc_date.strip() == '':
+                print(f"    ⚠️  Skipping procedure with missing date")
+                continue
+
             # Query for operative note DocumentReference linked to this procedure
             # Search for notes created around the time of surgery (±7 days)
-            proc_date_str = proc_date.split()[0] if isinstance(proc_date, str) else str(proc_date)
+            proc_date_str = proc_date.split()[0] if isinstance(proc_date, str) and ' ' in proc_date else str(proc_date)
 
             op_note_query = f"""
                 SELECT
