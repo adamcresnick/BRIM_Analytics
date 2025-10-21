@@ -25,9 +25,12 @@ def build_imaging_classification_prompt(
     - post_operative: Imaging within 72 hours after surgery (assesses extent of resection)
     - surveillance: Follow-up imaging for monitoring (3-6 months intervals)
     """
-    report_text = report.get('document_text', '')
-    imaging_date = report.get('document_date', 'Unknown')
-    modality = report.get('metadata', {}).get('imaging_modality', 'Unknown')
+    import json
+
+    # Extract key fields with fallbacks for different field names
+    report_text = report.get('document_text', report.get('radiology_report_text', ''))
+    imaging_date = report.get('document_date', report.get('imaging_date', 'Unknown'))
+    modality = report.get('metadata', {}).get('imaging_modality', report.get('imaging_modality', 'Unknown'))
 
     # Extract temporal context
     procedures_before = context.get('events_before', [])
@@ -69,6 +72,9 @@ def build_imaging_classification_prompt(
 
     context_text = "\n".join(context_summary)
 
+    # Format entire report as JSON for MedGemma to see all available fields
+    report_json = json.dumps(report, indent=2, default=str)
+
     prompt = f"""You are a medical AI analyzing a radiology report to classify the imaging study.
 
 **TASK:** Classify this imaging study as one of:
@@ -82,6 +88,11 @@ Modality: {modality}
 
 **TEMPORAL CONTEXT (procedures near this imaging):**
 {context_text}
+
+**COMPLETE REPORT DATA (JSON):**
+```json
+{report_json}
+```
 
 **RADIOLOGY REPORT TEXT:**
 {report_text}
@@ -230,9 +241,25 @@ def build_operative_report_eor_extraction_prompt(
     - Partial Resection
     - Biopsy Only
     """
-    report_text = operative_report.get('note_text', '')
-    procedure_date = operative_report.get('procedure_date', 'Unknown')
-    procedure_code = operative_report.get('proc_code_text', 'Unknown')
+    import json
+
+    # Extract key fields with fallbacks
+    report_text = operative_report.get('note_text', operative_report.get('document_text', ''))
+    procedure_date = operative_report.get('procedure_date', operative_report.get('surgery_date', 'Unknown'))
+    procedure_code = operative_report.get('proc_code_text', operative_report.get('surgery_type', 'Unknown'))
+
+    # Build timeline context
+    prior_surgeries = []
+    events_before = context.get('events_before', [])
+    for event in events_before:
+        if event.get('event_type') == 'Procedure':
+            days_ago = abs(event.get('days_diff', 0))
+            prior_surgeries.append(f"- {event.get('description', 'Surgery')}: {days_ago} days before (date: {event.get('event_date', 'Unknown')})")
+
+    timeline_context = "\n".join(prior_surgeries) if prior_surgeries else "- No prior tumor surgeries found"
+
+    # Format complete report as JSON
+    report_json = json.dumps(operative_report, indent=2, default=str)
 
     prompt = f"""You are a neurosurgical AI assistant analyzing an operative report to determine the extent of tumor resection.
 
@@ -241,6 +268,14 @@ def build_operative_report_eor_extraction_prompt(
 **OPERATIVE REPORT INFORMATION:**
 Date: {procedure_date}
 Procedure: {procedure_code}
+
+**SURGICAL TIMELINE (prior surgeries):**
+{timeline_context}
+
+**COMPLETE OPERATIVE REPORT DATA (JSON):**
+```json
+{report_json}
+```
 
 **OPERATIVE NOTE TEXT:**
 {report_text}
@@ -303,8 +338,11 @@ def build_tumor_status_extraction_prompt(
     - Decreased (Partial response - size reduction)
     - New_Malignancy (Second primary or new lesion)
     """
-    report_text = report.get('document_text', '')
-    imaging_date = report.get('document_date', 'Unknown')
+    import json
+
+    # Extract key fields
+    report_text = report.get('document_text', report.get('radiology_report_text', ''))
+    imaging_date = report.get('document_date', report.get('imaging_date', 'Unknown'))
 
     # Find prior imaging for comparison context
     prior_context = "No prior imaging available for comparison"
@@ -321,6 +359,9 @@ def build_tumor_status_extraction_prompt(
         prior_date = most_recent_prior.get('event_date', 'Unknown')
         prior_context = f"Prior imaging: {days_diff} days before (date: {prior_date})"
 
+    # Format entire report as JSON for MedGemma to see all available fields
+    report_json = json.dumps(report, indent=2, default=str)
+
     prompt = f"""You are a neuro-oncology AI assistant analyzing a surveillance MRI report to determine tumor status.
 
 **TASK:** Determine the tumor status by comparing this imaging to prior studies.
@@ -328,6 +369,11 @@ def build_tumor_status_extraction_prompt(
 **IMAGING INFORMATION:**
 Current imaging date: {imaging_date}
 Comparison: {prior_context}
+
+**COMPLETE REPORT DATA (JSON):**
+```json
+{report_json}
+```
 
 **RADIOLOGY REPORT TEXT:**
 {report_text}
@@ -408,9 +454,41 @@ def build_progress_note_disease_state_prompt(
     - Physical exam findings
     - Treatment response assessment
     """
-    note_text = progress_note.get('note_text', '')
-    note_date = progress_note.get('dr_date', 'Unknown')
-    note_type = progress_note.get('dr_type_text', 'Unknown')
+    import json
+
+    # Extract key fields with fallbacks
+    note_text = progress_note.get('note_text', progress_note.get('document_text', ''))
+    note_date = progress_note.get('dr_date', progress_note.get('document_date', 'Unknown'))
+    note_type = progress_note.get('dr_type_text', 'Progress Note')
+
+    # Build timeline context - show recent imaging and surgeries
+    timeline_summary = []
+
+    events_before = context.get('events_before', [])
+
+    # Recent imaging (last 3 months)
+    recent_imaging = [e for e in events_before if e.get('event_type') == 'Imaging' and abs(e.get('days_diff', 999)) <= 90]
+    if recent_imaging:
+        timeline_summary.append("Recent Imaging:")
+        for img in recent_imaging[:3]:  # Last 3 imaging studies
+            days_ago = abs(img.get('days_diff', 0))
+            timeline_summary.append(f"  - {img.get('event_category', 'MRI')}: {days_ago} days before (date: {img.get('event_date', 'Unknown')})")
+
+    # Recent surgeries
+    recent_surgeries = [e for e in events_before if e.get('event_type') == 'Procedure']
+    if recent_surgeries:
+        timeline_summary.append("Surgical History:")
+        for surg in recent_surgeries[:2]:  # Last 2 surgeries
+            days_ago = abs(surg.get('days_diff', 0))
+            timeline_summary.append(f"  - {surg.get('description', 'Surgery')}: {days_ago} days before (date: {surg.get('event_date', 'Unknown')})")
+
+    if not timeline_summary:
+        timeline_summary.append("No recent imaging or surgeries found in timeline")
+
+    timeline_context = "\n".join(timeline_summary)
+
+    # Format complete progress note as JSON
+    note_json = json.dumps(progress_note, indent=2, default=str)
 
     prompt = f"""You are a neuro-oncology AI assistant analyzing a progress note to extract the oncologist's disease state assessment.
 
@@ -419,6 +497,14 @@ def build_progress_note_disease_state_prompt(
 **PROGRESS NOTE INFORMATION:**
 Date: {note_date}
 Type: {note_type}
+
+**CLINICAL TIMELINE (context for this assessment):**
+{timeline_context}
+
+**COMPLETE PROGRESS NOTE DATA (JSON):**
+```json
+{note_json}
+```
 
 **PROGRESS NOTE TEXT:**
 {note_text}

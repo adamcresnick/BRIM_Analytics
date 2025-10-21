@@ -30,6 +30,7 @@ import boto3
 import time
 from typing import Dict, List, Any, Optional
 import base64
+import subprocess
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -58,6 +59,65 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def check_and_refresh_aws_sso_token(profile_name: str = 'radiant-prod') -> bool:
+    """
+    Check if AWS SSO token is valid and refresh if expired.
+
+    Args:
+        profile_name: AWS profile name to check/refresh
+
+    Returns:
+        True if token is valid or successfully refreshed, False otherwise
+    """
+    try:
+        # Try to create a session and client - this will fail if token is expired
+        session = boto3.Session(profile_name=profile_name)
+        sts = session.client('sts')
+        sts.get_caller_identity()
+        logger.info(f"AWS SSO token for profile '{profile_name}' is valid")
+        return True
+    except Exception as e:
+        error_msg = str(e)
+        if 'Token has expired' in error_msg or 'sso' in error_msg.lower():
+            logger.warning(f"AWS SSO token expired. Attempting to refresh...")
+            print(f"\n⚠️  AWS SSO token expired. Running 'aws sso login --profile {profile_name}'...")
+            print("This will open a browser window for authentication.\n")
+
+            try:
+                # Run aws sso login command
+                result = subprocess.run(
+                    ['aws', 'sso', 'login', '--profile', profile_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout for user to complete login
+                )
+
+                if result.returncode == 0:
+                    logger.info(f"AWS SSO token refreshed successfully for profile '{profile_name}'")
+                    print(f"✅ AWS SSO token refreshed successfully\n")
+                    return True
+                else:
+                    logger.error(f"Failed to refresh AWS SSO token: {result.stderr}")
+                    print(f"❌ Failed to refresh AWS SSO token: {result.stderr}\n")
+                    return False
+
+            except subprocess.TimeoutExpired:
+                logger.error("AWS SSO login timed out after 5 minutes")
+                print("❌ AWS SSO login timed out. Please run 'aws sso login --profile radiant-prod' manually.\n")
+                return False
+            except FileNotFoundError:
+                logger.error("AWS CLI not found. Please install AWS CLI.")
+                print("❌ AWS CLI not found. Please install AWS CLI.\n")
+                return False
+            except Exception as refresh_error:
+                logger.error(f"Error during AWS SSO refresh: {refresh_error}")
+                print(f"❌ Error during AWS SSO refresh: {refresh_error}\n")
+                return False
+        else:
+            logger.error(f"AWS session error (not SSO-related): {e}")
+            raise
 
 
 def query_athena(query: str, description: str) -> List[Dict[str, Any]]:
@@ -177,6 +237,13 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Check and refresh AWS SSO token if needed
+    if not check_and_refresh_aws_sso_token('radiant-prod'):
+        logger.error("Cannot proceed without valid AWS SSO token")
+        print("\n❌ Cannot proceed without valid AWS SSO token.")
+        print("Please run 'aws sso login --profile radiant-prod' manually and try again.\n")
+        sys.exit(1)
 
     # Create timestamped output folder
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -303,10 +370,12 @@ def main():
                 diagnostic_report_id,
                 imaging_date,
                 imaging_modality,
+                result_information as radiology_report_text,
                 report_conclusion,
                 patient_fhir_id
             FROM v_imaging
             WHERE patient_fhir_id = '{athena_patient_id}'
+                AND result_information IS NOT NULL
             ORDER BY imaging_date
         """
         imaging_text_reports = query_athena(imaging_text_query, "Querying imaging text reports")
@@ -526,6 +595,86 @@ def main():
             if op.get('procedure_date')
         ]
 
+        # Helper function to build timeline context for each document
+        def build_timeline_context(current_date_str: str) -> Dict:
+            """
+            Build events_before and events_after context for a given date.
+            Uses in-memory data from imaging_text_reports and surgical_history.
+            """
+            from datetime import datetime, timedelta
+
+            try:
+                current_date = datetime.fromisoformat(str(current_date_str).replace(' ', 'T'))
+            except (ValueError, AttributeError):
+                return {'events_before': [], 'events_after': []}
+
+            events_before = []
+            events_after = []
+
+            # Add imaging events
+            for img in imaging_text_reports:
+                try:
+                    img_date_str = img.get('imaging_date')
+                    if not img_date_str:
+                        continue
+                    img_date = datetime.fromisoformat(str(img_date_str).replace(' ', 'T'))
+                    days_diff = (current_date - img_date).days
+
+                    # Only include events within ±180 days
+                    if abs(days_diff) > 180:
+                        continue
+
+                    event = {
+                        'event_type': 'Imaging',
+                        'event_category': img.get('imaging_modality', 'MRI Brain'),
+                        'event_date': img_date_str.split(' ')[0],
+                        'days_diff': -days_diff,  # Negative if before, positive if after
+                        'description': f"{img.get('imaging_modality', 'MRI')}"
+                    }
+
+                    if days_diff > 0:  # Before current date
+                        events_before.append(event)
+                    elif days_diff < 0:  # After current date
+                        events_after.append(event)
+
+                except (ValueError, AttributeError):
+                    continue
+
+            # Add procedure events
+            for proc_id, proc_date_str, surgery_type in surgical_history:
+                try:
+                    proc_date = datetime.fromisoformat(str(proc_date_str).replace(' ', 'T'))
+                    days_diff = (current_date - proc_date).days
+
+                    # Only include procedures within ±180 days
+                    if abs(days_diff) > 180:
+                        continue
+
+                    event = {
+                        'event_type': 'Procedure',
+                        'event_category': 'Surgery',
+                        'event_date': proc_date_str.split(' ')[0] if ' ' in str(proc_date_str) else str(proc_date_str),
+                        'days_diff': -days_diff,  # Negative if before, positive if after
+                        'description': surgery_type
+                    }
+
+                    if days_diff > 0:  # Before current date
+                        events_before.append(event)
+                    elif days_diff < 0:  # After current date
+                        events_after.append(event)
+
+                except (ValueError, AttributeError):
+                    continue
+
+            # Sort by proximity to current date
+            events_before.sort(key=lambda x: abs(x['days_diff']))
+            events_after.sort(key=lambda x: abs(x['days_diff']))
+
+            return {
+                'events_before': events_before,
+                'events_after': events_after
+            }
+
         # 2A: Extract from imaging text reports
         print(f"2A. Extracting from {len(imaging_text_reports)} imaging text reports...")
         for i, report in enumerate(imaging_text_reports, 1):
@@ -533,10 +682,16 @@ def main():
             report_date = report.get('imaging_date', 'unknown')
             print(f"  [{i}/{len(imaging_text_reports)}] {report_id[:30]}... ({report_date})")
 
+            # Build timeline context with events before/after this report
+            timeline_events = build_timeline_context(report_date)
+
+            # Pass entire report dict to prompts - they will extract what they need
             context = {
                 'patient_id': args.patient_id,
                 'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
-                'report_date': report_date
+                'report_date': report_date,
+                'events_before': timeline_events['events_before'],
+                'events_after': timeline_events['events_after']
             }
 
             # Imaging classification
@@ -608,15 +763,21 @@ def main():
             report = {
                 'diagnostic_report_id': doc_id,
                 'imaging_date': doc_date,
-                'report_conclusion': extracted_text,  # PDF text goes in report_conclusion field
+                'radiology_report_text': extracted_text,  # Full extracted PDF text
+                'document_text': extracted_text,  # Alias for compatibility
                 'patient_fhir_id': args.patient_id
             }
 
-            # Build context with surgical history
+            # Build timeline context with events before/after this report
+            timeline_events = build_timeline_context(doc_date)
+
+            # Build context with surgical history and timeline
             context = {
                 'patient_id': args.patient_id,
                 'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
-                'report_date': doc_date
+                'report_date': doc_date,
+                'events_before': timeline_events['events_before'],
+                'events_after': timeline_events['events_after']
             }
 
             # Extract classification and tumor status using MedGemma
@@ -733,8 +894,30 @@ def main():
                         dr_description=op_note.get('dr_description')
                     )
 
+                # Build operative report dict
+                operative_report = {
+                    'note_text': extracted_text,
+                    'document_text': extracted_text,
+                    'procedure_date': proc_date,
+                    'surgery_date': proc_date,
+                    'proc_code_text': surgery['proc_code_text'],
+                    'surgery_type': surgery_type,
+                    'procedure_fhir_id': proc_id,
+                    'operative_note_id': doc_id
+                }
+
+                # Build timeline context
+                timeline_events = build_timeline_context(proc_date)
+                context = {
+                    'patient_id': args.patient_id,
+                    'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
+                    'report_date': proc_date,
+                    'events_before': timeline_events['events_before'],
+                    'events_after': timeline_events['events_after']
+                }
+
                 # Extract EOR using MedGemma
-                eor_prompt = build_operative_report_eor_extraction_prompt(extracted_text)
+                eor_prompt = build_operative_report_eor_extraction_prompt(operative_report, context)
                 eor_result = medgemma.extract(eor_prompt, "operative_report_eor")
 
                 print(f"    EOR: {eor_result.extracted_data.get('extent_of_resection', 'Unknown')}")
@@ -809,8 +992,29 @@ def main():
                     dr_description=note.get('dr_description')
                 )
 
+            # Build progress note dict
+            progress_note = {
+                'note_text': extracted_text,
+                'document_text': extracted_text,
+                'dr_date': doc_date,
+                'document_date': doc_date,
+                'dr_type_text': note.get('dr_type_text'),
+                'document_reference_id': doc_id,
+                'priority_reason': priority_reason
+            }
+
+            # Build timeline context
+            timeline_events = build_timeline_context(doc_date)
+            context = {
+                'patient_id': args.patient_id,
+                'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
+                'report_date': doc_date,
+                'events_before': timeline_events['events_before'],
+                'events_after': timeline_events['events_after']
+            }
+
             # Extract disease state using MedGemma
-            disease_state_prompt = build_progress_note_disease_state_prompt(extracted_text)
+            disease_state_prompt = build_progress_note_disease_state_prompt(progress_note, context)
             disease_state_result = medgemma.extract(disease_state_prompt, "progress_note_disease_state")
 
             print(f"  [{idx}/{len(prioritized_notes)}] {doc_id[:30]}... ({doc_date})")
@@ -953,12 +1157,71 @@ def main():
         print()
 
         clarifications = []
-        # TODO: For each high-severity inconsistency, query Agent 2
+
+        # Query Agent 2 for clarification on high-severity inconsistencies
+        high_severity_inc = [i for i in inconsistencies if i.get('requires_agent2_query')]
+
+        for inc in high_severity_inc:
+            try:
+                # Build clarification prompt
+                clarification_prompt = f'''# AGENT 1 REQUESTS CLARIFICATION FROM AGENT 2
+
+## Temporal Inconsistency Detected
+
+**Type:** {inc['type']}
+**Severity:** {inc['severity']}
+**Description:** {inc['description']}
+
+## Timeline
+- **{inc['prior_date']}**: {inc['prior_status']}
+- **{inc['current_date']}**: {inc['current_status']}
+- **Days between**: {inc['days_between']}
+
+## Question for Agent 2
+
+After reviewing the timeline above:
+
+1. **Clinical Plausibility**: Is this rapid change clinically plausible?
+2. **Potential Explanations**: What could explain this pattern?
+3. **Recommendation**: Should either extraction be revised?
+
+Provide recommendation: keep_both | revise_first | revise_second | escalate_to_human
+'''
+
+                # Query Agent 2
+                result = medgemma.extract(clarification_prompt, "temporal_inconsistency_clarification")
+
+                clarifications.append({
+                    'inconsistency_id': inc['inconsistency_id'],
+                    'type': inc['type'],
+                    'agent2_response': result.extracted_data if result.success else None,
+                    'success': result.success,
+                    'confidence': result.confidence,
+                    'error': result.error if not result.success else None
+                })
+
+                if result.success:
+                    print(f"    ✅ {inc['type']}: {result.extracted_data.get('recommended_action', 'N/A')}")
+                else:
+                    print(f"    ❌ {inc['type']}: Failed to get clarification")
+
+            except Exception as e:
+                logger.error(f"Failed to query Agent 2 for {inc['inconsistency_id']}: {e}")
+                clarifications.append({
+                    'inconsistency_id': inc['inconsistency_id'],
+                    'success': False,
+                    'error': str(e)
+                })
+
         print(f"  {len(clarifications)} Agent 2 queries sent")
+        if clarifications:
+            successful = len([c for c in clarifications if c.get('success')])
+            print(f"    Successful: {successful}/{len(clarifications)}")
         print()
 
         comprehensive_summary['phases']['agent_feedback'] = {
             'queries_sent': len(clarifications),
+            'successful_clarifications': len([c for c in clarifications if c.get('success')]),
             'clarifications': clarifications
         }
         save_checkpoint('agent_feedback', 'completed')
@@ -972,12 +1235,135 @@ def main():
         print()
 
         eor_adjudications = []
-        # TODO: Adjudicate operative vs imaging EOR
+
+        # Group operative reports with their post-op imaging (within 72 hours)
+        operative_reports = [e for e in all_extractions if e['source'] == 'operative_report']
+
+        for op_report in operative_reports:
+            try:
+                surgery_date_str = op_report.get('surgery_date')
+                if not surgery_date_str:
+                    continue
+
+                surgery_date = datetime.fromisoformat(str(surgery_date_str))
+                proc_id = op_report['source_id']
+
+                # Get EOR from operative report
+                operative_eor = None
+                if 'eor' in op_report and isinstance(op_report['eor'], dict):
+                    eor_data = op_report['eor']
+                    if not eor_data.get('error'):
+                        operative_eor = eor_data.get('extent_of_resection')
+
+                if not operative_eor or operative_eor == 'Unknown':
+                    continue  # Skip if no EOR extracted
+
+                # Find post-op imaging within 72 hours
+                postop_imaging = []
+                for ext in all_extractions:
+                    if ext['source'] in ['imaging_text', 'imaging_pdf']:
+                        try:
+                            img_date = datetime.fromisoformat(str(ext['date']))
+                            hours_diff = (img_date - surgery_date).total_seconds() / 3600
+
+                            # Post-op imaging: 0-72 hours after surgery
+                            if 0 <= hours_diff <= 72:
+                                # Check if imaging mentions resection/EOR
+                                classification = ext.get('classification', {})
+                                if isinstance(classification, dict) and not classification.get('error'):
+                                    imaging_type = classification.get('imaging_type', '').lower()
+                                    # Look for post-op assessment keywords
+                                    if any(keyword in imaging_type for keyword in ['post', 'operative', 'resection', 'surgical']):
+                                        postop_imaging.append({
+                                            'imaging_id': ext['source_id'],
+                                            'imaging_date': ext['date'],
+                                            'hours_after_surgery': round(hours_diff, 1),
+                                            'tumor_status': ext.get('tumor_status', {}).get('overall_status'),
+                                            'imaging_type': imaging_type
+                                        })
+                        except (ValueError, TypeError):
+                            continue
+
+                # Only adjudicate if we have both sources
+                if postop_imaging:
+                    # Build EOR sources for adjudicator
+                    sources = [
+                        EORSource(
+                            source_type='operative_report',
+                            source_id=proc_id,
+                            source_date=surgery_date,
+                            eor=operative_eor,
+                            confidence=op_report.get('confidence', 0.85),
+                            evidence=f"Operative report from {surgery_date.date()}",
+                            extracted_by='agent2_medgemma'
+                        )
+                    ]
+
+                    # Infer EOR from post-op imaging tumor status
+                    for img in postop_imaging:
+                        tumor_status = img.get('tumor_status')
+                        inferred_eor = 'Unknown'
+
+                        # Inference rules
+                        if tumor_status == 'NED' or tumor_status == 'Decreased':
+                            inferred_eor = 'Gross Total Resection'
+                        elif tumor_status == 'Stable':
+                            inferred_eor = 'Near Total Resection'
+                        elif tumor_status == 'Increased':
+                            inferred_eor = 'Partial Resection'
+
+                        if inferred_eor != 'Unknown':
+                            sources.append(
+                                EORSource(
+                                    source_type='postop_imaging',
+                                    source_id=img['imaging_id'],
+                                    source_date=datetime.fromisoformat(img['imaging_date']),
+                                    eor=inferred_eor,
+                                    confidence=0.70,  # Lower confidence for inferred EOR
+                                    evidence=f"Post-op imaging ({img['hours_after_surgery']}h after surgery) shows {tumor_status}",
+                                    extracted_by='agent2_medgemma'
+                                )
+                            )
+
+                    # Adjudicate
+                    adjudication = eor_adjudicator.adjudicate_eor(proc_id, surgery_date, sources)
+
+                    eor_adjudications.append({
+                        'procedure_id': proc_id,
+                        'surgery_date': str(surgery_date.date()),
+                        'final_eor': adjudication.final_eor,
+                        'confidence': adjudication.confidence,
+                        'primary_source': adjudication.primary_source,
+                        'agreement_status': adjudication.agreement,
+                        'sources_count': len(sources),
+                        'operative_report_eor': operative_eor,
+                        'postop_imaging_count': len(postop_imaging),
+                        'discrepancy_notes': adjudication.discrepancy_notes,
+                        'reasoning': adjudication.adjudication_reasoning
+                    })
+
+                    print(f"    Procedure {proc_id[:20]}... ({surgery_date.date()})")
+                    print(f"      Operative: {operative_eor}")
+                    print(f"      Final: {adjudication.final_eor} (confidence: {adjudication.confidence:.2f})")
+                    if adjudication.agreement == 'discrepancy':
+                        print(f"      ⚠️  Discrepancy: {adjudication.discrepancy_notes}")
+
+            except Exception as e:
+                logger.error(f"Failed to adjudicate EOR for {proc_id}: {e}")
+                continue
+
         print(f"  {len(eor_adjudications)} EOR adjudications completed")
+        if eor_adjudications:
+            agreements = len([a for a in eor_adjudications if a['agreement_status'] == 'full_agreement'])
+            discrepancies = len([a for a in eor_adjudications if a['agreement_status'] == 'discrepancy'])
+            print(f"    Full agreement: {agreements}")
+            print(f"    Discrepancies: {discrepancies}")
         print()
 
         comprehensive_summary['phases']['eor_adjudication'] = {
             'count': len(eor_adjudications),
+            'full_agreement': len([a for a in eor_adjudications if a['agreement_status'] == 'full_agreement']),
+            'discrepancies': len([a for a in eor_adjudications if a['agreement_status'] == 'discrepancy']),
             'adjudications': eor_adjudications
         }
         save_checkpoint('eor_adjudication', 'completed')
@@ -991,15 +1377,92 @@ def main():
         print()
 
         try:
-            event_classifications = event_classifier.classify_patient_events(args.patient_id)
+            # Write extractions to timeline first so classifier can access them
+            workflow_logger.log_info("Writing tumor status extractions to timeline for event classification")
+
+            for ext in all_extractions:
+                if ext['source'] in ['imaging_text', 'imaging_pdf']:
+                    if 'tumor_status' in ext and isinstance(ext['tumor_status'], dict):
+                        ts_data = ext['tumor_status']
+                        if not ts_data.get('error'):
+                            tumor_status = ts_data.get('overall_status') or ts_data.get('tumor_status')
+                            if tumor_status and tumor_status != 'Unknown':
+                                try:
+                                    # Write to timeline so event_classifier can query it
+                                    timeline.conn.execute('''
+                                        INSERT OR IGNORE INTO extracted_variables
+                                        (patient_id, source_event_id, variable_name, variable_value, variable_confidence, extraction_date)
+                                        VALUES (?, ?, ?, ?, ?, ?)
+                                    ''', [
+                                        args.patient_id,
+                                        ext['source_id'],
+                                        'tumor_status',
+                                        tumor_status,
+                                        ext.get('tumor_status_confidence', 0.0),
+                                        datetime.now().isoformat()
+                                    ])
+                                except Exception as e:
+                                    logger.warning(f"Failed to write tumor_status to timeline: {e}")
+
+            timeline.conn.commit()
+
+            # Write EOR extractions to timeline
+            for ext in all_extractions:
+                if ext['source'] == 'operative_report' and 'eor' in ext:
+                    if isinstance(ext['eor'], dict) and not ext['eor'].get('error'):
+                        eor_value = ext['eor'].get('extent_of_resection')
+                        if eor_value and eor_value != 'Unknown':
+                            try:
+                                timeline.conn.execute('''
+                                    INSERT OR IGNORE INTO extracted_variables
+                                    (patient_id, source_event_id, variable_name, variable_value, variable_confidence, extraction_date)
+                                    VALUES (?, ?, ?, ?, ?, ?)
+                                ''', [
+                                    args.patient_id,
+                                    ext['source_id'],
+                                    'extent_of_resection',
+                                    eor_value,
+                                    ext.get('confidence', 0.0),
+                                    datetime.now().isoformat()
+                                ])
+                            except Exception as e:
+                                logger.warning(f"Failed to write EOR to timeline: {e}")
+
+            timeline.conn.commit()
+
+            # Now classify events
+            event_classifications_raw = event_classifier.classify_patient_events(args.patient_id)
+
+            # Convert to dict format
+            event_classifications = []
+            for cls in event_classifications_raw:
+                event_classifications.append({
+                    'event_id': cls.event_id,
+                    'event_date': cls.event_date.isoformat() if isinstance(cls.event_date, datetime) else str(cls.event_date),
+                    'event_type': cls.event_type,
+                    'confidence': cls.confidence,
+                    'reasoning': cls.reasoning,
+                    'supporting_evidence': cls.supporting_evidence
+                })
+
             print(f"  ✅ Classified {len(event_classifications)} events")
 
-            # Show sample
+            # Show sample with counts by type
+            type_counts = {}
+            for cls in event_classifications:
+                event_type = cls['event_type']
+                type_counts[event_type] = type_counts.get(event_type, 0) + 1
+
+            for event_type, count in sorted(type_counts.items()):
+                print(f"    {event_type}: {count}")
+
+            # Show samples
             for cls in event_classifications[:3]:
-                print(f"    - {cls['event_date']}: {cls['event_type']} (confidence: {cls['confidence']})")
+                print(f"    - {cls['event_date']}: {cls['event_type']} (confidence: {cls['confidence']:.2f})")
 
             comprehensive_summary['phases']['event_classification'] = {
                 'count': len(event_classifications),
+                'by_type': type_counts,
                 'classifications': event_classifications
             }
         except Exception as e:
