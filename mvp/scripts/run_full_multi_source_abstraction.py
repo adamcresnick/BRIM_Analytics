@@ -237,6 +237,12 @@ def main():
         default='data/timeline.duckdb',
         help='Path to timeline DuckDB database'
     )
+    parser.add_argument(
+        '--resume',
+        type=str,
+        default=None,
+        help='Resume from checkpoint (provide timestamp folder name, e.g., 20251021_172921)'
+    )
 
     args = parser.parse_args()
 
@@ -507,7 +513,7 @@ def main():
                     event_category,
                     description as event_description
                 FROM events
-                WHERE patient_id = '{args.patient_id}'
+                WHERE patient_id = '{athena_patient_id}'
                     AND event_type = 'Medication'
                     AND event_category IN ('Chemotherapy', 'Targeted Therapy')
                 ORDER BY event_date
@@ -592,7 +598,7 @@ def main():
         print()
 
         all_extractions = []
-        extraction_count = {'imaging_text': 0, 'imaging_pdf': 0, 'operative': 0, 'progress_note': 0}
+        extraction_count = {'imaging_text': 0, 'imaging_pdf': 0, 'operative': 0, 'progress_notes': 0}
 
         # Build surgical history from Athena operative_reports (no timeline needed)
         surgical_history = [
@@ -899,36 +905,66 @@ def main():
                 continue
 
             # Query for operative note DocumentReference linked to this procedure
-            # Search for notes created around the time of surgery (±7 days)
+            # Use context_period_start matching (not dr_date) per project documentation
+            # See: brim_workflows_individual_fields/extent_of_resection/docs/IMAGING_AND_OPERATIVE_NOTE_LINKAGE_STRATEGY.md
             proc_date_str = proc_date.split()[0] if isinstance(proc_date, str) and ' ' in proc_date else str(proc_date)
 
+            # TIER 1: Try primary operative note types (exact date match)
             op_note_query = f"""
                 SELECT
                     document_reference_id,
                     binary_id,
                     dr_date,
-                    dr_category_text,
+                    dr_context_period_start,
                     dr_type_text,
                     content_type
                 FROM v_binary_files
-                WHERE patient_fhir_id = '{args.patient_id}'
+                WHERE patient_fhir_id = '{athena_patient_id}'
                     AND (
-                        LOWER(dr_category_text) LIKE '%operative%'
-                        OR LOWER(dr_category_text) LIKE '%surgery%'
-                        OR LOWER(dr_category_text) LIKE '%procedure%'
-                        OR LOWER(dr_type_text) LIKE '%operative%'
-                        OR LOWER(dr_type_text) LIKE '%surgery%'
+                        dr_type_text LIKE 'OP Note%'
+                        OR dr_type_text = 'Operative Record'
+                        OR dr_type_text = 'External Operative Note'
+                        OR dr_type_text = 'Anesthesia Postprocedure Evaluation'
                     )
-                    AND ABS(DATE_DIFF('day', CAST(dr_date AS DATE), DATE '{proc_date_str}')) <= 7
-                ORDER BY ABS(DATE_DIFF('day', CAST(dr_date AS DATE), DATE '{proc_date_str}'))
+                    AND DATE(dr_context_period_start) = DATE '{proc_date_str}'
+                ORDER BY
+                    CASE
+                        WHEN dr_type_text LIKE '%Complete%' THEN 1
+                        WHEN dr_type_text = 'Anesthesia Postprocedure Evaluation' THEN 2
+                        WHEN dr_type_text = 'External Operative Note' THEN 3
+                        WHEN dr_type_text LIKE '%Brief%' THEN 4
+                        WHEN dr_type_text = 'Operative Record' THEN 5
+                        ELSE 6
+                    END
                 LIMIT 1
             """
 
             try:
                 op_notes = query_athena(op_note_query, None)  # Don't print query message
 
+                # TIER 2: If no primary operative notes found, try Perioperative Records as fallback
                 if not op_notes or len(op_notes) == 0:
-                    print(f"    ⚠️  No operative note found within ±7 days of surgery")
+                    fallback_query = f"""
+                        SELECT
+                            document_reference_id,
+                            binary_id,
+                            dr_date,
+                            dr_context_period_start,
+                            dr_type_text,
+                            content_type
+                        FROM v_binary_files
+                        WHERE patient_fhir_id = '{athena_patient_id}'
+                            AND dr_type_text = 'Perioperative Records'
+                            AND DATE(dr_context_period_start) = DATE '{proc_date_str}'
+                        LIMIT 1
+                    """
+                    op_notes = query_athena(fallback_query, None)
+
+                    if op_notes and len(op_notes) > 0:
+                        print(f"    ℹ️  Using Perioperative Records (fallback)")
+
+                if not op_notes or len(op_notes) == 0:
+                    print(f"    ⚠️  No operative note found for surgery date {proc_date_str}")
                     continue
 
                 op_note = op_notes[0]
@@ -1282,7 +1318,7 @@ def main():
                         'days_between': days_diff,
                         'prior_status': prior_status,
                         'current_status': current_status,
-                        'requires_agent2_query': False  # Expected pattern
+                        'requires_agent2_query': True  # Trigger Agent 2 clarification for medium severity
                     })
 
             except (ValueError, TypeError) as e:
@@ -1661,7 +1697,7 @@ Provide recommendation: keep_both | revise_first | revise_second | escalate_to_h
         print(f"  Imaging text: {extraction_count['imaging_text']} extractions")
         print(f"  Imaging PDFs: {extraction_count['imaging_pdf']} extractions")
         print(f"  Operative reports: {extraction_count['operative']} extractions")
-        print(f"  Progress notes: {extraction_count['progress_note']} extractions")
+        print(f"  Progress notes: {extraction_count['progress_notes']} extractions")
         print(f"  Total extractions: {len(all_extractions)}")
         print()
 
