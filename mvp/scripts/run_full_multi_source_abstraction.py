@@ -256,10 +256,55 @@ def main():
         print("Please run 'aws sso login --profile radiant-prod' manually and try again.\n")
         sys.exit(1)
 
-    # Create timestamped output folder
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = Path("data/patient_abstractions") / timestamp
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Handle resume from checkpoint
+    checkpoint_data = None
+    previous_comprehensive = None
+
+    if args.resume:
+        # Use existing output folder
+        timestamp = args.resume
+        output_dir = Path("data/patient_abstractions") / timestamp
+
+        if not output_dir.exists():
+            print(f"\n❌ Resume folder not found: {output_dir}")
+            print("Please provide a valid timestamp folder name (e.g., 20251023_101827)\n")
+            sys.exit(1)
+
+        # Load checkpoint
+        safe_patient_id = args.patient_id.replace('/', '_')
+        checkpoint_path = output_dir / f"{safe_patient_id}_checkpoint.json"
+
+        if not checkpoint_path.exists():
+            print(f"\n❌ Checkpoint file not found: {checkpoint_path}")
+            print("Cannot resume without checkpoint file\n")
+            sys.exit(1)
+
+        with open(checkpoint_path, 'r') as f:
+            checkpoint_data = json.load(f)
+
+        # Load previous comprehensive JSON
+        comprehensive_path = output_dir / f"{safe_patient_id}_comprehensive.json"
+        if comprehensive_path.exists():
+            with open(comprehensive_path, 'r') as f:
+                previous_comprehensive = json.load(f)
+
+        print("="*80)
+        print("RESUMING FROM CHECKPOINT")
+        print("="*80)
+        print()
+        print(f"Patient: {args.patient_id}")
+        print(f"Resume folder: {output_dir}")
+        print(f"Checkpoint timestamp: {checkpoint_data.get('last_updated', 'unknown')}")
+        print(f"Last completed phase: {checkpoint_data.get('current_phase', 'unknown')}")
+        print(f"Phases completed: {', '.join(checkpoint_data.get('phases_completed', []))}")
+        print()
+        print("="*80)
+        print()
+    else:
+        # Create timestamped output folder
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path("data/patient_abstractions") / timestamp
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     print("="*80)
     print("FULL MULTI-SOURCE COMPREHENSIVE ABSTRACTION")
@@ -517,7 +562,6 @@ def main():
 
                 # Match operative notes to surgeries using date matching
                 # Enrich each operative note with matched surgery information
-                from datetime import datetime, timedelta
                 for opnote in operative_note_documents:
                     opnote['matched_surgery'] = None
                     opnote['days_from_surgery'] = None
@@ -754,8 +798,6 @@ def main():
             Build events_before and events_after context for a given date.
             Uses in-memory data from imaging_text_reports, surgical_history, chemo, and radiation.
             """
-            from datetime import datetime, timedelta
-
             try:
                 current_date = datetime.fromisoformat(str(current_date_str).replace(' ', 'T'))
             except (ValueError, AttributeError):
