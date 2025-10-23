@@ -646,10 +646,14 @@ def main():
         ]
 
         # Helper function to build timeline context for each document
-        def build_timeline_context(current_date_str: str) -> Dict:
+        def build_timeline_context(
+            current_date_str: str,
+            chemo_json: Optional[Dict] = None,
+            radiation_json: Optional[Dict] = None
+        ) -> Dict:
             """
             Build events_before and events_after context for a given date.
-            Uses in-memory data from imaging_text_reports and surgical_history.
+            Uses in-memory data from imaging_text_reports, surgical_history, chemo, and radiation.
             """
             from datetime import datetime, timedelta
 
