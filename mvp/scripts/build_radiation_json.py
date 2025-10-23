@@ -112,7 +112,7 @@ class RadiationJSONBuilder:
             SELECT *
             FROM v_radiation_treatments
             WHERE patient_fhir_id = '{athena_patient_id}'
-            ORDER BY treatment_start_date
+            ORDER BY obs_start_date
         """
 
         return self.query_athena(query)
@@ -128,7 +128,7 @@ class RadiationJSONBuilder:
             SELECT *
             FROM v_radiation_documents
             WHERE patient_fhir_id = '{athena_patient_id}'
-            ORDER BY document_date
+            ORDER BY doc_date
         """
 
         return self.query_athena(query)
@@ -144,7 +144,6 @@ class RadiationJSONBuilder:
             SELECT *
             FROM v_radiation_care_plan_hierarchy
             WHERE patient_fhir_id = '{athena_patient_id}'
-            ORDER BY period_start
         """
 
         return self.query_athena(query)
@@ -160,7 +159,6 @@ class RadiationJSONBuilder:
             SELECT *
             FROM v_radiation_treatment_appointments
             WHERE patient_fhir_id = '{athena_patient_id}'
-            ORDER BY appointment_date
         """
 
         return self.query_athena(query)

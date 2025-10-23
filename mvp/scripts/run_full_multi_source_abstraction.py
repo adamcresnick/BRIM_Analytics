@@ -400,6 +400,10 @@ def main():
             print(f"  ⚠️  No chemotherapy data or error: {e}")
             chemo_json = None
 
+        # Add radiation and chemotherapy to comprehensive summary
+        comprehensive_summary['radiation'] = radiation_json if radiation_json else {'error': 'No radiation data available'}
+        comprehensive_summary['chemotherapy'] = chemo_json if chemo_json else {'error': 'No chemotherapy data available'}
+
         print()
 
         # ================================================================
@@ -454,7 +458,7 @@ def main():
         """
         imaging_pdfs = query_athena(imaging_pdf_query, "Querying imaging PDFs")
 
-        # 1C: Operative reports
+        # 1C: Operative reports (surgery records)
         print("1C. Operative reports (v_procedures_tumor):")
         operative_query = f"""
             SELECT
@@ -469,6 +473,100 @@ def main():
             ORDER BY procedure_date
         """
         operative_reports = query_athena(operative_query, "Querying operative reports")
+
+        # 1C-DOCUMENTS: Operative note documents (all formats: PDF, text/plain, text/html)
+        print("1C-DOCUMENTS. Operative note documents (v_binary_files):")
+        operative_note_documents = []
+        if operative_reports:
+            # Build a query to match operative notes to surgeries using date matching
+            # Use ±7 day window to catch all potentially matching operative notes
+            surgery_dates = []
+            for surgery in operative_reports:
+                if surgery.get('procedure_date'):
+                    surgery_dates.append(surgery['procedure_date'])
+
+            if surgery_dates:
+                # Query all operative notes for the patient (all content types like progress notes)
+                operative_document_query = f"""
+                    SELECT
+                        document_reference_id,
+                        dr_date,
+                        dr_context_period_start,
+                        dr_type_text,
+                        dr_category_text,
+                        binary_id,
+                        content_type,
+                        patient_fhir_id
+                    FROM v_binary_files
+                    WHERE patient_fhir_id = '{athena_patient_id}'
+                        AND (
+                            content_type = 'text/plain'
+                            OR content_type = 'text/html'
+                            OR content_type = 'application/pdf'
+                        )
+                        AND (
+                            dr_type_text LIKE 'OP Note%'
+                            OR dr_type_text = 'Operative Record'
+                            OR dr_type_text = 'Anesthesia Postprocedure Evaluation'
+                            OR LOWER(dr_category_text) LIKE '%operative%'
+                            OR LOWER(dr_category_text) LIKE '%surgical%'
+                        )
+                    ORDER BY dr_context_period_start, dr_date
+                """
+                operative_note_documents = query_athena(operative_document_query, "Querying operative note documents")
+
+                # Match operative notes to surgeries using date matching
+                # Enrich each operative note with matched surgery information
+                from datetime import datetime, timedelta
+                for opnote in operative_note_documents:
+                    opnote['matched_surgery'] = None
+                    opnote['days_from_surgery'] = None
+
+                    # Try to parse operative note date (prefer context_period_start)
+                    opnote_date_str = opnote.get('dr_context_period_start') or opnote.get('dr_date')
+                    if not opnote_date_str:
+                        continue
+
+                    try:
+                        if ' ' in opnote_date_str:
+                            opnote_date = datetime.strptime(opnote_date_str.split()[0], '%Y-%m-%d')
+                        else:
+                            opnote_date = datetime.strptime(opnote_date_str, '%Y-%m-%d')
+                    except:
+                        continue
+
+                    # Find closest surgery within ±7 days
+                    closest_surgery = None
+                    min_days_diff = float('inf')
+
+                    for surgery in operative_reports:
+                        surgery_date_str = surgery.get('procedure_date')
+                        if not surgery_date_str:
+                            continue
+
+                        try:
+                            if ' ' in surgery_date_str:
+                                surgery_date = datetime.strptime(surgery_date_str.split()[0], '%Y-%m-%d')
+                            else:
+                                surgery_date = datetime.strptime(surgery_date_str, '%Y-%m-%d')
+                        except:
+                            continue
+
+                        days_diff = abs((opnote_date - surgery_date).days)
+
+                        # Match if within 7 days and closer than previous matches
+                        if days_diff <= 7 and days_diff < min_days_diff:
+                            closest_surgery = surgery
+                            min_days_diff = days_diff
+
+                    if closest_surgery:
+                        opnote['matched_surgery'] = closest_surgery
+                        opnote['days_from_surgery'] = min_days_diff
+
+                matched_count = sum(1 for opnote in operative_note_documents if opnote.get('matched_surgery'))
+                print(f"  Matched {matched_count}/{len(operative_note_documents)} operative notes to surgeries")
+        else:
+            print("  No surgeries found - skipping operative note PDF query")
 
         # 1D: All progress notes (to be filtered)
         print("1D. Progress notes (v_binary_files):")
@@ -620,6 +718,7 @@ def main():
             'imaging_text_count': len(imaging_text_reports),
             'imaging_pdf_count': len(imaging_pdfs),
             'operative_report_count': len(operative_reports),
+            'operative_note_documents_count': len(operative_note_documents),
             'progress_note_all_count': len(all_progress_notes),
             'progress_note_oncology_count': len(oncology_notes),
             'progress_note_prioritized_count': len(prioritized_notes),

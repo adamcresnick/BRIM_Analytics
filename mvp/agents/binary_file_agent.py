@@ -82,6 +82,7 @@ class BinaryFileAgent:
         self.s3_bucket = s3_bucket
         self.s3_prefix = s3_prefix
         self.region_name = region_name
+        self.aws_profile = aws_profile  # Store for token refresh
 
         # Initialize S3 client
         if aws_profile:
@@ -121,10 +122,30 @@ class BinaryFileAgent:
 
         return self.s3_bucket, s3_key
 
+    def _refresh_s3_client(self):
+        """
+        Refresh S3 client with new AWS SSO credentials
+
+        This is called when TokenRetrievalError is detected, which happens
+        when AWS SSO tokens expire (typically after 2.5 hours).
+        """
+        try:
+            logger.info("Refreshing AWS SSO credentials...")
+            if hasattr(self, 'aws_profile') and self.aws_profile:
+                session = boto3.Session(profile_name=self.aws_profile, region_name=self.region_name)
+                self.s3_client = session.client('s3')
+                logger.info("✅ Successfully refreshed S3 client with new credentials")
+            else:
+                logger.warning("No AWS profile configured, cannot refresh credentials")
+        except Exception as e:
+            logger.error(f"Failed to refresh AWS credentials: {e}")
+            raise
+
     def stream_binary_from_s3(
         self,
         binary_id: str,
-        max_size_mb: int = 50
+        max_size_mb: int = 50,
+        max_retries: int = 1
     ) -> Optional[bytes]:
         """
         Stream binary content from S3 without saving to disk
@@ -135,53 +156,69 @@ class BinaryFileAgent:
         Args:
             binary_id: FHIR binary ID
             max_size_mb: Maximum file size to stream (MB)
+            max_retries: Number of times to retry on token expiration (default: 1)
 
         Returns:
             Binary content as bytes (actual PDF/HTML, not FHIR JSON), or None if error
         """
         bucket, key = self.construct_s3_path(binary_id)
 
-        try:
-            logger.info(f"Streaming from s3://{bucket}/{key}")
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"Streaming from s3://{bucket}/{key}")
 
-            # Get object metadata first to check size
-            response = self.s3_client.head_object(Bucket=bucket, Key=key)
-            file_size_bytes = response['ContentLength']
-            file_size_mb = file_size_bytes / (1024 * 1024)
+                # Get object metadata first to check size
+                response = self.s3_client.head_object(Bucket=bucket, Key=key)
+                file_size_bytes = response['ContentLength']
+                file_size_mb = file_size_bytes / (1024 * 1024)
 
-            if file_size_mb > max_size_mb:
-                logger.warning(
-                    f"File too large: {file_size_mb:.2f}MB > {max_size_mb}MB limit. "
-                    f"Skipping {binary_id}"
-                )
+                if file_size_mb > max_size_mb:
+                    logger.warning(
+                        f"File too large: {file_size_mb:.2f}MB > {max_size_mb}MB limit. "
+                        f"Skipping {binary_id}"
+                    )
+                    return None
+
+                # Stream the FHIR Binary resource (JSON)
+                response = self.s3_client.get_object(Bucket=bucket, Key=key)
+                fhir_json = response['Body'].read()
+
+                # Extract base64-encoded content from FHIR Binary resource
+                fhir_data = json.loads(fhir_json)
+
+                if 'data' not in fhir_data:
+                    logger.error(f"No 'data' field in FHIR Binary resource: {binary_id}")
+                    return None
+
+                # Decode base64 to get actual binary content (PDF/HTML/etc)
+                binary_content = base64.b64decode(fhir_data['data'])
+
+                logger.info(f"Successfully extracted {len(binary_content)/1024:.1f}KB from FHIR Binary resource")
+                return binary_content
+
+            except self.s3_client.exceptions.NoSuchKey:
+                logger.error(f"File not found in S3: s3://{bucket}/{key}")
+                return None
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid FHIR JSON in S3 object: {e}")
+                return None
+            except Exception as e:
+                error_str = str(e)
+
+                # Check if this is a token retrieval error
+                if 'TokenRetrievalError' in error_str or 'The SSO session associated with this profile has expired' in error_str:
+                    if attempt < max_retries:
+                        logger.warning(f"AWS SSO token expired. Refreshing credentials and retrying (attempt {attempt + 1}/{max_retries})...")
+                        self._refresh_s3_client()
+                        continue
+                    else:
+                        logger.error(f"AWS SSO token expired and max retries reached. Please run 'aws sso login --profile {getattr(self, 'aws_profile', 'radiant-prod')}'")
+                        return None
+
+                logger.error(f"Error streaming from S3: {e}")
                 return None
 
-            # Stream the FHIR Binary resource (JSON)
-            response = self.s3_client.get_object(Bucket=bucket, Key=key)
-            fhir_json = response['Body'].read()
-
-            # Extract base64-encoded content from FHIR Binary resource
-            fhir_data = json.loads(fhir_json)
-
-            if 'data' not in fhir_data:
-                logger.error(f"No 'data' field in FHIR Binary resource: {binary_id}")
-                return None
-
-            # Decode base64 to get actual binary content (PDF/HTML/etc)
-            binary_content = base64.b64decode(fhir_data['data'])
-
-            logger.info(f"Successfully extracted {len(binary_content)/1024:.1f}KB from FHIR Binary resource")
-            return binary_content
-
-        except self.s3_client.exceptions.NoSuchKey:
-            logger.error(f"File not found in S3: s3://{bucket}/{key}")
-            return None
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid FHIR JSON in S3 object: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Error streaming from S3: {e}")
-            return None
+        return None
 
     def extract_text_from_pdf(self, pdf_content: bytes) -> Tuple[str, Optional[str]]:
         """
