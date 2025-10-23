@@ -459,8 +459,8 @@ UNION ALL
 -- Provenance: CarePlan FHIR resource
 -- ============================================================================
 SELECT
-    vrs.patient_id as patient_fhir_id,
-    'rad_course_1_' || vrs.patient_id as event_id,
+    vrs.patient_fhir_id as patient_fhir_id,
+    'rad_course_1_' || vrs.patient_fhir_id as event_id,
     CAST(vrs.course_1_start_date AS DATE) as event_date,
     DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vrs.course_1_start_date AS DATE)) as age_at_event_days,
     CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vrs.course_1_start_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
@@ -473,7 +473,7 @@ SELECT
 
     'v_radiation_summary' as source_view,
     'CarePlan' as source_domain,
-    vrs.patient_id as source_id,
+    vrs.patient_fhir_id as source_id,
 
     CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
     CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
@@ -505,7 +505,7 @@ SELECT
     ) AS JSON) AS VARCHAR) as extraction_context
 
 FROM fhir_prd_db.v_radiation_summary vrs
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vrs.patient_id = vpd.patient_fhir_id
+LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vrs.patient_fhir_id = vpd.patient_fhir_id
 WHERE vrs.course_1_start_date IS NOT NULL
 
 UNION ALL
