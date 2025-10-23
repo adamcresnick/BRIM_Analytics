@@ -735,3 +735,167 @@ __all__ = [
     'build_progress_note_disease_state_prompt',
     'build_tumor_location_extraction_prompt'
 ]
+
+
+def build_progress_note_comprehensive_prompt(
+    note_data: Dict[str, Any],
+    context: Dict[str, Any],
+    priority_reason: str
+) -> str:
+    """
+    Comprehensive prompt for progress note extraction (Optimizations #1, #2, #4 combined)
+
+    Extracts ALL fields in a single LLM call:
+    - Document classification
+    - Tumor status
+    - Tumor location
+    - Treatment response
+    - Clinical reasoning
+    - Toxicities
+    - Treatment plan changes
+
+    Customizes based on priority_reason (post_surgery, post_imaging, post_medication_change, final_note)
+    """
+
+    note_text = note_data.get('extracted_text', note_data.get('note_text', ''))
+    note_date = note_data.get('dr_date', 'Unknown')
+
+    # Build temporal context
+    events_before = context.get('events_before', [])
+    events_after = context.get('events_after', [])
+
+    context_summary = []
+    for event in events_before[:5]:  # Show up to 5 recent events
+        days = abs(event.get('days_diff', 0))
+        context_summary.append(
+            f"- {event['event_type']} {days} days BEFORE: {event['description']}"
+        )
+
+    for event in events_after[:3]:  # Show up to 3 upcoming events
+        days = abs(event.get('days_diff', 0))
+        context_summary.append(
+            f"- {event['event_type']} {days} days AFTER: {event['description']}"
+        )
+
+    context_text = "\n".join(context_summary) if context_summary else "No major clinical events in surrounding timeline"
+
+    # Customize based on priority reason
+    priority_focus = ""
+    if priority_reason == "post_surgery":
+        priority_focus = """
+**PRIORITY FOCUS (Post-Surgery Note):**
+This note was selected because it occurs shortly after a tumor surgery. Focus on:
+- Post-operative assessment and recovery
+- Discussion of surgical findings and pathology
+- Changes to treatment plan based on surgical outcome
+- Post-operative complications if any
+"""
+    elif priority_reason == "post_medication_change":
+        priority_focus = """
+**PRIORITY FOCUS (Medication Change Note):**
+This note was selected because it occurs around a chemotherapy/treatment change. Focus on:
+- Rationale for medication change (progression, toxicity, completion)
+- Baseline disease assessment before new medication
+- Response assessment from previous medication if discussed
+- Anticipated toxicity monitoring plan
+"""
+    elif priority_reason == "post_imaging":
+        priority_focus = """
+**PRIORITY FOCUS (Post-Imaging Note):**
+This note was selected because it occurs shortly after imaging. Focus on:
+- Clinical interpretation of imaging findings
+- How imaging results affect treatment decisions
+- Discussion of response criteria (RANO, RECIST, etc.)
+- Any changes to treatment plan based on imaging
+"""
+    elif priority_reason == "final_note":
+        priority_focus = """
+**PRIORITY FOCUS (Most Recent Note):**
+This is the patient's most recent progress note. Focus on:
+- Current disease status summary
+- Active treatment regimen
+- Upcoming planned interventions
+- Overall disease trajectory (improving, stable, declining)
+"""
+
+    prompt = f"""You are a medical AI extracting comprehensive clinical information from an oncology progress note.
+
+**NOTE INFORMATION:**
+Date: {note_date}
+Priority Reason: {priority_reason}
+
+**TEMPORAL CONTEXT (Clinical Events):**
+{context_text}
+
+{priority_focus}
+
+**PROGRESS NOTE TEXT:**
+{note_text}
+
+**EXTRACTION TASK:**
+Extract the following information from this progress note. Look for information in the Assessment and Plan sections primarily.
+
+**OUTPUT FORMAT (JSON):**
+{{
+  "document_classification": {{
+    "document_type": "progress_note",
+    "specialty": "oncology" | "hematology" | "neurology" | "other",
+    "note_sections_present": ["subjective", "objective", "assessment", "plan"]
+  }},
+
+  "tumor_status": {{
+    "status": "NED" | "Stable" | "Increased" | "Decreased" | "New_Malignancy" | "Not_mentioned",
+    "confidence": 0.0-1.0,
+    "clinical_assessment": "Free text summary of disease state from clinician's perspective",
+    "evidence": "Direct quote from note"
+  }},
+
+  "tumor_location": {{
+    "primary_location": "Anatomical location if mentioned",
+    "laterality": "left" | "right" | "bilateral" | "midline" | null,
+    "evidence": "Direct quote"
+  }},
+
+  "treatment_response": {{
+    "response_category": "complete_response" | "partial_response" | "stable_disease" | "progressive_disease" | "not_assessed",
+    "response_criteria_used": "RANO" | "RECIST" | "clinical_assessment" | null,
+    "evidence": "Direct quote discussing response"
+  }},
+
+  "clinical_reasoning": {{
+    "why_treatment_changed": "Explanation if treatment plan changed",
+    "clinical_concerns": "Any concerns mentioned by clinician",
+    "future_plan": "What is planned for next steps"
+  }},
+
+  "toxicities": [
+    {{
+      "adverse_event": "Description of side effect/toxicity",
+      "grade": "1-5 or null if not graded",
+      "attribution": "definitely_related" | "possibly_related" | "unlikely_related" | "unrelated",
+      "management": "How toxicity is being managed",
+      "evidence": "Direct quote"
+    }}
+  ],
+
+  "treatment_plan": {{
+    "medications_started": ["List of new medications"],
+    "medications_stopped": ["List of stopped medications"],
+    "medications_dose_modified": ["List of medications with dose changes"],
+    "upcoming_procedures": ["Planned procedures/surgeries"],
+    "upcoming_imaging": ["Planned imaging studies"]
+  }}
+}}
+
+**INSTRUCTIONS:**
+1. Only extract information explicitly stated in the note
+2. Use "Not_mentioned" or null for fields without information
+3. Include direct quotes as evidence when possible
+4. Pay special attention to the Assessment and Plan sections
+5. Consider the temporal context when interpreting clinical decisions
+6. Return ONLY valid JSON, no additional text
+
+OUTPUT:
+"""
+
+    return prompt

@@ -35,6 +35,8 @@ import subprocess
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from scripts.build_radiation_json import RadiationJSONBuilder
+from scripts.build_chemotherapy_json import ChemotherapyJSONBuilder
 from agents.master_agent import MasterAgent
 from agents.medgemma_agent import MedGemmaAgent
 from agents.binary_file_agent import BinaryFileAgent
@@ -44,6 +46,7 @@ from utils.progress_note_prioritization import ProgressNotePrioritizer
 from utils.document_text_cache import DocumentTextCache
 from utils.workflow_monitoring import WorkflowLogger, WorkflowMetrics
 from agents.extraction_prompts import (
+    build_progress_note_comprehensive_prompt,
     build_operative_report_eor_extraction_prompt,
     build_progress_note_disease_state_prompt,
     build_imaging_classification_prompt,
@@ -364,6 +367,41 @@ def main():
         logger.info(f"Checkpoint saved: {phase} - {status}")
 
     try:
+
+        # ================================================================
+        # PHASE 1-PRE: QUERY RADIATION AND CHEMOTHERAPY DATA
+        # ================================================================
+        print("="*80)
+        print("PHASE 1-PRE: QUERY RADIATION AND CHEMOTHERAPY DATA")
+        print("="*80)
+        print()
+
+        # 1-PRE-A: Radiation data
+        print("1-PRE-A. Querying radiation data...")
+        radiation_json = None
+        try:
+            radiation_builder = RadiationJSONBuilder(aws_profile='radiant-prod')
+            radiation_json = radiation_builder.build_comprehensive_json(args.patient_id)
+            print(f"  Radiation courses: {radiation_json.get('total_courses', 0)}")
+            print(f"  Radiation documents: {len(radiation_json.get('supporting_documents', {}).get('treatment_summaries', []))}")
+        except Exception as e:
+            print(f"  ⚠️  No radiation data or error: {e}")
+            radiation_json = None
+
+        # 1-PRE-B: Chemotherapy data
+        print("1-PRE-B. Querying chemotherapy data...")
+        chemo_json = None
+        try:
+            chemo_builder = ChemotherapyJSONBuilder(aws_profile='radiant-prod')
+            chemo_json = chemo_builder.build_comprehensive_json(args.patient_id)
+            print(f"  Chemotherapy courses: {chemo_json.get('total_courses', 0)}")
+            print(f"  Total medications: {chemo_json.get('total_medications', 0)}")
+        except Exception as e:
+            print(f"  ⚠️  No chemotherapy data or error: {e}")
+            chemo_json = None
+
+        print()
+
         # ================================================================
         # PHASE 1: QUERY ALL DATA SOURCES FROM ATHENA
         # ================================================================
@@ -678,6 +716,65 @@ def main():
                 except (ValueError, AttributeError):
                     continue
 
+
+            # Add chemotherapy course events
+            if chemo_json and chemo_json.get('treatment_courses'):
+                for course in chemo_json['treatment_courses']:
+                    try:
+                        course_start = course.get('course_start_date')
+                        if not course_start:
+                            continue
+
+                        course_date = datetime.fromisoformat(course_start.split()[0])
+                        days_diff = (current_date - course_date).days
+
+                        if abs(days_diff) > 180:
+                            continue
+
+                        event = {
+                            'event_type': 'Medication',
+                            'event_category': 'Chemotherapy',
+                            'event_date': course_start.split()[0],
+                            'days_diff': -days_diff,
+                            'description': f"{len(course['medications'])} chemotherapy medications started"
+                        }
+
+                        if days_diff > 0:
+                            events_before.append(event)
+                        elif days_diff < 0:
+                            events_after.append(event)
+                    except:
+                        continue
+
+            # Add radiation treatment events
+            if radiation_json and radiation_json.get('treatment_courses'):
+                for treatment in radiation_json['treatment_courses']:
+                    try:
+                        treatment_start = treatment.get('start_date')
+                        if not treatment_start:
+                            continue
+
+                        treatment_date = datetime.fromisoformat(treatment_start.split()[0])
+                        days_diff = (current_date - treatment_date).days
+
+                        if abs(days_diff) > 180:
+                            continue
+
+                        event = {
+                            'event_type': 'Radiation',
+                            'event_category': 'Radiation Therapy',
+                            'event_date': treatment_start.split()[0],
+                            'days_diff': -days_diff,
+                            'description': f"Radiation to {treatment.get('radiation_field', 'unknown site')}"
+                        }
+
+                        if days_diff > 0:
+                            events_before.append(event)
+                        elif days_diff < 0:
+                            events_after.append(event)
+                    except:
+                        continue
+
             # Sort by proximity to current date
             events_before.sort(key=lambda x: abs(x['days_diff']))
             events_after.sort(key=lambda x: abs(x['days_diff']))
@@ -695,7 +792,7 @@ def main():
             print(f"  [{i}/{len(imaging_text_reports)}] {report_id[:30]}... ({report_date})")
 
             # Build timeline context with events before/after this report
-            timeline_events = build_timeline_context(report_date)
+            timeline_events = build_timeline_context(report_date, chemo_json, radiation_json)
 
             # Pass entire report dict to prompts - they will extract what they need
             context = {
@@ -807,7 +904,7 @@ def main():
             }
 
             # Build timeline context with events before/after this report
-            timeline_events = build_timeline_context(doc_date)
+            timeline_events = build_timeline_context(doc_date, chemo_json, radiation_json)
 
             # Build context with surgical history and timeline
             context = {
@@ -1158,7 +1255,7 @@ def main():
             }
 
             # Build timeline context
-            timeline_events = build_timeline_context(doc_date)
+            timeline_events = build_timeline_context(doc_date, chemo_json, radiation_json)
             context = {
                 'patient_id': args.patient_id,
                 'surgical_history': [{'date': s[1], 'description': s[2]} for s in surgical_history],
