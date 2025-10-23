@@ -30,7 +30,7 @@ patients_with_structured_data AS (
         MAX(obs_stop_date) as latest_structured_end,
         SUM(CASE WHEN obs_dose_value IS NOT NULL THEN 1 ELSE 0 END) as num_dose_records,
         SUM(CASE WHEN obs_radiation_field IS NOT NULL THEN 1 ELSE 0 END) as num_site_records,
-        LISTAGG(DISTINCT obs_radiation_field, ', ') WITHIN GROUP (ORDER BY obs_radiation_field) as radiation_fields_observed
+        ARRAY_JOIN(ARRAY_SORT(ARRAY_AGG(DISTINCT obs_radiation_field)), ', ') as radiation_fields_observed
     FROM fhir_prd_db.v_radiation_treatments
     WHERE data_source_primary = 'observation'
     GROUP BY patient_fhir_id
@@ -50,7 +50,7 @@ patients_with_documents AS (
         SUM(CASE WHEN extraction_priority = 2 THEN 1 ELSE 0 END) as num_consults,
         SUM(CASE WHEN extraction_priority >= 3 THEN 1 ELSE 0 END) as num_other_documents,
         -- Document categories
-        LISTAGG(DISTINCT document_category, ', ') WITHIN GROUP (ORDER BY document_category) as document_types
+        ARRAY_JOIN(ARRAY_SORT(ARRAY_AGG(DISTINCT document_category)), ', ') as document_types
     FROM fhir_prd_db.v_radiation_documents
     GROUP BY patient_fhir_id
 ),
@@ -64,8 +64,8 @@ patients_with_care_plans AS (
         COUNT(DISTINCT care_plan_id) as num_care_plans,
         MIN(cp_period_start) as earliest_care_plan_start,
         MAX(cp_period_end) as latest_care_plan_end,
-        LISTAGG(DISTINCT cp_status, ', ') WITHIN GROUP (ORDER BY cp_status) as care_plan_statuses,
-        LISTAGG(DISTINCT SUBSTR(cp_title, 1, 50), ' | ') WITHIN GROUP (ORDER BY cp_period_start) as care_plan_titles_sample
+        ARRAY_JOIN(ARRAY_SORT(ARRAY_AGG(DISTINCT cp_status)), ', ') as care_plan_statuses,
+        ARRAY_JOIN(ARRAY_AGG(DISTINCT SUBSTR(cp_title, 1, 50)), ' | ') as care_plan_titles_sample
     FROM fhir_prd_db.v_radiation_care_plan_hierarchy
     GROUP BY patient_fhir_id
 ),
@@ -94,7 +94,7 @@ patients_with_service_requests AS (
         COUNT(DISTINCT course_id) as num_service_requests,
         MIN(sr_occurrence_period_start) as earliest_sr_start,
         MAX(sr_occurrence_period_end) as latest_sr_end,
-        LISTAGG(DISTINCT sr_code_text, ' | ') WITHIN GROUP (ORDER BY sr_authored_on) as service_request_codes
+        ARRAY_JOIN(ARRAY_AGG(DISTINCT sr_code_text), ' | ') as service_request_codes
     FROM fhir_prd_db.v_radiation_treatments
     WHERE data_source_primary = 'service_request'
     GROUP BY patient_fhir_id
@@ -119,7 +119,7 @@ all_radiation_patients AS (
 -- MAIN SELECT: Data availability summary for each patient
 -- ============================================================================
 SELECT
-    arp.patient_fhir_id as patient_id,
+    arp.patient_fhir_id as patient_fhir_id,
 
     -- ========================================================================
     -- DATA AVAILABILITY FLAGS (Boolean indicators)

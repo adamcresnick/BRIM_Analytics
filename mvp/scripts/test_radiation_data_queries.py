@@ -144,8 +144,7 @@ def main():
             obs_dose_value,
             obs_dose_unit,
             obs_radiation_field,
-            radiation_modality,
-            radiation_site,
+            obs_radiation_site_code,
             data_source_primary
         FROM v_radiation_treatments
         WHERE patient_fhir_id = '{athena_patient_id}'
@@ -163,7 +162,6 @@ def main():
             print(f"    - Stop date: {treatment.get('obs_stop_date')}")
             print(f"    - Dose: {treatment.get('obs_dose_value')} {treatment.get('obs_dose_unit')}")
             print(f"    - Field/Site: {treatment.get('obs_radiation_field')}")
-            print(f"    - Modality: {treatment.get('radiation_modality')}")
             print(f"    - Data source: {treatment.get('data_source_primary')}")
     else:
         print("\n  No structured ELECT data available")
@@ -180,14 +178,13 @@ def main():
             document_id,
             patient_fhir_id,
             doc_date,
-            dr_type_text,
-            dr_description,
-            document_priority,
-            binary_id,
-            content_type
+            doc_type_text,
+            doc_description,
+            extraction_priority,
+            document_category
         FROM v_radiation_documents
         WHERE patient_fhir_id = '{athena_patient_id}'
-        ORDER BY document_priority, doc_date
+        ORDER BY extraction_priority, doc_date
         LIMIT 10
     """
 
@@ -197,11 +194,11 @@ def main():
         print(f"\n  Found radiation documents (showing top 10):")
         for idx, doc in enumerate(radiation_documents, 1):
             print(f"\n  Document {idx}:")
-            print(f"    - Type: {doc.get('dr_type_text')}")
+            print(f"    - Type: {doc.get('doc_type_text')}")
             print(f"    - Date: {doc.get('doc_date')}")
-            print(f"    - Priority: {doc.get('document_priority')}")
-            print(f"    - Description: {doc.get('dr_description', 'N/A')[:80]}")
-            print(f"    - Binary ID: {doc.get('binary_id')}")
+            print(f"    - Priority: {doc.get('extraction_priority')}")
+            print(f"    - Description: {doc.get('doc_description', 'N/A')[:80]}")
+            print(f"    - Category: {doc.get('document_category')}")
     else:
         print("\n  No radiation documents available")
 
