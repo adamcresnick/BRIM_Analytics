@@ -547,6 +547,7 @@ def main():
                         AND (
                             content_type = 'text/plain'
                             OR content_type = 'text/html'
+                            OR content_type = 'text/rtf'
                             OR content_type = 'application/pdf'
                         )
                         AND (
@@ -559,6 +560,43 @@ def main():
                     ORDER BY dr_context_period_start, dr_date
                 """
                 operative_note_documents = query_athena(operative_document_query, "Querying operative note documents")
+
+                # Deduplicate by document_reference_id, prioritizing HTML over RTF
+                # Each DocumentReference may have both RTF and HTML Binary attachments
+                # We prefer HTML since RTF S3 objects are often missing
+                doc_ref_to_note = {}
+                for opnote in operative_note_documents:
+                    doc_ref_id = opnote.get('document_reference_id')
+                    if not doc_ref_id:
+                        continue
+
+                    content_type = opnote.get('content_type', '')
+
+                    # If we haven't seen this DocumentReference, add it
+                    if doc_ref_id not in doc_ref_to_note:
+                        doc_ref_to_note[doc_ref_id] = opnote
+                    else:
+                        # We've seen this DocumentReference before
+                        # Prefer text/html over text/rtf over others
+                        existing_content_type = doc_ref_to_note[doc_ref_id].get('content_type', '')
+
+                        # Priority order: text/html > text/plain > application/pdf > text/rtf
+                        priority = {
+                            'text/html': 1,
+                            'text/plain': 2,
+                            'application/pdf': 3,
+                            'text/rtf': 4
+                        }
+
+                        current_priority = priority.get(content_type, 99)
+                        existing_priority = priority.get(existing_content_type, 99)
+
+                        if current_priority < existing_priority:
+                            doc_ref_to_note[doc_ref_id] = opnote
+
+                # Use deduplicated list
+                operative_note_documents = list(doc_ref_to_note.values())
+                print(f"  📄 Deduplicated to {len(operative_note_documents)} unique DocumentReferences (prioritized HTML over RTF)")
 
                 # Match operative notes to surgeries using date matching
                 # Enrich each operative note with matched surgery information
@@ -628,6 +666,7 @@ def main():
                 AND (
                     content_type = 'text/plain'
                     OR content_type = 'text/html'
+                    OR content_type = 'text/rtf'
                     OR content_type = 'application/pdf'
                 )
                 AND (
@@ -639,6 +678,43 @@ def main():
             ORDER BY dr_date
         """
         all_progress_notes = query_athena(progress_notes_query, "Querying progress notes")
+
+        # Deduplicate by document_reference_id, prioritizing HTML over RTF
+        # Each DocumentReference may have both RTF and HTML Binary attachments
+        doc_ref_to_note = {}
+        for pnote in all_progress_notes:
+            doc_ref_id = pnote.get('document_reference_id')
+            if not doc_ref_id:
+                continue
+
+            content_type = pnote.get('content_type', '')
+
+            # If we haven't seen this DocumentReference, add it
+            if doc_ref_id not in doc_ref_to_note:
+                doc_ref_to_note[doc_ref_id] = pnote
+            else:
+                # We've seen this DocumentReference before
+                # Prefer text/html over text/rtf over others
+                existing_content_type = doc_ref_to_note[doc_ref_id].get('content_type', '')
+
+                # Priority order: text/html > text/plain > application/pdf > text/rtf
+                priority = {
+                    'text/html': 1,
+                    'text/plain': 2,
+                    'application/pdf': 3,
+                    'text/rtf': 4
+                }
+
+                current_priority = priority.get(content_type, 99)
+                existing_priority = priority.get(existing_content_type, 99)
+
+                if current_priority < existing_priority:
+                    doc_ref_to_note[doc_ref_id] = pnote
+
+        # Use deduplicated list
+        all_progress_notes_original_count = len(all_progress_notes)
+        all_progress_notes = list(doc_ref_to_note.values())
+        print(f"  📄 Deduplicated {all_progress_notes_original_count} → {len(all_progress_notes)} unique DocumentReferences (prioritized HTML over RTF)")
 
         # Filter to oncology-specific notes
         try:
