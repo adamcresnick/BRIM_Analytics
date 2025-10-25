@@ -2,8 +2,8 @@
 
 **Purpose:** Provide comprehensive context for new Claude sessions working on the Multi-Agent Clinical Data Extraction System
 
-**Last Updated:** 2025-10-20
-**System Version:** v1.2.0
+**Last Updated:** 2025-10-25
+**System Version:** v1.3.0
 **Repository:** https://github.com/adamcresnick/BRIM_Analytics
 
 ---
@@ -35,7 +35,7 @@ Extracts and validates clinical variables from pediatric brain tumor patient rec
 - **Agent 1 (You - Claude/MasterAgent)**: Orchestrator, validator, adjudicator, timeline analyzer
 - **Agent 2 (MedGemma 27B)**: Medical text extractor (local Ollama model)
 
-### Key Capabilities (v1.2.0)
+### Key Capabilities (v1.3.0)
 
 ✅ **Multi-source extraction**: Imaging text, imaging PDFs, operative reports, progress notes
 ✅ **Document text caching**: 80% cost savings, extract once use forever
@@ -46,6 +46,10 @@ Extracts and validates clinical variables from pediatric brain tumor patient rec
 ✅ **Event type classification**: Initial/Recurrence/Progressive/Second Malignancy
 ✅ **Workflow monitoring**: Multi-level logging, error tracking, notifications
 ✅ **Timestamped abstractions**: Never overwrites, always creates new dated folders
+✅ **Enhanced operative note extraction**: Deduplication, datetime bug fixes, failure tracking
+✅ **Automatic AWS SSO refresh**: Handles token expiration in long-running workflows
+✅ **Athena view deployment**: Automated timeline view deployment with prerequisites
+✅ **ChemotherapyFilter integration**: Automatic medication categorization in timeline
 
 ---
 
@@ -201,6 +205,89 @@ prioritized_notes = note_prioritizer.prioritize_notes(
 
 **Documentation:** [docs/PROGRESS_NOTE_PRIORITIZATION.md](docs/PROGRESS_NOTE_PRIORITIZATION.md)
 
+### 5. Enhanced Operative Note Extraction (v1.3.0)
+
+**Purpose:** Robust operative note extraction with deduplication and error handling
+
+**Bug Fixes (Oct 23-24):**
+
+1. **Datetime Column Handling:**
+   - All observation datetime columns wrapped in `TRY_CAST(... AS TIMESTAMP(3))`
+   - Prevents extraction crashes from malformed datetime strings
+   - Affects: operative notes, pathology reports, radiology reports in `v_binary_files`
+
+2. **Operative Note Deduplication:**
+   - Prevents duplicate extractions when same note linked to multiple procedures
+   - Uses `document_reference_id` for deduplication instead of `procedure_fhir_id`
+   - Reduces extraction costs and improves data quality
+   - Example: Single operative note with tumor and non-tumor procedures
+
+3. **Extraction Failure Tracking:**
+   - Failed operative note extractions logged to `failed_operative_extractions` list
+   - Enables post-workflow QA review
+   - Format: `{'document_reference_id': '...', 'error': '...', 'procedure_id': '...'}`
+
+**Usage in Workflow:**
+```python
+# Deduplication
+seen_doc_refs = set()
+for note in operative_reports:
+    doc_ref_id = note['document_reference_id']
+    if doc_ref_id in seen_doc_refs:
+        continue  # Skip duplicate
+    seen_doc_refs.add(doc_ref_id)
+
+    # Extract text from cache or Binary
+    cached_doc = doc_cache.get_cached_document(doc_ref_id)
+    if cached_doc:
+        text = cached_doc.extracted_text
+    else:
+        text, error = binary_agent.extract_text_from_binary(...)
+        if error:
+            failed_operative_extractions.append({
+                'document_reference_id': doc_ref_id,
+                'error': error,
+                'procedure_id': note['procedure_fhir_id']
+            })
+            continue
+```
+
+**Code Location:** `scripts/run_full_multi_source_abstraction.py` lines 450-550
+
+**Quality Assurance:**
+After workflow completion, check `comprehensive_summary['failed_operative_extractions']` for:
+- Binary files not found in S3 (404 errors)
+- PDF corruption or unsupported formats
+- Text extraction timeouts (large PDFs)
+- SSO token expiration (now auto-retried)
+
+### 6. Automatic AWS SSO Token Refresh (v1.3.0)
+
+**Purpose:** Automatically handle expired SSO tokens during long-running extractions
+
+**How It Works:**
+1. BinaryFileAgent detects SSO token expiration errors
+2. Triggers `aws sso login --profile radiant-prod` subprocess
+3. Waits for user to complete browser authentication
+4. Retries failed operation automatically
+5. Continues extraction workflow without manual intervention
+
+**Impact:**
+- Eliminates workflow interruptions from token expiration
+- Enables multi-hour extraction workflows
+- Reduces manual monitoring requirements
+
+**Code Location:** `agents/binary_file_agent.py` lines 180-220
+
+**User Experience:**
+```
+⚠️  AWS SSO token expired. Initiating automatic login...
+🔐 Please complete SSO login in your browser...
+✓ SSO login successful! Resuming extraction...
+```
+
+**Note:** User must still complete browser authentication, but workflow resumes automatically afterward.
+
 ---
 
 ## Main Workflow Script
@@ -251,6 +338,166 @@ python3 scripts/run_full_multi_source_abstraction.py --patient-id <PATIENT_FHIR_
 - `data/patient_abstractions/<TIMESTAMP>/<PATIENT_ID>.json` - Full abstraction
 - `data/patient_abstractions/<TIMESTAMP>/<PATIENT_ID>_checkpoint.json` - Recovery checkpoint
 - Log files in abstraction folder
+
+---
+
+## Athena View Deployment and Timeline Maintenance
+
+### When to Rebuild Timeline Views
+
+Rebuild Athena timeline views when:
+1. Source FHIR views change (v_medications, v_imaging, v_procedures_tumor, etc.)
+2. Timeline view logic updated (new event types, column changes)
+3. Temporal context calculations modified
+4. Column name standardization applied
+
+**Recent Updates (Oct 25):**
+- Column standardization: `patient_id` → `patient_fhir_id` across all views
+- Datetime standardization: `VARCHAR` → `TIMESTAMP(3)` for all datetime columns
+- New data source: `v_visits_unified` v2.2 (unified encounters + appointments)
+- Updated prerequisite views with correct column names
+
+### Prerequisite Views (MUST DEPLOY FIRST)
+
+The unified timeline depends on two prerequisite views that **MUST** be deployed before the main timeline view:
+
+1. **v_diagnoses** - Normalizes `v_problem_list_diagnoses`
+   - Removes `pld_` column prefixes
+   - Standardizes diagnosis data structure
+   - File: `athena_views/views/V_DIAGNOSES.sql`
+
+2. **v_radiation_summary** - Aggregates `v_radiation_treatments`
+   - Course-level radiation summaries (course 1, 2, 3)
+   - Uses `patient_fhir_id` (not `patient_id`)
+   - File: `athena_views/views/V_RADIATION_SUMMARY.sql`
+
+### Deployment Procedure
+
+```bash
+# Navigate to athena_views directory
+cd /Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/athena_views
+
+# Deploy all timeline views (prerequisites + main view)
+./deploy_unified_timeline.sh
+
+# Output:
+# Deploying v_diagnoses...
+#   ✅ v_diagnoses deployed successfully!
+# Deploying v_radiation_summary...
+#   ✅ v_radiation_summary deployed successfully!
+# Deploying v_unified_patient_timeline...
+#   ✅ v_unified_patient_timeline deployed successfully!
+```
+
+**Deployment Script:** `athena_views/deploy_unified_timeline.sh`
+- Deploys views in correct order (prerequisites first)
+- Handles Athena's single-statement limitation
+- Polls for query completion
+- Reports deployment status
+
+### Timeline View Files
+
+- `athena_views/views/V_DIAGNOSES.sql` - Diagnosis normalization view
+- `athena_views/views/V_RADIATION_SUMMARY.sql` - Radiation course summaries
+- `athena_views/views/V_UNIFIED_PATIENT_TIMELINE.sql` - Main timeline view (with comments & validation queries)
+- `athena_views/views/V_UNIFIED_PATIENT_TIMELINE_DEPLOY.sql` - Clean deployment version (no comments)
+- `athena_views/deploy_unified_timeline.sh` - Automated deployment script
+
+### Rebuild DuckDB Timeline After Athena Updates
+
+**CRITICAL:** After deploying updated Athena views, rebuild local DuckDB timeline:
+
+```bash
+cd /Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp
+python3 scripts/build_timeline_database.py
+```
+
+**What This Does:**
+1. Queries updated `v_unified_patient_timeline` from Athena
+2. Applies ChemotherapyFilter to medication categorization
+3. Computes temporal context (disease phases, milestones)
+4. Loads data into `data/timeline.duckdb`
+5. Creates indexes for fast queries
+
+**Output:**
+```
+================================================================================
+BUILD DUCKDB TIMELINE DATABASE
+Patient: e4BwD8ZYDBccepXcJ.Ilo3w3
+================================================================================
+
+Applying ChemotherapyFilter to medications
+  ✓ vinBLAStine inj 10 mg → Chemotherapy (rxnorm_ingredient, high confidence)
+  ✓ selumetinib capsule → Targeted Therapy (drug_name_alias, medium confidence)
+
+✓ Updated 110 medication categories using ChemotherapyFilter
+
+Milestones identified:
+  first_treatment_date: 2021-05-20
+
+Disease phase distribution:
+  Observation     12527
+  Surveillance      478
+  On-treatment      261
+
+✅ TIMELINE DATABASE CREATED SUCCESSFULLY
+Database location: /Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/data/timeline.duckdb
+
+Event counts by type:
+  Visit                1007
+  Measurement           438
+  Medication            281
+  Imaging                82
+  Procedure               9
+  Molecular Test          3
+```
+
+**Validation:**
+```python
+import duckdb
+conn = duckdb.connect('data/timeline.duckdb')
+conn.execute('SELECT event_type, COUNT(*) FROM events GROUP BY event_type').fetchdf()
+```
+
+### ChemotherapyFilter Integration in Timeline Build
+
+**Automatic Medication Categorization:**
+
+When building the timeline database, medications are automatically categorized using ChemotherapyFilter:
+
+**Process:**
+1. Query medications from `v_medications` (includes medication names and RxNorm codes)
+2. Apply ChemotherapyFilter to each medication
+3. Classify as: Chemotherapy, Targeted Therapy, or Other Medication
+4. Update `event_category` in timeline database
+
+**Reference Files Location:**
+`athena_views/data_dictionary/chemo_reference/`
+- `chemotherapy_drugs.csv` - 3067 drug names and classifications
+- `chemotherapy_drug_aliases.csv` - 23795 name variations
+- `chemotherapy_rxnorm_mappings.csv` - 2806 RxNorm code mappings
+
+**Code Location:** `scripts/build_timeline_database.py` lines 120-180
+
+### Troubleshooting Timeline Deployment
+
+**Error: "Only one sql statement is allowed"**
+- Cause: SQL file contains comments or multiple statements
+- Solution: Use `V_UNIFIED_PATIENT_TIMELINE_DEPLOY.sql` (clean version without comments)
+
+**Error: "Column 'patient_id' cannot be resolved"**
+- Cause: View uses old column name
+- Solution: Update to `patient_fhir_id` everywhere in source views
+
+**Timeline has no events after rebuild:**
+- Check SSO token: `aws sso login --profile radiant-prod`
+- Verify Athena views deployed successfully via AWS Console
+- Check test patient ID matches: `e4BwD8ZYDBccepXcJ.Ilo3w3`
+
+**Deployment takes very long:**
+- Normal for large views (v_unified_patient_timeline can take 30-60 seconds)
+- Script polls every 2 seconds for completion
+- Check Athena console for query progress
 
 ---
 
@@ -381,34 +628,49 @@ ls -la data/patient_abstractions/$(ls -t data/patient_abstractions/ | head -1)/
 ## File Structure Reference
 
 ```
-/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/
-├── agents/
-│   ├── master_agent.py              # Agent 1 (Claude orchestrator)
-│   ├── medgemma_agent.py            # Agent 2 (MedGemma wrapper)
-│   ├── binary_file_agent.py         # PDF/HTML extraction from S3
-│   ├── extraction_prompts.py        # All extraction prompts
-│   ├── eor_adjudicator.py           # Multi-source EOR reconciliation
-│   └── event_type_classifier.py     # Event classification logic
-├── scripts/
-│   └── run_full_multi_source_abstraction.py  # Main workflow
-├── utils/
-│   ├── Athena_Schema.csv            # AUTHORITATIVE schema (always check!)
-│   ├── workflow_monitoring.py       # Enhanced logging
-│   ├── document_text_cache.py       # PDF/HTML text caching
-│   ├── progress_note_prioritization.py  # Note prioritization
-│   └── progress_note_filters.py     # Oncology filtering
-├── data/
-│   ├── timeline.duckdb              # Patient timeline database
-│   ├── document_text_cache.duckdb   # Cached extracted text
-│   └── patient_abstractions/        # Timestamped output folders
-├── docs/
-│   ├── WORKFLOW_MONITORING.md       # Monitoring framework docs
-│   ├── DOCUMENT_TEXT_CACHE.md       # Caching system docs
-│   └── PROGRESS_NOTE_PRIORITIZATION.md  # Prioritization docs
-├── COMPREHENSIVE_SYSTEM_DOCUMENTATION.md  # Complete system guide
-├── ATHENA_VIEW_COLUMN_QUICK_REFERENCE.md  # Column name reference
-├── AGENT_ONBOARDING_GUIDE.md        # This file
-└── PRODUCTION_DEPLOYMENT_ROADMAP.md  # Production deployment plan
+/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/
+├── mvp/
+│   ├── agents/
+│   │   ├── master_agent.py              # Agent 1 (Claude orchestrator)
+│   │   ├── medgemma_agent.py            # Agent 2 (MedGemma wrapper)
+│   │   ├── binary_file_agent.py         # PDF/HTML extraction from S3
+│   │   ├── extraction_prompts.py        # All extraction prompts
+│   │   ├── eor_adjudicator.py           # Multi-source EOR reconciliation
+│   │   └── event_type_classifier.py     # Event classification logic
+│   ├── scripts/
+│   │   ├── run_full_multi_source_abstraction.py  # Main workflow
+│   │   └── build_timeline_database.py   # Build DuckDB timeline from Athena
+│   ├── utils/
+│   │   ├── Athena_Schema.csv            # AUTHORITATIVE schema (always check!)
+│   │   ├── workflow_monitoring.py       # Enhanced logging
+│   │   ├── document_text_cache.py       # PDF/HTML text caching
+│   │   ├── progress_note_prioritization.py  # Note prioritization
+│   │   └── progress_note_filters.py     # Oncology filtering
+│   ├── data/
+│   │   ├── timeline.duckdb              # Patient timeline database
+│   │   ├── document_text_cache.duckdb   # Cached extracted text
+│   │   └── patient_abstractions/        # Timestamped output folders
+│   ├── docs/
+│   │   ├── WORKFLOW_MONITORING.md       # Monitoring framework docs
+│   │   ├── DOCUMENT_TEXT_CACHE.md       # Caching system docs
+│   │   └── PROGRESS_NOTE_PRIORITIZATION.md  # Prioritization docs
+│   ├── COMPREHENSIVE_SYSTEM_DOCUMENTATION.md  # Complete system guide
+│   ├── ATHENA_VIEW_COLUMN_QUICK_REFERENCE.md  # Column name reference
+│   ├── AGENT_ONBOARDING_GUIDE.md        # This file
+│   ├── V_UNIFIED_TIMELINE_REBUILD_ASSESSMENT.md  # Timeline rebuild rationale
+│   └── PRODUCTION_DEPLOYMENT_ROADMAP.md  # Production deployment plan
+├── athena_views/
+│   ├── views/
+│   │   ├── V_DIAGNOSES.sql              # Prerequisite: Normalized diagnoses
+│   │   ├── V_RADIATION_SUMMARY.sql      # Prerequisite: Radiation course summaries
+│   │   ├── V_UNIFIED_PATIENT_TIMELINE.sql  # Main timeline view (with comments)
+│   │   └── V_UNIFIED_PATIENT_TIMELINE_DEPLOY.sql  # Clean deployment version
+│   ├── deploy_unified_timeline.sh       # Automated timeline deployment
+│   └── data_dictionary/
+│       └── chemo_reference/             # ChemotherapyFilter reference files
+│           ├── chemotherapy_drugs.csv
+│           ├── chemotherapy_drug_aliases.csv
+│           └── chemotherapy_rxnorm_mappings.csv
 ```
 
 ---
@@ -419,7 +681,21 @@ ls -la data/patient_abstractions/$(ls -t data/patient_abstractions/ | head -1)/
 
 **Symptoms:** `Error when retrieving token from sso: Token has expired and refresh failed`
 
-**Solution:**
+**Automatic Handling (v1.3.0):**
+BinaryFileAgent now automatically handles SSO token expiration:
+1. Detects token expiration error
+2. Triggers `aws sso login` automatically
+3. Waits for browser authentication
+4. Resumes extraction workflow
+
+**User Experience:**
+```
+⚠️  AWS SSO token expired. Initiating automatic login...
+🔐 Please complete SSO login in your browser...
+✓ SSO login successful! Resuming extraction...
+```
+
+**Manual Solution (if needed):**
 ```bash
 aws sso login --profile radiant-prod
 ```
@@ -471,7 +747,18 @@ ollama restart
 
 ## Version History Quick Reference
 
-### v1.2.0 (2025-10-20) - Current Version
+### v1.3.0 (2025-10-25) - Current Version
+- ✅ Enhanced operative note extraction with deduplication and datetime bug fixes
+- ✅ Automatic AWS SSO token refresh for long-running workflows
+- ✅ Extraction failure tracking for quality assurance
+- ✅ Athena timeline view deployment automation (prerequisites + main view)
+- ✅ DuckDB timeline rebuild procedures documented
+- ✅ ChemotherapyFilter integration in timeline build
+- ✅ Column name standardization: patient_id → patient_fhir_id across all views
+- ✅ Datetime standardization: VARCHAR → TIMESTAMP(3) for all datetime columns
+- ✅ v_visits_unified v2.2 integration in timeline
+
+### v1.2.0 (2025-10-20)
 - ✅ All 4 components fully integrated (WorkflowMonitoring, DocumentTextCache, BinaryFileAgent, ProgressNotePrioritizer)
 - ✅ Phases 2B, 2C, 2D fully functional (imaging PDFs, operative reports, progress notes)
 - ✅ Complete end-to-end multi-source workflow operational
@@ -545,6 +832,6 @@ When asking for help, include:
 
 ---
 
-**Last Updated:** 2025-10-20
+**Last Updated:** 2025-10-25
 **Maintained By:** Adam Cresnick, MD & Claude (Agent 1)
 **Repository:** https://github.com/adamcresnick/BRIM_Analytics
