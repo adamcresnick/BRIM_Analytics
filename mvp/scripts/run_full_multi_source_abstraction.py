@@ -855,7 +855,9 @@ def main():
         print()
 
         all_extractions = []
-        extraction_count = {'imaging_text': 0, 'imaging_pdf': 0, 'operative': 0, 'progress_notes': 0}
+        extraction_count = {'imaging_text': 0, 'imaging_pdf': 0, 'operative_reports': 0, 'progress_notes': 0}
+        extraction_failures = {'imaging_text': 0, 'imaging_pdf': 0, 'operative_reports': 0, 'progress_notes': 0}
+        sso_token_expired = False
 
         # Build surgical history from Athena operative_reports (no timeline needed)
         surgical_history = [
@@ -1099,6 +1101,10 @@ def main():
                 )
                 if error:
                     workflow_logger.log_warning(f"Failed to extract PDF {doc_id}: {error}")
+                    extraction_failures['imaging_pdf'] += 1
+                    # Check if this is an SSO token expiration error
+                    if 'Token has expired' in str(error) or 'SSO' in str(error):
+                        sso_token_expired = True
                     continue
 
                 # Cache the extracted text
@@ -1301,6 +1307,10 @@ def main():
                     if error:
                         workflow_logger.log_warning(f"Failed to extract operative note {doc_id}: {error}")
                         print(f"    ⚠️  Failed to extract text: {error}")
+                        extraction_failures['operative_reports'] += 1
+                        # Check if this is an SSO token expiration error
+                        if 'Token has expired' in str(error) or 'SSO' in str(error):
+                            sso_token_expired = True
                         continue
 
                     # Determine extraction method based on content type
@@ -1443,6 +1453,10 @@ def main():
                 )
                 if error:
                     workflow_logger.log_warning(f"Failed to extract progress note {doc_id}: {error}")
+                    extraction_failures['progress_notes'] += 1
+                    # Check if this is an SSO token expiration error
+                    if 'Token has expired' in str(error) or 'SSO' in str(error):
+                        sso_token_expired = True
                     continue
 
                 # Determine extraction method based on content type
@@ -1550,12 +1564,51 @@ def main():
         print(f"  ✅ Completed {extraction_count['progress_notes']} progress note extractions")
         print()
 
+        # Calculate total failures and determine checkpoint status
+        total_failures = sum(extraction_failures.values())
+        total_expected = (len(imaging_text_reports) + len(imaging_pdfs) +
+                         len(operative_reports) + len(prioritized_notes))
+
+        # Consider it a partial completion if:
+        # 1. There are significant failures (>10 failures OR >20% failure rate)
+        # 2. SSO token expired (preventing remaining extractions)
+        # 3. Any operative reports or progress notes failed (these are critical)
+        is_partial_completion = (
+            total_failures > 10 or
+            (total_expected > 0 and total_failures / total_expected > 0.2) or
+            sso_token_expired or
+            extraction_failures['operative_reports'] > 0 or
+            extraction_failures['progress_notes'] > 0
+        )
+
+        checkpoint_status = 'partial_completion' if is_partial_completion else 'completed'
+
         comprehensive_summary['phases']['agent2_extraction'] = {
             'total_extractions': len(all_extractions),
             'by_source': extraction_count,
+            'extraction_failures': extraction_failures,
+            'total_failures': total_failures,
+            'sso_token_expired': sso_token_expired,
+            'checkpoint_status': checkpoint_status,
             'extractions': all_extractions
         }
-        save_checkpoint('agent2_extraction', 'completed', comprehensive_summary['phases']['agent2_extraction'])
+
+        # Save checkpoint with appropriate status
+        save_checkpoint('agent2_extraction', checkpoint_status, comprehensive_summary['phases']['agent2_extraction'])
+
+        # Print failure summary if there were failures
+        if total_failures > 0:
+            print()
+            print("⚠️  EXTRACTION FAILURES DETECTED:")
+            print(f"  Imaging PDF failures: {extraction_failures['imaging_pdf']}")
+            print(f"  Operative report failures: {extraction_failures['operative_reports']}")
+            print(f"  Progress note failures: {extraction_failures['progress_notes']}")
+            print(f"  Total failures: {total_failures}")
+            if sso_token_expired:
+                print(f"  ⚠️  AWS SSO TOKEN EXPIRED - Remaining extractions could not complete")
+                print(f"  ⚠️  Run 'aws sso login --profile radiant-prod' and use --resume flag to continue")
+            print(f"  Checkpoint status: {checkpoint_status}")
+            print()
 
         # ================================================================
         # PHASE 3: AGENT 1 TEMPORAL INCONSISTENCY DETECTION
@@ -2002,10 +2055,18 @@ Provide recommendation: keep_both | revise_first | revise_second | escalate_to_h
         with open(abstraction_path, 'w') as f:
             json.dump(comprehensive_summary, f, indent=2)
 
-        save_checkpoint('complete', 'success')
+        # Determine if workflow completed successfully or with failures
+        final_status = 'success'
+        if checkpoint_status == 'partial_completion':
+            final_status = 'partial_success'
+
+        save_checkpoint('complete', final_status)
 
         print("="*80)
-        print("COMPREHENSIVE ABSTRACTION COMPLETE")
+        if final_status == 'partial_success':
+            print("⚠️  COMPREHENSIVE ABSTRACTION COMPLETED WITH FAILURES")
+        else:
+            print("COMPREHENSIVE ABSTRACTION COMPLETE")
         print("="*80)
         print()
         print(f"✅ Abstraction saved: {abstraction_path}")
@@ -2014,9 +2075,14 @@ Provide recommendation: keep_both | revise_first | revise_second | escalate_to_h
         print("Summary:")
         print(f"  Imaging text: {extraction_count['imaging_text']} extractions")
         print(f"  Imaging PDFs: {extraction_count['imaging_pdf']} extractions")
-        print(f"  Operative reports: {extraction_count['operative']} extractions")
+        print(f"  Operative reports: {extraction_count['operative_reports']} extractions")
         print(f"  Progress notes: {extraction_count['progress_notes']} extractions")
         print(f"  Total extractions: {len(all_extractions)}")
+        if final_status == 'partial_success':
+            print()
+            print("⚠️  WARNING: Extraction completed with failures (see above for details)")
+            print("⚠️  Checkpoint status: partial_completion")
+            print("⚠️  You can use --resume to re-run failed extractions after fixing issues")
         print()
 
         return 0
