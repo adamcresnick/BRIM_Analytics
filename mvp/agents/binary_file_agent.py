@@ -127,16 +127,58 @@ class BinaryFileAgent:
         Refresh S3 client with new AWS SSO credentials
 
         This is called when TokenRetrievalError is detected, which happens
-        when AWS SSO tokens expire (typically after 2.5 hours).
+        when AWS SSO tokens expire (typically after 8-12 hours).
+
+        This method actually refreshes the SSO token by running 'aws sso login'
+        which opens a browser for user authentication.
         """
+        import subprocess
+
         try:
-            logger.info("Refreshing AWS SSO credentials...")
+            logger.info("AWS SSO token expired. Refreshing credentials...")
             if hasattr(self, 'aws_profile') and self.aws_profile:
-                session = boto3.Session(profile_name=self.aws_profile, region_name=self.region_name)
-                self.s3_client = session.client('s3')
-                logger.info("✅ Successfully refreshed S3 client with new credentials")
+                print(f"\n{'='*80}")
+                print("⚠️  AWS SSO TOKEN EXPIRED DURING EXTRACTION")
+                print(f"{'='*80}")
+                print(f"Opening browser for AWS SSO login (profile: {self.aws_profile})...")
+                print("Please complete the authentication in your browser.")
+                print(f"{'='*80}\n")
+
+                # Run aws sso login to refresh the token via browser
+                result = subprocess.run(
+                    ['aws', 'sso', 'login', '--profile', self.aws_profile],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout for user to complete login
+                )
+
+                if result.returncode == 0:
+                    # Create new session with refreshed token
+                    session = boto3.Session(profile_name=self.aws_profile, region_name=self.region_name)
+                    self.s3_client = session.client('s3')
+                    logger.info("✅ Successfully refreshed AWS SSO credentials and S3 client")
+                    print(f"\n{'='*80}")
+                    print("✅ AWS SSO TOKEN REFRESHED - Extraction resuming...")
+                    print(f"{'='*80}\n")
+                else:
+                    error_msg = f"Failed to refresh AWS SSO token: {result.stderr}"
+                    logger.error(error_msg)
+                    print(f"\n❌ {error_msg}\n")
+                    raise Exception(error_msg)
             else:
                 logger.warning("No AWS profile configured, cannot refresh credentials")
+                raise Exception("No AWS profile configured for SSO refresh")
+        except subprocess.TimeoutExpired:
+            error_msg = "AWS SSO login timed out after 5 minutes"
+            logger.error(error_msg)
+            print(f"\n❌ {error_msg}\n")
+            print("Please run 'aws sso login --profile radiant-prod' manually and restart extraction.\n")
+            raise Exception(error_msg)
+        except FileNotFoundError:
+            error_msg = "AWS CLI not found. Please install AWS CLI."
+            logger.error(error_msg)
+            print(f"\n❌ {error_msg}\n")
+            raise Exception(error_msg)
         except Exception as e:
             logger.error(f"Failed to refresh AWS credentials: {e}")
             raise
