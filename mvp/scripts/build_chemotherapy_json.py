@@ -144,6 +144,12 @@ class ChemotherapyJSONBuilder:
                 current_date = datetime.fromisoformat(med.get('medication_start_date', '').split()[0])
                 last_date = datetime.fromisoformat(current_course[-1].get('medication_start_date', '').split()[0])
 
+                # Strip timezone info to ensure both are naive (avoid offset-naive vs offset-aware error)
+                if current_date.tzinfo is not None:
+                    current_date = current_date.replace(tzinfo=None)
+                if last_date.tzinfo is not None:
+                    last_date = last_date.replace(tzinfo=None)
+
                 # If within 90 days, add to current course
                 if (current_date - last_date).days <= 90:
                     current_course.append(med)
@@ -286,14 +292,27 @@ class ChemotherapyJSONBuilder:
                 'confirmed': len(binary_files['infusion_records']) > 0 or len(binary_files['progress_notes']) > 0
             }
 
+            # Calculate duration with timezone-naive datetimes
+            duration_days = None
+            if course_start and course_end:
+                try:
+                    start_dt = datetime.fromisoformat(course_start.split()[0])
+                    end_dt = datetime.fromisoformat(course_end.split()[0])
+                    # Strip timezone info to ensure both are naive
+                    if start_dt.tzinfo is not None:
+                        start_dt = start_dt.replace(tzinfo=None)
+                    if end_dt.tzinfo is not None:
+                        end_dt = end_dt.replace(tzinfo=None)
+                    duration_days = (end_dt - start_dt).days
+                except:
+                    pass
+
             course_detail = {
                 'course_id': f'course_{i}',
                 'course_number': i,
                 'start_date': course_start,
                 'end_date': course_end,
-                'duration_days': (datetime.fromisoformat(course_end.split()[0]) -
-                                datetime.fromisoformat(course_start.split()[0])).days
-                                if course_start and course_end else None,
+                'duration_days': duration_days,
                 'medications': course_meds,
                 'unique_drugs': unique_drugs,
                 'total_orders': len(course_meds),
