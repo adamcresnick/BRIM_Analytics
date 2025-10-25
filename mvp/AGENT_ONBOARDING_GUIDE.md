@@ -95,7 +95,7 @@ AGENT 2 (MedGemma 27B via Ollama)
 
 ---
 
-## Key Components (v1.2.0)
+## Key Components (v1.3.0)
 
 ### 1. WorkflowMonitoring (`utils/workflow_monitoring.py`)
 
