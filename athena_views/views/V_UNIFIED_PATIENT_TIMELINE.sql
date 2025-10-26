@@ -253,43 +253,29 @@ FROM fhir_prd_db.v_imaging vi
 UNION ALL
 
 -- ============================================================================
--- 4. MEDICATIONS AS EVENTS (Systemic Therapy)
--- Source: v_medications
+-- 4. MEDICATIONS AS EVENTS (Chemotherapy & Systemic Therapy)
+-- Source: v_chemo_medications (comprehensive chemotherapy filtering with drug categorization)
 -- Provenance: MedicationRequest FHIR resource
+-- NOTE: Using v_chemo_medications instead of v_medications for accurate drug categorization
+--       and to include therapeutic_normalized for drug continuity detection
 -- ============================================================================
 SELECT
-    vm.patient_fhir_id,
-    'med_' || vm.medication_request_id as event_id,
-    CAST(vm.medication_start_date AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vm.medication_start_date AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vm.medication_start_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
+    vcm.patient_fhir_id,
+    'med_' || vcm.medication_request_fhir_id as event_id,
+    CAST(vcm.medication_start_date AS DATE) as event_date,
+    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vcm.medication_start_date AS DATE)) as age_at_event_days,
+    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vcm.medication_start_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
 
     'Medication' as event_type,
-    CASE
-        WHEN LOWER(vm.medication_name) LIKE '%vincristine%' OR LOWER(vm.medication_name) LIKE '%carboplatin%'
-             OR LOWER(vm.medication_name) LIKE '%cisplatin%' OR LOWER(vm.medication_name) LIKE '%etoposide%'
-             OR LOWER(vm.medication_name) LIKE '%cyclophosphamide%' OR LOWER(vm.medication_name) LIKE '%ifosfamide%'
-        THEN 'Chemotherapy'
-        WHEN LOWER(vm.medication_name) LIKE '%selumetinib%' OR LOWER(vm.medication_name) LIKE '%dabrafenib%'
-             OR LOWER(vm.medication_name) LIKE '%trametinib%' OR LOWER(vm.medication_name) LIKE '%vemurafenib%'
-        THEN 'Targeted Therapy'
-        WHEN LOWER(vm.medication_name) LIKE '%dexamethasone%' OR LOWER(vm.medication_name) LIKE '%prednisone%'
-             OR LOWER(vm.medication_name) LIKE '%methylprednisolone%'
-        THEN 'Corticosteroid'
-        WHEN LOWER(vm.medication_name) LIKE '%ondansetron%' OR LOWER(vm.medication_name) LIKE '%granisetron%'
-             OR LOWER(vm.medication_name) LIKE '%metoclopramide%'
-        THEN 'Antiemetic'
-        WHEN LOWER(vm.medication_name) LIKE '%filgrastim%' OR LOWER(vm.medication_name) LIKE '%pegfilgrastim%'
-        THEN 'Growth Factor'
-        ELSE 'Other Medication'
-    END as event_category,
-    NULL as event_subtype,
-    vm.medication_name as event_description,
-    vm.mr_status as event_status,
+    -- Use accurate drug_category from v_chemo_medications instead of LIKE pattern matching
+    COALESCE(vcm.chemo_drug_category, 'Other Medication') as event_category,
+    vcm.chemo_preferred_name as event_subtype,
+    vcm.medication_name as event_description,
+    vcm.medication_status as event_status,
 
-    'v_medications' as source_view,
+    'v_chemo_medications' as source_view,
     'MedicationRequest' as source_domain,
-    vm.medication_request_id as source_id,
+    vcm.medication_request_fhir_id as source_id,
 
     CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
     CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
@@ -297,32 +283,35 @@ SELECT
     CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
 
     CAST(CAST(MAP(
-        ARRAY['medication_name', 'medication_form', 'rx_norm_codes', 'start_date', 'end_date', 'status', 'requester', 'care_plan_id'],
+        ARRAY['medication_name', 'chemo_preferred_name', 'chemo_therapeutic_normalized', 'chemo_drug_category', 'rx_norm_codes', 'start_date', 'stop_date', 'status', 'route', 'dosage'],
         ARRAY[
-            CAST(vm.medication_name AS VARCHAR),
-            CAST(vm.medication_form AS VARCHAR),
-            CAST(vm.rx_norm_codes AS VARCHAR),
-            CAST(vm.medication_start_date AS VARCHAR),
-            CAST(vm.mr_validity_period_end AS VARCHAR),
-            CAST(vm.mr_status AS VARCHAR),
-            CAST(vm.requester_name AS VARCHAR),
-            CAST(vm.mrb_care_plan_references AS VARCHAR)
+            CAST(vcm.medication_name AS VARCHAR),
+            CAST(vcm.chemo_preferred_name AS VARCHAR),
+            CAST(vcm.chemo_therapeutic_normalized AS VARCHAR),
+            CAST(vcm.chemo_drug_category AS VARCHAR),
+            CAST(vcm.medication_rxnorm_code AS VARCHAR),
+            CAST(vcm.medication_start_date AS VARCHAR),
+            CAST(vcm.medication_stop_date AS VARCHAR),
+            CAST(vcm.medication_status AS VARCHAR),
+            CAST(vcm.medication_route AS VARCHAR),
+            CAST(vcm.medication_dosage_instructions AS VARCHAR)
         ]
     ) AS JSON) AS VARCHAR) as event_metadata,
 
     CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction'],
+        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'match_type', 'therapeutic_normalized'],
         ARRAY[
-            'v_medications',
+            'v_chemo_medications',
             'medication_request',
             CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            CAST(CASE WHEN vm.rx_norm_codes IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            'false'
+            CAST(CASE WHEN vcm.medication_rxnorm_code IS NOT NULL THEN true ELSE false END AS VARCHAR),
+            CAST(vcm.rxnorm_match_type AS VARCHAR),
+            CAST(vcm.chemo_therapeutic_normalized AS VARCHAR)
         ]
     ) AS JSON) AS VARCHAR) as extraction_context
 
-FROM fhir_prd_db.v_medications vm
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vm.patient_fhir_id = vpd.patient_fhir_id
+FROM fhir_prd_db.v_chemo_medications vcm
+LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vcm.patient_fhir_id = vpd.patient_fhir_id
 
 UNION ALL
 

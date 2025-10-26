@@ -26,14 +26,18 @@ from pathlib import Path
 class TreatmentParadigmAnalyzer:
     """Discover treatment paradigms empirically from chemotherapy data"""
 
-    def __init__(self, chemo_data_path: str):
+    def __init__(self, chemo_data_path: str, use_normalized_names: bool = True):
         """
         Initialize with path to extracted chemotherapy CSV
 
         Args:
             chemo_data_path: Path to CSV from v_chemo_medications query
+            use_normalized_names: If True, use chemo_therapeutic_normalized for grouping/continuity
+                                 (recommended to avoid false drug duplicates from salt variants)
         """
         self.data = pd.read_csv(chemo_data_path)
+        self.use_normalized_names = use_normalized_names
+
         # Use medication_authored_date if available, otherwise medication_start_date or order_date
         if 'medication_authored_date' in self.data.columns:
             date_col = 'medication_authored_date'
@@ -42,6 +46,16 @@ class TreatmentParadigmAnalyzer:
         else:
             date_col = 'order_date'
         self.data['order_date'] = pd.to_datetime(self.data[date_col], format='mixed', utc=True)
+
+        # Determine which drug name column to use for analysis
+        if use_normalized_names and 'chemo_therapeutic_normalized' in self.data.columns:
+            self.drug_column = 'chemo_therapeutic_normalized'
+            print(f"Using therapeutic_normalized column for drug continuity detection")
+        else:
+            self.drug_column = 'chemo_preferred_name'
+            if use_normalized_names:
+                print("WARNING: therapeutic_normalized column not found, falling back to chemo_preferred_name")
+                print("         This may cause false drug duplicates (e.g., 'irinotecan' vs 'Irinotecan Hydrochloride')")
 
         # Results
         self.patient_fingerprints = {}
@@ -64,8 +78,8 @@ class TreatmentParadigmAnalyzer:
             # Sort by date
             patient_data = patient_data.sort_values('order_date')
 
-            # Unique drugs
-            unique_drugs = set(patient_data['chemo_preferred_name'].unique())
+            # Unique drugs (using therapeutic_normalized for accurate drug continuity)
+            unique_drugs = set(patient_data[self.drug_column].unique())
 
             # Time-windowed combinations (30-day windows)
             combinations = self._find_concurrent_drugs(patient_data)
@@ -98,7 +112,7 @@ class TreatmentParadigmAnalyzer:
 
         for idx, row in patient_data.iterrows():
             current_date = row['order_date']
-            current_drug = row['chemo_preferred_name']
+            current_drug = row[self.drug_column]
 
             # Find other drugs within window
             window_start = current_date - timedelta(days=window_days)
@@ -107,8 +121,8 @@ class TreatmentParadigmAnalyzer:
             concurrent = patient_data[
                 (patient_data['order_date'] >= window_start) &
                 (patient_data['order_date'] <= window_end) &
-                (patient_data['chemo_preferred_name'] != current_drug)
-            ]['chemo_preferred_name'].unique()
+                (patient_data[self.drug_column] != current_drug)
+            ][self.drug_column].unique()
 
             if len(concurrent) > 0:
                 for other_drug in concurrent:
@@ -124,8 +138,8 @@ class TreatmentParadigmAnalyzer:
         """
         patient_data = patient_data.sort_values('order_date')
 
-        # Get first occurrence of each drug
-        first_use = patient_data.groupby('chemo_preferred_name')['order_date'].min().sort_values()
+        # Get first occurrence of each drug (using therapeutic_normalized for drug continuity)
+        first_use = patient_data.groupby(self.drug_column)['order_date'].min().sort_values()
 
         # Group into phases based on time gaps
         phases = []
