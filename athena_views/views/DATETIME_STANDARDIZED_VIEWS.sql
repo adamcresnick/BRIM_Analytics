@@ -1516,17 +1516,21 @@ ORDER BY pm.patient_id, pm.authored_on;
 --          data using the comprehensive RADIANT unified chemotherapy reference.
 --
 -- Key Features:
---   1. Matches BOTH ingredient-level AND product-level RxNorm codes
---   2. FALLBACK to name-based matching for medications without RxNorm codes
---   3. Uses improved medication timing bounds for ~89% date coverage
---   4. Includes all medication fields from v_medications
---   5. Adds chemotherapy-specific fields (drug_id, approval_status, etc.)
+--   1. Four-tier matching strategy:
+--      a) RxNorm matching (ingredient + product codes) - ~10% of chemo drugs
+--      b) Name-based matching (specific drug patterns) - ~90% of chemo drugs
+--      c) Investigational drug extraction (from notes) - clinical trial drugs
+--      d) Generic investigational fallback - remaining trial drugs
+--   2. Uses improved medication timing bounds for ~89% date coverage
+--   3. Includes all medication fields from v_medications
+--   4. Adds chemotherapy-specific fields (drug_id, approval_status, etc.)
 --
 -- Data Sources:
 --   - fhir_prd_db.medication_request (FHIR medication orders)
 --   - fhir_prd_db.medication (medication details)
 --   - fhir_prd_db.medication_code_coding (RxNorm codes)
---   - fhir_prd_db.v_chemotherapy_drugs (814 chemotherapy ingredient codes)
+--   - fhir_prd_db.medication_request_note (investigational drug names)
+--   - fhir_prd_db.v_chemotherapy_drugs (839 chemotherapy ingredient codes)
 --   - fhir_prd_db.v_chemotherapy_rxnorm_codes (2,804 product→ingredient mappings)
 --
 -- Usage:
@@ -1538,6 +1542,7 @@ ORDER BY pm.patient_id, pm.authored_on;
 -- History:
 --   2025-01-XX: Initial creation using comprehensive chemotherapy reference
 --   2025-10-25: Added name-based fallback matching (fixes 90% data loss issue)
+--   2025-10-25: Added investigational drug name extraction from notes
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_medications AS
@@ -1647,6 +1652,85 @@ name_matched_medications AS (
         )
 ),
 
+-- ================================================================================
+-- Step 3c: Extract investigational drug names from notes (NEW!)
+-- ================================================================================
+investigational_drug_extraction AS (
+    SELECT DISTINCT
+        mr.medication_reference_reference as medication_id,
+        -- Extract drug name after "Name of investigational drug:"
+        TRIM(
+            SUBSTRING(
+                SUBSTRING(mrn.note_text, POSITION('Name of investigational drug:' IN mrn.note_text) + 30),
+                1,
+                CASE
+                    WHEN POSITION(' ' IN SUBSTRING(mrn.note_text, POSITION('Name of investigational drug:' IN mrn.note_text) + 30)) > 0
+                    THEN POSITION(' ' IN SUBSTRING(mrn.note_text, POSITION('Name of investigational drug:' IN mrn.note_text) + 30)) - 1
+                    ELSE 50  -- Default max length if no space found
+                END
+            )
+        ) as extracted_drug_name
+    FROM fhir_prd_db.medication_request mr
+    LEFT JOIN fhir_prd_db.medication_request_note mrn
+        ON mr.id = mrn.medication_request_id
+    WHERE mr.medication_reference_display LIKE '%nonspecific%investigational%'
+        AND mrn.note_text IS NOT NULL
+        AND LOWER(mrn.note_text) LIKE '%name of investigational drug:%'
+),
+
+investigational_with_extracted_names AS (
+    SELECT DISTINCT
+        ide.medication_id,
+        NULL as rxnorm_code,
+        NULL as rxnorm_display,
+        cd.drug_id AS chemo_drug_id,
+        COALESCE(cd.preferred_name, ide.extracted_drug_name) AS chemo_preferred_name,
+        COALESCE(cd.approval_status, 'investigational') AS chemo_approval_status,
+        cd.rxnorm_in AS chemo_rxnorm_ingredient,
+        cd.ncit_code AS chemo_ncit_code,
+        COALESCE(cd.sources, 'CLINICAL_TRIAL') AS chemo_sources,
+        'investigational_extracted' AS match_type
+    FROM investigational_drug_extraction ide
+    INNER JOIN medications_without_chemo_match mwcm ON ide.medication_id = mwcm.medication_id
+    -- Try to match extracted name to reference table
+    LEFT JOIN fhir_prd_db.v_chemotherapy_drugs cd
+        ON LOWER(cd.preferred_name) = LOWER(ide.extracted_drug_name)
+        OR LOWER(cd.preferred_name) LIKE '%' || LOWER(ide.extracted_drug_name) || '%'
+    -- Exclude from name_matched_medications (prevent duplicates)
+    WHERE ide.medication_id NOT IN (SELECT medication_id FROM name_matched_medications)
+),
+
+-- ================================================================================
+-- Step 3d: Generic investigational/oncology medication matches (fallback)
+-- ================================================================================
+generic_investigational_matches AS (
+    SELECT DISTINCT
+        m.id as medication_id,
+        NULL as rxnorm_code,
+        NULL as rxnorm_display,
+        NULL AS chemo_drug_id,
+        'Investigational Chemotherapy (unspecified)' AS chemo_preferred_name,
+        'investigational' AS chemo_approval_status,
+        NULL AS chemo_rxnorm_ingredient,
+        NULL AS chemo_ncit_code,
+        'CLINICAL_TRIAL' AS chemo_sources,
+        'investigational_generic' AS match_type
+    FROM fhir_prd_db.medication m
+    INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
+    WHERE
+        -- Match generic investigational/oncology patterns
+        (
+            -- Investigational medications
+            (LOWER(m.code_text) LIKE '%nonspecific%' AND LOWER(m.code_text) LIKE '%onco%' AND LOWER(m.code_text) LIKE '%investigational%')
+            OR (LOWER(m.code_text) LIKE '%nonformulary%' AND LOWER(m.code_text) LIKE '%oncology%')
+            OR (LOWER(m.code_text) LIKE '%investigational%' AND LOWER(m.code_text) LIKE '%onco%')
+            OR LOWER(m.code_text) LIKE '%oncology outpatient medication%'
+        )
+        -- Exclude from name_matched_medications and investigational_with_extracted_names
+        AND m.id NOT IN (SELECT medication_id FROM name_matched_medications)
+        AND m.id NOT IN (SELECT medication_id FROM investigational_with_extracted_names)
+),
+
 -- Get RxNorm codes for name-matched medications (if they exist)
 name_matched_rxnorm_codes AS (
     SELECT
@@ -1679,12 +1763,16 @@ chemotherapy_name_matches AS (
 ),
 
 -- ================================================================================
--- Step 3c: UNION RxNorm and name-based matches
+-- Step 3e: UNION all matching strategies
 -- ================================================================================
 chemotherapy_medication_matches AS (
     SELECT * FROM chemotherapy_rxnorm_matches
     UNION ALL
     SELECT * FROM chemotherapy_name_matches
+    UNION ALL
+    SELECT * FROM investigational_with_extracted_names
+    UNION ALL
+    SELECT * FROM generic_investigational_matches
 ),
 
 -- ================================================================================
@@ -1757,6 +1845,116 @@ medication_reason_references AS (
 
 -- ================================================================================
 -- Step 5: Final SELECT - All chemotherapy medications with full details
+-- ================================================================================
+SELECT
+    -- Patient identifiers
+    mr.subject_reference as patient_fhir_id,
+    mr.encounter_reference as encounter_fhir_id,
+
+    -- Medication request identifiers
+    mr.id as medication_request_fhir_id,
+    m.id as medication_fhir_id,
+
+    -- Chemotherapy classification (from comprehensive reference)
+    cmm.chemo_drug_id,
+    cmm.chemo_preferred_name,
+    cmm.chemo_approval_status,
+    cmm.chemo_rxnorm_ingredient,
+    cmm.chemo_ncit_code,
+    cmm.chemo_sources,
+    cmm.match_type as rxnorm_match_type,
+
+    -- Medication details
+    COALESCE(m.code_text, mr.medication_reference_display) as medication_name,
+    cmm.rxnorm_code as medication_rxnorm_code,
+    cmm.rxnorm_display as medication_rxnorm_display,
+
+    -- Status and intent
+    mr.status as medication_status,
+    mr.intent as medication_intent,
+    mr.priority as medication_priority,
+
+    -- Dates (improved coverage using timing_bounds) - return as VARCHAR to avoid casting issues
+    CASE
+        WHEN mtb.earliest_bounds_start IS NOT NULL THEN mtb.earliest_bounds_start
+        WHEN mr.authored_on IS NOT NULL THEN mr.authored_on
+        ELSE NULL
+    END as medication_start_date,
+
+    CASE
+        WHEN mtb.latest_bounds_end IS NOT NULL THEN mtb.latest_bounds_end
+        WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN mr.dispense_request_validity_period_end
+        ELSE NULL
+    END as medication_stop_date,
+
+    mr.authored_on as medication_authored_date,
+
+    -- Dosage and route (CRITICAL for chemotherapy)
+    mdi.route_text_aggregated as medication_route,
+    mdi.method_text_aggregated as medication_method,
+    mdi.site_text_aggregated as medication_site,
+    mdi.dosage_text_aggregated as medication_dosage_instructions,
+    mdi.timing_code_aggregated as medication_timing,
+    mdi.patient_instruction_aggregated as medication_patient_instructions,
+
+    -- Form and ingredients
+    mf.form_coding_codes as medication_form_codes,
+    mf.form_coding_displays as medication_forms,
+    mi.ingredient_strengths as medication_ingredient_strengths,
+
+    -- Clinical context
+    mrrefs.reason_reference_displays as medication_reason,
+    mrr.reason_code_text_aggregated as medication_reason_codes,
+    mn.note_text_aggregated as medication_notes,
+
+    -- Care plan linkage
+    mbo.based_on_references as care_plan_references,
+    mbo.based_on_displays as care_plan_displays,
+
+    -- Requester
+    mr.requester_reference as requester_fhir_id,
+    mr.requester_display as requester_name,
+
+    -- Recorder and entered by
+    mr.recorder_reference as recorder_fhir_id,
+    mr.recorder_display as recorder_name
+
+FROM fhir_prd_db.medication_request mr
+
+-- Join to medication details (LEFT JOIN since some medications don't link to medication table)
+LEFT JOIN fhir_prd_db.medication m
+    ON m.id = mr.medication_reference_reference
+
+-- Join to chemotherapy matches (INNER JOIN to filter to chemo only)
+-- Now includes BOTH RxNorm matches AND name-based matches
+INNER JOIN chemotherapy_medication_matches cmm
+    ON cmm.medication_id = m.id
+
+-- Join to timing bounds
+LEFT JOIN medication_timing_bounds mtb
+    ON mtb.medication_request_id = mr.id
+
+-- Join to aggregated details
+LEFT JOIN medication_notes mn
+    ON mn.medication_request_id = mr.id
+LEFT JOIN medication_reasons mrr
+    ON mrr.medication_request_id = mr.id
+LEFT JOIN medication_forms mf
+    ON mf.medication_id = m.id
+LEFT JOIN medication_ingredients mi
+    ON mi.medication_id = m.id
+LEFT JOIN medication_dosage_instructions mdi
+    ON mdi.medication_request_id = mr.id
+LEFT JOIN medication_based_on mbo
+    ON mbo.medication_request_id = mr.id
+LEFT JOIN medication_reason_references mrrefs
+    ON mrrefs.medication_request_id = mr.id
+
+-- Only include active, completed, or stopped medications
+WHERE mr.status IN ('active', 'completed', 'stopped', 'on-hold')
+;
+
+
 -- ================================================================================
 SELECT
     -- Patient identifiers
