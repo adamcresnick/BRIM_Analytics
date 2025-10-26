@@ -135,6 +135,19 @@ name_matched_medications AS (
         -- 3-letter codes: "ADE" matching "ropivacaine", "lidocaine", "adenosine"
         -- These codes will ONLY match via RxNorm (if they have RxNorm codes)
         LENGTH(cd.preferred_name) > 3
+        -- Exclude placeholder/generic drug names (2025-10-26)
+        -- Prevents "nonspecific investigational medication" from matching generic terms
+        AND cd.preferred_name NOT LIKE 'Drugs Approved for%'
+        AND cd.preferred_name NOT LIKE 'Access to Experimental%'
+        AND cd.preferred_name NOT LIKE 'Drug-based intervention%'
+        AND cd.preferred_name NOT LIKE '%placebo%'
+        AND cd.preferred_name NOT LIKE '%Placebo%'
+        AND cd.preferred_name NOT LIKE 'Experimental:%'
+        AND cd.preferred_name NOT LIKE 'Investigational Chemotherapy%'
+        AND cd.preferred_name NOT LIKE 'Combination drug'
+        AND cd.preferred_name NOT LIKE '%drug chemotherapy group'
+        AND cd.preferred_name NOT LIKE 'ntifier:%'
+        AND cd.preferred_name != '***'
         -- Match on medication name (case-insensitive, partial match)
         AND (
             -- Try exact preferred name match first

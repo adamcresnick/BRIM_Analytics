@@ -7,7 +7,6 @@ rx:1726183.0,AC-T,FDA_approved,False,1726183.0,,act,FDA_old,chemotherapy,single_
 rx:1236711.0,ADE,FDA_approved,False,1236711.0,C9579,ade,FDA_old|FDA_v24,chemotherapy,single_agent
 rx:2536435.0,Abecma,FDA_approved,False,2536435.0,,abecma,FDA_old,chemotherapy,single_agent
 rx:589511.0,Abraxane,FDA_approved,False,589511.0,,abraxane,FDA_old,chemotherapy,single_agent
-norm:accesstoexperimentaldrugs,Access to Experimental Drugs,FDA_approved,False,,,accesstoexperimentaldrugs,FDA_v24,investigational_therapy,single_agent
 rx:895761.0,Actemra,FDA_approved,False,895761.0,,actemra,FDA_old,chemotherapy,single_agent
 rx:1147324.0,Adcetris,FDA_approved,False,1147324.0,,adcetris,FDA_old,chemotherapy,single_agent
 rx:42512.0,Adriamycin,FDA_approved,False,42512.0,,adriamycin,FDA_old,chemotherapy,single_agent
@@ -98,9 +97,6 @@ rx:1746528.0,Defitelio,FDA_approved,False,1746528.0,,defitelio,FDA_old,chemother
 rx:3264.0,Dexamethasone,FDA_approved,False,3264.0,,dexamethasone,FDA_old|Supportive_Care,supportive_care,single_agent
 rx:80773.0,Doxil,FDA_approved,False,80773.0,,doxil,FDA_old,chemotherapy,single_agent
 rx:466523.0,Doxorubicin Hydrochloride Liposome,FDA_approved,False,466523.0,,doxorubicinhydrochlorideliposome,FDA_old,chemotherapy,combination_regimen
-norm:drugsapprovedforchildhoodcancers,Drugs Approved for Childhood Cancers,FDA_approved,False,,,drugsapprovedforchildhoodcancers,FDA_v24,chemotherapy,combination_regimen
-norm:drugsapprovedforconditionsrelatedtocancer,Drugs Approved for Conditions Related to Cancer,FDA_approved,False,,,drugsapprovedforconditionsrelatedtocancer,FDA_v24,chemotherapy,combination_regimen
-norm:drugsapprovedfordifferenttypesofcancer,Drugs Approved for Different Types of Cancer,FDA_approved,False,,,drugsapprovedfordifferenttypesofcancer,FDA_v24,chemotherapy,combination_regimen
 rx:81945.0,Eflornithine Hydrochloride,FDA_approved,False,81945.0,,eflornithinehydrochloride,FDA_old,chemotherapy,single_agent
 rx:224945.0,Efudex,FDA_approved,False,224945.0,,efudex,FDA_old,chemotherapy,single_agent
 rx:2628473.0,Elacestrant Dihydrochloride,FDA_approved,False,2628473.0,,elacestrantdihydrochloride,FDA_old,chemotherapy,single_agent
@@ -1024,7 +1020,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,AZD6244,investigational,False,,,azd6244,CTGOV_INV,investigational_therapy,single_agent
 ,AZD9150,investigational,False,,,azd9150,CTGOV_INV,investigational_therapy,single_agent
 ,AZD9833,investigational,False,,,azd9833,CTGOV_INV,investigational_therapy,single_agent
-,AZD9833 placebo,investigational,False,,,azd9833placebo,CTGOV_INV,investigational_therapy,single_agent
 ,Abatacept,investigational,False,,,abatacept,CTGOV_INV,investigational_other,single_agent
 ,Acalabrutinib 2x100 MG Oral Capsule + alloSCT,investigational,False,,,acalabrutinib2x100mgoralcapsuleallosct,CTGOV_INV,targeted_therapy,combination_regimen
 ,Acetaminophen,investigational,False,,,acetaminophen,CTGOV_INV,supportive_care,single_agent
@@ -1037,7 +1032,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Adavosertib,investigational,False,,,adavosertib,CTGOV_INV,investigational_other,single_agent
 ,Adebelimab,investigational,False,,,adebelimab,CTGOV_INV,targeted_therapy,single_agent
 ,Adebrelimab,investigational,False,,,adebrelimab,CTGOV_INV,targeted_therapy,single_agent
-,Adebrelimab Combined With Albumin Paclitaxel,investigational,False,,,adebrelimabcombinedwithalbuminpaclitaxel,CTGOV_INV,targeted_therapy,combination_regimen
 ,Adefovir Dipivoxil and Lamivudine,investigational,False,,,adefovirdipivoxilandlamivudine,CTGOV_INV,investigational_other,combination_regimen
 ,Adjuvant Atezolizumab-Bevacizumab Therapy,investigational,False,,,adjuvantatezolizumabbevacizumabtherapy,CTGOV_INV,immunotherapy,combination_regimen
 ,Adjuvant chemotherapy optional,investigational,False,,,adjuvantchemotherapyoptional,CTGOV_INV,investigational_other,single_agent
@@ -1060,14 +1054,12 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Almonertinib,investigational,False,,,almonertinib,CTGOV_INV,targeted_therapy,single_agent
 ,Alvocidib,investigational,False,,,alvocidib,CTGOV_INV,investigational_other,single_agent
 ,Anastrazole,investigational,False,,,anastrazole,CTGOV_INV,investigational_other,single_agent
-,Anastrozole placebo,investigational,False,,,anastrozoleplacebo,CTGOV_INV,hormone_therapy,single_agent
 ,"Anastrozole, Exemestane, or Letrozole",investigational,False,,,anastrozoleexemestaneorletrozole,CTGOV_INV,hormone_therapy,combination_regimen
 ,Androgen deprivation,investigational,False,,,androgendeprivation,CTGOV_INV,investigational_other,single_agent
 ,Anlotinib,investigational,False,,,anlotinib,CTGOV_INV,targeted_therapy,single_agent
 ,Anlotinib Hydrochloride Capsule,investigational,False,,,anlotinibhydrochloridecapsule,CTGOV_INV,targeted_therapy,combination_regimen
 ,Anlotinib Hydrochloride Capsules,investigational,False,,,anlotinibhydrochloridecapsules,CTGOV_INV,targeted_therapy,combination_regimen
 ,Anlotinib hydrochloride,investigational,False,,,anlotinibhydrochloride,CTGOV_INV,targeted_therapy,single_agent
-,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy,investigational,False,,,anlotinibhydrochloridecapsulecombinedwithconcurrentchemoradiotherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,Anlotinib plus Pemetrexed,investigational,False,,,anlotinibpluspemetrexed,CTGOV_INV,targeted_therapy,single_agent
 ,Anthracycline based chemotherapy,investigational,False,,,anthracyclinebasedchemotherapy,CTGOV_INV,investigational_other,single_agent
 ,Anti-CD38 Monoclonal Antibody,investigational,False,,,anticd38monoclonalantibody,CTGOV_INV,investigational_other,combination_regimen
@@ -1088,16 +1080,13 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Apatinib,investigational,False,,,apatinib,CTGOV_INV,targeted_therapy,single_agent
 ,Apatinib Mesylate,investigational,False,,,apatinibmesylate,CTGOV_INV,targeted_therapy,single_agent
 ,Apatinib mesylate tablets,investigational,False,,,apatinibmesylatetablets,CTGOV_INV,targeted_therapy,single_agent
-,Apatinib（Tab./d） combined with EGFR-TKI（as previously）,investigational,False,,,apatinibtabdcombinedwithegfrtkiaspreviously,CTGOV_INV,targeted_therapy,combination_regimen
 ,Apixaban 2.5 milligram,investigational,False,,,apixaban25milligram,CTGOV_INV,investigational_other,single_agent
 ,Apremilast,investigational,False,,,apremilast,CTGOV_INV,investigational_other,single_agent
-,Aprepitant Placebo,investigational,False,,,aprepitantplacebo,CTGOV_INV,supportive_care,single_agent
 ,"Arcoxia,",investigational,False,,,arcoxia,CTGOV_INV,investigational_other,single_agent
 ,Argatroban,investigational,False,,,argatroban,CTGOV_INV,investigational_other,single_agent
 ,Arm 1- Dose Escalation,investigational,False,,,arm1doseescalation,CTGOV_INV,investigational_therapy,combination_regimen
 ,Arm 2- Dose Expansion,investigational,False,,,arm2doseexpansion,CTGOV_INV,investigational_therapy,combination_regimen
 ,Arm1: Statin,investigational,False,,,arm1statin,CTGOV_INV,investigational_therapy,single_agent
-,Arm2: Placebo,investigational,False,,,arm2placebo,CTGOV_INV,investigational_therapy,single_agent
 ,Aromatase Inhibitors,investigational,False,,,aromataseinhibitors,CTGOV_INV,investigational_other,single_agent
 ,Aromatase Inhibitors AIs,investigational,False,,,aromataseinhibitorsais,CTGOV_INV,investigational_other,combination_regimen
 ,Aromatase Inhibitors or Fulvestrant,investigational,False,,,aromataseinhibitorsorfulvestrant,CTGOV_INV,hormone_therapy,combination_regimen
@@ -1189,7 +1178,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Balstilimab,investigational,False,,,balstilimab,CTGOV_INV,targeted_therapy,single_agent
 ,Balstilimab + Zalifrelimab,investigational,False,,,balstilimabzalifrelimab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Basiliximab,investigational,False,,,basiliximab,CTGOV_INV,targeted_therapy,single_agent
-,Basimglurant with crossover to Placebo,investigational,False,,,basimglurantwithcrossovertoplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,Belantamab mafodotin,investigational,False,,,belantamabmafodotin,CTGOV_INV,targeted_therapy,single_agent
 ,Belimumab,investigational,False,,,belimumab,CTGOV_INV,targeted_therapy,single_agent
 ,Belinostat PDX101,investigational,False,,,belinostatpdx101,CTGOV_INV,investigational_other,single_agent
@@ -1203,7 +1191,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Bevacizumab-IRDye800CW,investigational,False,,,bevacizumabirdye800cw,CTGOV_INV,targeted_therapy,single_agent
 ,Bexarotene Targretin®,investigational,False,,,bexarotenetargretin,CTGOV_INV,chemotherapy,single_agent
 ,Bezlutifan,investigational,False,,,bezlutifan,CTGOV_INV,investigational_other,single_agent
-,Bifico combined with chemotherapy plus targeted therapy,investigational,False,,,bificocombinedwithchemotherapyplustargetedtherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,Bintrafusp alfa,investigational,False,,,bintrafuspalfa,CTGOV_INV,investigational_other,single_agent
 ,Biological: Camrelizumab,investigational,False,,,biologicalcamrelizumab,CTGOV_INV,targeted_therapy,single_agent
 ,Biosimilar Infliximab,investigational,False,,,biosimilarinfliximab,CTGOV_INV,targeted_therapy,single_agent
@@ -1218,11 +1205,9 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Bortezomib drug,investigational,False,,,bortezomibdrug,CTGOV_INV,investigational_other,single_agent
 ,"Bortezomib, Melphalan, Prednisone",investigational,False,,,bortezomibmelphalanprednisone,CTGOV_INV,supportive_care,combination_regimen
 ,"Bortezomib, Melphalan, Prednisone, Thalidomide",investigational,False,,,bortezomibmelphalanprednisonethalidomide,CTGOV_INV,supportive_care,combination_regimen
-,"Bortezomib/Dexamethasone BD, Followed By Autologous STC & Maintenance Bortezomib/Dexamethasone",investigational,False,,,bortezomibdexamethasonebdfollowedbyautologousstcmaintenancebortezomibdexamethasone,CTGOV_INV,supportive_care,combination_regimen
 ,Brivanib,investigational,False,,,brivanib,CTGOV_INV,investigational_other,single_agent
 ,Budigalimab,investigational,False,,,budigalimab,CTGOV_INV,targeted_therapy,single_agent
 ,Buparlisib,investigational,False,,,buparlisib,CTGOV_INV,investigational_other,single_agent
-,Buparlisib placebo,investigational,False,,,buparlisibplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,Bupivacaine,investigational,False,,,bupivacaine,CTGOV_INV,supportive_care,single_agent
 ,Bupivacaine Hydrochloride,investigational,False,,,bupivacainehydrochloride,CTGOV_INV,supportive_care,single_agent
 ,Bupivacaine Transversus Abdominis Plane Block,investigational,False,,,bupivacainetransversusabdominisplaneblock,CTGOV_INV,supportive_care,combination_regimen
@@ -1290,7 +1275,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Cabazitaxel/m2,investigational,False,,,cabazitaxelm2,CTGOV_INV,chemotherapy,single_agent
 ,Cabozantinib tablets,investigational,False,,,cabozantinibtablets,CTGOV_INV,targeted_therapy,single_agent
 ,Cadonilimab,investigational,False,,,cadonilimab,CTGOV_INV,targeted_therapy,single_agent
-,Cadonilimab Combined with chemotherapy,investigational,False,,,cadonilimabcombinedwithchemotherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,Calcipotriene,investigational,False,,,calcipotriene,CTGOV_INV,investigational_other,single_agent
 ,Calcium Leucovorin,investigational,False,,,calciumleucovorin,CTGOV_INV,supportive_care,single_agent
 ,Calcium chloride,investigational,False,,,calciumchloride,CTGOV_INV,supportive_care,single_agent
@@ -1314,7 +1298,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Carboplatin AUC 5,investigational,False,,,carboplatinauc5,CTGOV_INV,chemotherapy,single_agent
 ,Carboplatin AUC-6,investigational,False,,,carboplatinauc6,CTGOV_INV,chemotherapy,single_agent
 ,Carboplatin Investigator discretion,investigational,False,,,carboplatininvestigatordiscretion,CTGOV_INV,chemotherapy,single_agent
-,"Carboplatin, etoposide & placebo",investigational,False,,,carboplatinetoposideplacebo,CTGOV_INV,chemotherapy,single_agent
 ,"Carboplatin, etoposide & thalidomide",investigational,False,,,carboplatinetoposidethalidomide,CTGOV_INV,chemotherapy,combination_regimen
 ,Carboplatin/Nedaplatin,investigational,False,,,carboplatinnedaplatin,CTGOV_INV,chemotherapy,single_agent
 ,Carboplatin/Paclitaxel,investigational,False,,,carboplatinpaclitaxel,CTGOV_INV,chemotherapy,single_agent
@@ -1336,7 +1319,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Cetuximab + Gemcitabine + Oxaliplatin,investigational,False,,,cetuximabgemcitabineoxaliplatin,CTGOV_INV,targeted_therapy,combination_regimen
 ,Cetuximab/avelumab,investigational,False,,,cetuximabavelumab,CTGOV_INV,immunotherapy,single_agent
 ,Cevostamab,investigational,False,,,cevostamab,CTGOV_INV,targeted_therapy,single_agent
-,Chemo with concomitant Capecitabine and KD018,investigational,False,,,chemowithconcomitantcapecitabineandkd018,CTGOV_INV,chemotherapy,combination_regimen
 ,Chemotherapy,investigational,False,,,chemotherapy,CTGOV_INV,investigational_other,single_agent
 ,Chemotherapy + Blinatumomab,investigational,False,,,chemotherapyblinatumomab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Chemotherapy Regimen 1,investigational,False,,,chemotherapyregimen1,CTGOV_INV,investigational_therapy,combination_regimen
@@ -1347,7 +1329,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,"Chemotherapy, gemcitabine",investigational,False,,,chemotherapygemcitabine,CTGOV_INV,chemotherapy,combination_regimen
 ,Chemotherapy: Temozolomide,investigational,False,,,chemotherapytemozolomide,CTGOV_INV,chemotherapy,single_agent
 ,Chidamide,investigational,False,,,chidamide,CTGOV_INV,investigational_other,single_agent
-,Chidamide combined with Linperlisib,investigational,False,,,chidamidecombinedwithlinperlisib,CTGOV_INV,investigational_other,combination_regimen
 ,Chidamide+ Fulvestrant,investigational,False,,,chidamidefulvestrant,CTGOV_INV,hormone_therapy,single_agent
 ,Chidamide; Decitabine; Camrelizumab,investigational,False,,,chidamidedecitabinecamrelizumab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Chimeric Antigen Receptor NK Cell,investigational,False,,,chimericantigenreceptornkcell,CTGOV_INV,investigational_other,combination_regimen
@@ -1373,14 +1354,12 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Cohort B: Patients must have evidence of a pancreatic cystic neoplasm,investigational,False,,,cohortbpatientsmusthaveevidenceofapancreaticcysticneoplasm,CTGOV_INV,investigational_other,combination_regimen
 ,Colchicine,investigational,False,,,colchicine,CTGOV_INV,investigational_other,single_agent
 ,Colesevelam,investigational,False,,,colesevelam,CTGOV_INV,investigational_other,single_agent
-,Combination drug,investigational,False,,,combinationdrug,CTGOV_INV,investigational_therapy,combination_regimen
 ,Combination of Docetaxel DTX and Epirubicin EPI,investigational,False,,,combinationofdocetaxeldtxandepirubicinepi,CTGOV_INV,chemotherapy,combination_regimen
 ,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab",investigational,False,,,combinationofgemcitabineoxaliplatinsintilimabandbevacizumab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Combination of MK3475 with Metronomic CP,investigational,False,,,combinationofmk3475withmetronomiccp,CTGOV_INV,investigational_therapy,combination_regimen
 ,Combination of MK3475 with Metronomic CP and G100,investigational,False,,,combinationofmk3475withmetronomiccpandg100,CTGOV_INV,investigational_therapy,combination_regimen
 ,Combination of TIL Transfer with anti-PD-1 Therapy and low dose IL-2,investigational,False,,,combinationoftiltransferwithantipd1therapyandlowdoseil2,CTGOV_INV,immunotherapy,combination_regimen
 ,"Combination, Rogaratinib + palbociclib + fulvestrant",investigational,False,,,combinationrogaratinibpalbociclibfulvestrant,CTGOV_INV,targeted_therapy,combination_regimen
-,Comparator: placebo / Duration of Treatment: 24 weeks,investigational,False,,,comparatorplacebodurationoftreatment24weeks,CTGOV_INV,investigational_therapy,single_agent
 ,Control Group,investigational,False,,,controlgroup,CTGOV_INV,investigational_other,single_agent
 ,Controlled ovarian stimulation by Combined Clomiphene Citrate and Ubiquinol Versus hMG,investigational,False,,,controlledovarianstimulationbycombinedclomiphenecitrateandubiquinolversushmg,CTGOV_INV,investigational_other,combination_regimen
 ,Conventional Care,investigational,False,,,conventionalcare,CTGOV_INV,investigational_other,single_agent
@@ -1465,7 +1444,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Diphenylcyclopropenone DPCP,investigational,False,,,diphenylcyclopropenonedpcp,CTGOV_INV,investigational_other,single_agent
 ,Direct antiviral agents for hepatitis C,investigational,False,,,directantiviralagentsforhepatitisc,CTGOV_INV,investigational_other,single_agent
 ,Disitamab Vedotin,investigational,False,,,disitamabvedotin,CTGOV_INV,targeted_therapy,single_agent
-,Disitamab Vedotin combined with Bicalutamide,investigational,False,,,disitamabvedotincombinedwithbicalutamide,CTGOV_INV,targeted_therapy,combination_regimen
 ,Docetaxel & Gemcitabine,investigational,False,,,docetaxelgemcitabine,CTGOV_INV,chemotherapy,single_agent
 ,Docetaxel + Carboplatin + Trastuzumab + Pertuzumab,investigational,False,,,docetaxelcarboplatintrastuzumabpertuzumab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Docetaxel + Doxorubicin,investigational,False,,,docetaxeldoxorubicin,CTGOV_INV,chemotherapy,combination_regimen
@@ -1478,9 +1456,7 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Domvanalimab,investigational,False,,,domvanalimab,CTGOV_INV,targeted_therapy,single_agent
 ,Domvanalimab DOM,investigational,False,,,domvanalimabdom,CTGOV_INV,targeted_therapy,single_agent
 ,Donepezil,investigational,False,,,donepezil,CTGOV_INV,supportive_care,single_agent
-,Dose escalation followed by treatment with MTD,investigational,False,,,doseescalationfollowedbytreatmentwithmtd,CTGOV_INV,investigational_other,combination_regimen
 ,Dose-intensified TMZ,investigational,False,,,doseintensifiedtmz,CTGOV_INV,investigational_other,single_agent
-,Doublet or triplet chemotherapy combined with cetuximab,investigational,False,,,doubletortripletchemotherapycombinedwithcetuximab,CTGOV_INV,targeted_therapy,combination_regimen
 ,Dovitinib,investigational,False,,,dovitinib,CTGOV_INV,targeted_therapy,single_agent
 ,Doxepin Hydrochloride,investigational,False,,,doxepinhydrochloride,CTGOV_INV,investigational_other,single_agent
 ,Doxorubicin + Cisplatin,investigational,False,,,doxorubicincisplatin,CTGOV_INV,chemotherapy,combination_regimen
@@ -1489,7 +1465,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Doxorubicin pegylated,investigational,False,,,doxorubicinpegylated,CTGOV_INV,chemotherapy,single_agent
 ,"Doxorubicin, Rituxan, Cyclophosphamide, Vincristine and Prednisone",investigational,False,,,doxorubicinrituxancyclophosphamidevincristineandprednisone,CTGOV_INV,investigational_therapy,combination_regimen
 ,DpC,investigational,False,,,dpc,CTGOV_INV,investigational_other,single_agent
-,Drug-based intervention,investigational,False,,,drugbasedintervention,CTGOV_INV,investigational_other,single_agent
 ,Duloxetine,investigational,False,,,duloxetine,CTGOV_INV,supportive_care,single_agent
 ,Durvalumab + Monalizumab,investigational,False,,,durvalumabmonalizumab,CTGOV_INV,immunotherapy,combination_regimen
 ,Durvalumab + Oleclumab,investigational,False,,,durvalumaboleclumab,CTGOV_INV,immunotherapy,combination_regimen
@@ -1562,7 +1537,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Evolocumab,investigational,False,,,evolocumab,CTGOV_INV,targeted_therapy,single_agent
 ,Evorpacept ALX148,investigational,False,,,evorpaceptalx148,CTGOV_INV,investigational_other,single_agent
 ,Exenatide,investigational,False,,,exenatide,CTGOV_INV,supportive_care,single_agent
-,Experimental: CAR-T cells Infusion,investigational,False,,,experimentalcartcellsinfusion,CTGOV_INV,immunotherapy,combination_regimen
 ,F-18 16 Alpha-Fluoroestradiol,investigational,False,,,f1816alphafluoroestradiol,CTGOV_INV,investigational_other,single_agent
 ,F-18 NaF,investigational,False,,,f18naf,CTGOV_INV,investigational_other,single_agent
 ,"F-18Fluoro-DOPA PET, a diagnostic radiopharmaceutical",investigational,False,,,f18fluorodopapetadiagnosticradiopharmaceutical,CTGOV_INV,investigational_therapy,combination_regimen
@@ -1625,7 +1599,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Fotemustine,investigational,False,,,fotemustine,CTGOV_INV,chemotherapy,single_agent
 ,Foxy-5,investigational,False,,,foxy5,CTGOV_INV,investigational_other,single_agent
 ,Fragmin 5000 UNT in Prefilled Syringe,investigational,False,,,fragmin5000untinprefilledsyringe,CTGOV_INV,investigational_other,combination_regimen
-,Fruquintinib combined with anti-PD-1 antibodies,investigational,False,,,fruquintinibcombinedwithantipd1antibodies,CTGOV_INV,immunotherapy,combination_regimen
 ,Furmonertinib,investigational,False,,,furmonertinib,CTGOV_INV,targeted_therapy,single_agent
 ,G-202,investigational,False,,,g202,CTGOV_INV,investigational_other,single_agent
 ,G-CSF,investigational,False,,,gcsf,CTGOV_INV,investigational_other,single_agent
@@ -1636,9 +1609,7 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,GDC-0084,investigational,False,,,gdc0084,CTGOV_INV,investigational_other,single_agent
 ,GDC-0927,investigational,False,,,gdc0927,CTGOV_INV,investigational_other,single_agent
 ,GDC-0941,investigational,False,,,gdc0941,CTGOV_INV,investigational_other,single_agent
-,GDC-0941 Matching Placebo,investigational,False,,,gdc0941matchingplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,GDC-0980,investigational,False,,,gdc0980,CTGOV_INV,investigational_other,single_agent
-,GDC-0980 Matching Placebo,investigational,False,,,gdc0980matchingplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,GDP chemotherapy,investigational,False,,,gdpchemotherapy,CTGOV_INV,investigational_other,single_agent
 ,GH2616 Tablets,investigational,False,,,gh2616tablets,CTGOV_INV,investigational_other,single_agent
 ,GLS-012+GLS-010,investigational,False,,,gls012gls010,CTGOV_INV,investigational_other,single_agent
@@ -1825,7 +1796,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks,investigational,False,,,ivfolfiritargetagentbevacizumaborcetuximabevery2weeks,CTGOV_INV,targeted_therapy,combination_regimen
 ,Ialuset®,investigational,False,,,ialuset,CTGOV_INV,investigational_other,single_agent
 ,Ibrutinib + GA101 +GDC-0199,investigational,False,,,ibrutinibga101gdc0199,CTGOV_INV,targeted_therapy,combination_regimen
-,Ibrutinib combined with As2O3,investigational,False,,,ibrutinibcombinedwithas2o3,CTGOV_INV,targeted_therapy,combination_regimen
 ,Ibrutinib-RICE,investigational,False,,,ibrutinibrice,CTGOV_INV,targeted_therapy,combination_regimen
 ,Icotinib,investigational,False,,,icotinib,CTGOV_INV,targeted_therapy,single_agent
 ,Icotinib plus WBRT,investigational,False,,,icotinibpluswbrt,CTGOV_INV,targeted_therapy,single_agent
@@ -1843,7 +1813,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Imlunestrant,investigational,False,,,imlunestrant,CTGOV_INV,investigational_other,single_agent
 ,Immune checkpoint inhibitor,investigational,False,,,immunecheckpointinhibitor,CTGOV_INV,immunotherapy,single_agent
 ,Immunochemotherapy,investigational,False,,,immunochemotherapy,CTGOV_INV,investigational_other,single_agent
-,Immunochemotherapy combined with antiangiogenic,investigational,False,,,immunochemotherapycombinedwithantiangiogenic,CTGOV_INV,investigational_other,combination_regimen
 ,Immunotherapy,investigational,False,,,immunotherapy,CTGOV_INV,investigational_other,single_agent
 ,Immunotoxin therapy,investigational,False,,,immunotoxintherapy,CTGOV_INV,investigational_other,single_agent
 ,Indocyanine Green Solution,investigational,False,,,indocyaninegreensolution,CTGOV_INV,investigational_other,combination_regimen
@@ -1883,7 +1852,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,"Investigator's Choice Treatment Darcabazine, Pazopanib, Gemcitabine + Docetaxel, Doxorubicin, Ifosfamide",investigational,False,,,investigatorschoicetreatmentdarcabazinepazopanibgemcitabinedocetaxeldoxorubicinifosfamide,CTGOV_INV,chemotherapy,combination_regimen
 ,Iodine-131 Anti-B1 Antibody,investigational,False,,,iodine131antib1antibody,CTGOV_INV,supportive_care,combination_regimen
 ,Iomab-B,investigational,False,,,iomabb,CTGOV_INV,targeted_therapy,single_agent
-,Iparomlimab/Tuvonralimab anti PD-1/CTLA-4 combined with albumin-bound paclitaxel,investigational,False,,,iparomlimabtuvonralimabantipd1ctla4combinedwithalbuminboundpaclitaxel,CTGOV_INV,immunotherapy,combination_regimen
 ,Ipatasertib,investigational,False,,,ipatasertib,CTGOV_INV,investigational_other,single_agent
 ,Ipilimumab -/kg,investigational,False,,,ipilimumabkg,CTGOV_INV,immunotherapy,single_agent
 ,Iressa Gefitinib,investigational,False,,,iressagefitinib,CTGOV_INV,targeted_therapy,single_agent
@@ -1920,7 +1888,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Keytruda Injectable Product,investigational,False,,,keytrudainjectableproduct,CTGOV_INV,investigational_other,combination_regimen
 ,L-carnitine,investigational,False,,,lcarnitine,CTGOV_INV,investigational_other,single_agent
 ,L-selenomethionine,investigational,False,,,lselenomethionine,CTGOV_INV,investigational_other,single_agent
-,L-selenomethionine placebo,investigational,False,,,lselenomethionineplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,LA-EP2006,investigational,False,,,laep2006,CTGOV_INV,investigational_other,single_agent
 ,LAT010,investigational,False,,,lat010,CTGOV_INV,investigational_other,single_agent
 ,LAT010 + ICI,investigational,False,,,lat010ici,CTGOV_INV,investigational_other,combination_regimen
@@ -1968,7 +1935,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Leuprorelin,investigational,False,,,leuprorelin,CTGOV_INV,investigational_other,single_agent
 ,Levofolinic acid,investigational,False,,,levofolinicacid,CTGOV_INV,investigational_other,single_agent
 ,Linifanib,investigational,False,,,linifanib,CTGOV_INV,investigational_other,single_agent
-,Linperlisib in combined with Chidamide,investigational,False,,,linperlisibincombinedwithchidamide,CTGOV_INV,investigational_other,combination_regimen
 ,Linvoseltamab,investigational,False,,,linvoseltamab,CTGOV_INV,targeted_therapy,single_agent
 ,Lipiodol,investigational,False,,,lipiodol,CTGOV_INV,investigational_other,single_agent
 ,Liposomal 9-Nitrocamptothecin,investigational,False,,,liposomal9nitrocamptothecin,CTGOV_INV,investigational_other,single_agent
@@ -2046,7 +2012,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Maintenance,investigational,False,,,maintenance,CTGOV_INV,investigational_other,single_agent
 ,Maintenance icotinib,investigational,False,,,maintenanceicotinib,CTGOV_INV,targeted_therapy,single_agent
 ,Marinol Dronabinol,investigational,False,,,marinoldronabinol,CTGOV_INV,investigational_other,single_agent
-,Matching placebo for visugromab,investigational,False,,,matchingplaceboforvisugromab,CTGOV_INV,targeted_therapy,single_agent
 ,Mecapegfilgrastim,investigational,False,,,mecapegfilgrastim,CTGOV_INV,chemotherapy,single_agent
 ,Melatonin,investigational,False,,,melatonin,CTGOV_INV,supportive_care,single_agent
 ,Merestinib,investigational,False,,,merestinib,CTGOV_INV,targeted_therapy,single_agent
@@ -2173,7 +2138,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Omega-3 Fatty Acids,investigational,False,,,omega3fattyacids,CTGOV_INV,supportive_care,combination_regimen
 ,Omeprazole,investigational,False,,,omeprazole,CTGOV_INV,supportive_care,single_agent
 ,Oncolytic virus VRT106,investigational,False,,,oncolyticvirusvrt106,CTGOV_INV,investigational_therapy,single_agent
-,Ondansetron Placebo,investigational,False,,,ondansetronplacebo,CTGOV_INV,supportive_care,single_agent
 ,Ontak,investigational,False,,,ontak,CTGOV_INV,investigational_other,single_agent
 ,Opevesostat,investigational,False,,,opevesostat,CTGOV_INV,investigational_other,single_agent
 ,Oral Contraceptive Pill,investigational,False,,,oralcontraceptivepill,CTGOV_INV,investigational_other,combination_regimen
@@ -2198,7 +2162,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Oxycodone/Naloxone,investigational,False,,,oxycodonenaloxone,CTGOV_INV,supportive_care,single_agent
 ,Oxytocin,investigational,False,,,oxytocin,CTGOV_INV,investigational_other,single_agent
 ,P276-00 along with Gemcitabine and carboplatin,investigational,False,,,p27600alongwithgemcitabineandcarboplatin,CTGOV_INV,chemotherapy,combination_regimen
-,PAD Followed by ASCT,investigational,False,,,padfollowedbyasct,CTGOV_INV,investigational_other,combination_regimen
 ,PAD-VCD,investigational,False,,,padvcd,CTGOV_INV,investigational_other,combination_regimen
 ,PARPi,investigational,False,,,parpi,CTGOV_INV,investigational_other,single_agent
 ,PBLTT52CAR19,investigational,False,,,pbltt52car19,CTGOV_INV,investigational_other,single_agent
@@ -2216,7 +2179,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,PD-L1 t-haNK,investigational,False,,,pdl1thank,CTGOV_INV,immunotherapy,single_agent
 ,PD-L1/PD-1 inhibitor and chemotherapy,investigational,False,,,pdl1pd1inhibitorandchemotherapy,CTGOV_INV,immunotherapy,combination_regimen
 ,PDR001,investigational,False,,,pdr001,CTGOV_INV,investigational_other,single_agent
-,"PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001",investigational,False,,,pdr001concurrentwithstandardplatinumbasedchemoradiationfollowedbyconsolidationwithpdr001,CTGOV_INV,chemotherapy,combination_regimen
 ,PEG-G-CSF,investigational,False,,,peggcsf,CTGOV_INV,investigational_other,single_agent
 ,PEG-Interferon Alfa,investigational,False,,,peginterferonalfa,CTGOV_INV,investigational_other,single_agent
 ,PEG-paclitaxel,investigational,False,,,pegpaclitaxel,CTGOV_INV,chemotherapy,single_agent
@@ -2267,7 +2229,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Paclitaxel/Paclitaxel-albumin,investigational,False,,,paclitaxelpaclitaxelalbumin,CTGOV_INV,chemotherapy,single_agent
 ,Paclitaxel/m2,investigational,False,,,paclitaxelm2,CTGOV_INV,chemotherapy,single_agent
 ,PaclitaxelAlbumin Bound and Gemcitabine,investigational,False,,,paclitaxelalbuminboundandgemcitabine,CTGOV_INV,chemotherapy,combination_regimen
-,"PaclitaxelPaclitaxel Albumin Bound,Bleomycin combined with Cisplatin or Carboplatin",investigational,False,,,paclitaxelpaclitaxelalbuminboundbleomycincombinedwithcisplatinorcarboplatin,CTGOV_INV,chemotherapy,combination_regimen
 ,Pafolacianine CYTALUX with intraoperative fluorescent near-infrared NIR imaging,investigational,False,,,pafolacianinecytaluxwithintraoperativefluorescentnearinfrarednirimaging,CTGOV_INV,investigational_other,combination_regimen
 ,Palbociclib100mg,investigational,False,,,palbociclib100mg,CTGOV_INV,targeted_therapy,single_agent
 ,Palbociclib125mg,investigational,False,,,palbociclib125mg,CTGOV_INV,targeted_therapy,single_agent
@@ -2308,7 +2269,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Pemetrexed & Gemcitabine,investigational,False,,,pemetrexedgemcitabine,CTGOV_INV,chemotherapy,single_agent
 ,Pemetrexed Alimta,investigational,False,,,pemetrexedalimta,CTGOV_INV,chemotherapy,single_agent
 ,Pemetrexed and Gemcitabine plus Bevacizumab,investigational,False,,,pemetrexedandgemcitabineplusbevacizumab,CTGOV_INV,targeted_therapy,combination_regimen
-,Pemetrexed plus carboplatin combined with gefitinib,investigational,False,,,pemetrexedpluscarboplatincombinedwithgefitinib,CTGOV_INV,targeted_therapy,combination_regimen
 ,Pemetrexed plusCIsplatin,investigational,False,,,pemetrexedpluscisplatin,CTGOV_INV,chemotherapy,single_agent
 ,"Pemetrexed, cisplatin",investigational,False,,,pemetrexedcisplatin,CTGOV_INV,chemotherapy,combination_regimen
 ,Pemetrexed/Carboplatin,investigational,False,,,pemetrexedcarboplatin,CTGOV_INV,chemotherapy,single_agent
@@ -2328,33 +2288,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Pictilisib,investigational,False,,,pictilisib,CTGOV_INV,investigational_other,single_agent
 ,Pimasertib,investigational,False,,,pimasertib,CTGOV_INV,investigational_other,single_agent
 ,Pioglitazone,investigational,False,,,pioglitazone,CTGOV_INV,supportive_care,single_agent
-,Placebo,investigational,False,,,placebo,CTGOV_INV,investigational_therapy,single_agent
-,Placebo - Concentrate,investigational,False,,,placeboconcentrate,CTGOV_INV,investigational_therapy,single_agent
-,Placebo Administration,investigational,False,,,placeboadministration,CTGOV_INV,investigational_therapy,single_agent
-,Placebo Cediranib,investigational,False,,,placebocediranib,CTGOV_INV,investigational_therapy,single_agent
-,Placebo Control,investigational,False,,,placebocontrol,CTGOV_INV,investigational_therapy,single_agent
-,Placebo Cream,investigational,False,,,placebocream,CTGOV_INV,investigational_therapy,single_agent
-,Placebo DLBS1425,investigational,False,,,placebodlbs1425,CTGOV_INV,investigational_therapy,single_agent
-,Placebo Oral Tablet,investigational,False,,,placebooraltablet,CTGOV_INV,investigational_therapy,single_agent
-,Placebo SAR302503,investigational,False,,,placebosar302503,CTGOV_INV,investigational_therapy,single_agent
-,Placebo TDS,investigational,False,,,placebotds,CTGOV_INV,investigational_therapy,single_agent
-,Placebo for pembrolizumab,investigational,False,,,placeboforpembrolizumab,CTGOV_INV,immunotherapy,single_agent
-,Placebo for thalidomide,investigational,False,,,placeboforthalidomide,CTGOV_INV,investigational_therapy,single_agent
-,Placebo in combination with Cytarabine,investigational,False,,,placeboincombinationwithcytarabine,CTGOV_INV,chemotherapy,single_agent
-,Placebo matching Niraparib,investigational,False,,,placebomatchingniraparib,CTGOV_INV,targeted_therapy,single_agent
-,Placebo matching dostarlimab,investigational,False,,,placebomatchingdostarlimab,CTGOV_INV,immunotherapy,single_agent
-,Placebo of aprepitant,investigational,False,,,placeboofaprepitant,CTGOV_INV,supportive_care,single_agent
-,Placebo of desloratadine,investigational,False,,,placeboofdesloratadine,CTGOV_INV,supportive_care,single_agent
-,Placebo oral capsule,investigational,False,,,placebooralcapsule,CTGOV_INV,investigational_therapy,single_agent
-,Placebo plus Docetaxel,investigational,False,,,placeboplusdocetaxel,CTGOV_INV,chemotherapy,single_agent
-,Placebo plus best supportive care,investigational,False,,,placeboplusbestsupportivecare,CTGOV_INV,investigational_therapy,single_agent
-,Placebo tablets,investigational,False,,,placebotablets,CTGOV_INV,investigational_therapy,single_agent
-,Placebo to match olaparib,investigational,False,,,placebotomatcholaparib,CTGOV_INV,targeted_therapy,single_agent
-,Placebo to vismodegib,investigational,False,,,placebotovismodegib,CTGOV_INV,investigational_therapy,single_agent
-,Placebo vaginal lubricant,investigational,False,,,placebovaginallubricant,CTGOV_INV,investigational_therapy,single_agent
-,Placebo with crossover to Basimglurant,investigational,False,,,placebowithcrossovertobasimglurant,CTGOV_INV,investigational_therapy,single_agent
-,"Placebo, Letrozole or anastrozole, Goserelin acetate",investigational,False,,,placeboletrozoleoranastrozolegoserelinacetate,CTGOV_INV,hormone_therapy,single_agent
-,Placebos,investigational,False,,,placebos,CTGOV_INV,investigational_therapy,single_agent
 ,Platinum chemotherapy cisplatin or carboplatin,investigational,False,,,platinumchemotherapycisplatinorcarboplatin,CTGOV_INV,chemotherapy,single_agent
 ,Poly ICLC,investigational,False,,,polyiclc,CTGOV_INV,investigational_other,single_agent
 ,Posaconazole,investigational,False,,,posaconazole,CTGOV_INV,supportive_care,single_agent
@@ -2398,7 +2331,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,"R1: Ixazomib, Lenalidomide, Dexamethasone IRD induction therapy - adaptive arm",investigational,False,,,r1ixazomiblenalidomidedexamethasoneirdinductiontherapyadaptivearm,CTGOV_INV,supportive_care,combination_regimen
 ,"R1: Ixazomib, Lenalidomide, Dexamethasone IRD induction therapy - reactive arm",investigational,False,,,r1ixazomiblenalidomidedexamethasoneirdinductiontherapyreactivearm,CTGOV_INV,supportive_care,combination_regimen
 ,R2: Lenalidomide + ixazomib maintenance,investigational,False,,,r2lenalidomideixazomibmaintenance,CTGOV_INV,investigational_other,combination_regimen
-,R2: Lenalidomide plus placebo maintenance,investigational,False,,,r2lenalidomideplusplacebomaintenance,CTGOV_INV,investigational_therapy,single_agent
 ,RAD001,investigational,False,,,rad001,CTGOV_INV,investigational_other,single_agent
 ,RC48-ADC,investigational,False,,,rc48adc,CTGOV_INV,investigational_other,single_agent
 ,RC48-ADC/kg HER2 Low Expression,investigational,False,,,rc48adckgher2lowexpression,CTGOV_INV,targeted_therapy,combination_regimen
@@ -2436,7 +2368,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,"Regorafenib Stivarga, BAY73-4506",investigational,False,,,regorafenibstivargabay734506,CTGOV_INV,investigational_other,combination_regimen
 ,Relatlimab,investigational,False,,,relatlimab,CTGOV_INV,immunotherapy,single_agent
 ,Relatlimab FDC + Nivolumab,investigational,False,,,relatlimabfdcnivolumab,CTGOV_INV,immunotherapy,combination_regimen
-,Relugolix placebo,investigational,False,,,relugolixplacebo,CTGOV_INV,hormone_therapy,single_agent
 ,Remifentanil 50 microg/ml,investigational,False,,,remifentanil50microgml,CTGOV_INV,investigational_other,single_agent
 ,Repaglinide,investigational,False,,,repaglinide,CTGOV_INV,investigational_other,single_agent
 ,"Rescue Therapy granisetron, dolasetron, tropisetron or ondansetron; metoclopramide or alizapride.",investigational,False,,,rescuetherapygranisetrondolasetrontropisetronorondansetronmetoclopramideoralizapride,CTGOV_INV,supportive_care,combination_regimen
@@ -2491,7 +2422,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,SGN-40,investigational,False,,,sgn40,CTGOV_INV,investigational_other,single_agent
 ,SH1573 Capsules,investigational,False,,,sh1573capsules,CTGOV_INV,investigational_other,single_agent
 ,SHR-1167,investigational,False,,,shr1167,CTGOV_INV,investigational_other,single_agent
-,"SHR-1210 Combined With Trastuzumab , Oxaliplatin and Capecitabine",investigational,False,,,shr1210combinedwithtrastuzumaboxaliplatinandcapecitabine,CTGOV_INV,targeted_therapy,combination_regimen
 ,SHR-1501,investigational,False,,,shr1501,CTGOV_INV,investigational_other,single_agent
 ,SHR-1701；BP102,investigational,False,,,shr1701bp102,CTGOV_INV,investigational_other,single_agent
 ,SHR-1909,investigational,False,,,shr1909,CTGOV_INV,investigational_other,single_agent
@@ -2501,7 +2431,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,SHR-A1921,investigational,False,,,shra1921,CTGOV_INV,investigational_other,single_agent
 ,SHR-A2009,investigational,False,,,shra2009,CTGOV_INV,investigational_other,single_agent
 ,SHR-A2102,investigational,False,,,shra2102,CTGOV_INV,investigational_other,single_agent
-,SHR1210 combined with FOLFOX,investigational,False,,,shr1210combinedwithfolfox,CTGOV_INV,investigational_therapy,combination_regimen
 ,SHR6390,investigational,False,,,shr6390,CTGOV_INV,investigational_other,single_agent
 ,SHR7280 Tablets,investigational,False,,,shr7280tablets,CTGOV_INV,investigational_other,single_agent
 ,SI-B001,investigational,False,,,sib001,CTGOV_INV,investigational_other,single_agent
@@ -2540,7 +2469,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Semaglutide Pen Injector,investigational,False,,,semaglutidepeninjector,CTGOV_INV,investigational_other,combination_regimen
 ,Sequential and maintenance icotinib,investigational,False,,,sequentialandmaintenanceicotinib,CTGOV_INV,targeted_therapy,combination_regimen
 ,Serplulimab,investigational,False,,,serplulimab,CTGOV_INV,targeted_therapy,single_agent
-,Serplulimab combined with bevacizumab and first-line chemotherapy,investigational,False,,,serplulimabcombinedwithbevacizumabandfirstlinechemotherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,Serplulimab+NabPE,investigational,False,,,serplulimabnabpe,CTGOV_INV,targeted_therapy,single_agent
 ,Sevoflurane,investigational,False,,,sevoflurane,CTGOV_INV,supportive_care,single_agent
 ,Signifor,investigational,False,,,signifor,CTGOV_INV,investigational_other,single_agent
@@ -2548,9 +2476,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Simethicone,investigational,False,,,simethicone,CTGOV_INV,supportive_care,single_agent
 ,Simvastatin,investigational,False,,,simvastatin,CTGOV_INV,supportive_care,single_agent
 ,Sintilimab,investigational,False,,,sintilimab,CTGOV_INV,targeted_therapy,single_agent
-,Sintilimab Combined With Docetaxel,investigational,False,,,sintilimabcombinedwithdocetaxel,CTGOV_INV,targeted_therapy,combination_regimen
-,Sintilimab Combined With Docetaxel Monotherapy,investigational,False,,,sintilimabcombinedwithdocetaxelmonotherapy,CTGOV_INV,targeted_therapy,combination_regimen
-,Sintilimab Combined with Platinum-containing Chemotherapy,investigational,False,,,sintilimabcombinedwithplatinumcontainingchemotherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,"Sintilimab, Nab-Paclitaxel, and Carboplatin",investigational,False,,,sintilimabnabpaclitaxelandcarboplatin,CTGOV_INV,targeted_therapy,combination_regimen
 ,"Sintilimab,nab-paclitaxel and tegio",investigational,False,,,sintilimabnabpaclitaxelandtegio,CTGOV_INV,targeted_therapy,combination_regimen
 ,Sitravatinib,investigational,False,,,sitravatinib,CTGOV_INV,targeted_therapy,single_agent
@@ -2579,7 +2504,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Superparamagnetic Iron Oxide,investigational,False,,,superparamagneticironoxide,CTGOV_INV,supportive_care,single_agent
 ,Surufatinib,investigational,False,,,surufatinib,CTGOV_INV,targeted_therapy,single_agent
 ,Surufatinib and Serplulimab,investigational,False,,,surufatinibandserplulimab,CTGOV_INV,targeted_therapy,combination_regimen
-,Surufatinib plus chemotherapy,investigational,False,,,surufatinibpluschemotherapy,CTGOV_INV,targeted_therapy,single_agent
 ,Sym021,investigational,False,,,sym021,CTGOV_INV,investigational_other,single_agent
 ,Sym022,investigational,False,,,sym022,CTGOV_INV,investigational_other,single_agent
 ,Sym023,investigational,False,,,sym023,CTGOV_INV,investigational_other,single_agent
@@ -2589,7 +2513,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,T-DM1,investigational,False,,,tdm1,CTGOV_INV,investigational_other,single_agent
 ,"T-DXd DS8201/kg, IVD, 1 cycle every 21 days.",investigational,False,,,tdxdds8201kgivd1cycleevery21days,CTGOV_INV,investigational_other,combination_regimen
 ,TAA05 cell,investigational,False,,,taa05cell,CTGOV_INV,investigational_other,single_agent
-,TACE combined with Acoradine,investigational,False,,,tacecombinedwithacoradine,CTGOV_INV,investigational_other,combination_regimen
 ,TACE-DEB,investigational,False,,,tacedeb,CTGOV_INV,investigational_other,combination_regimen
 ,TAK-228,investigational,False,,,tak228,CTGOV_INV,investigational_therapy,single_agent
 ,TAK-441,investigational,False,,,tak441,CTGOV_INV,investigational_therapy,single_agent
@@ -2654,7 +2577,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Third-generation EGFR-TKI,investigational,False,,,thirdgenerationegfrtki,CTGOV_INV,investigational_other,combination_regimen
 ,ThisCART19A with Dose Level 1,investigational,False,,,thiscart19awithdoselevel1,CTGOV_INV,investigational_other,combination_regimen
 ,ThisCART19A with Dose Level 2,investigational,False,,,thiscart19awithdoselevel2,CTGOV_INV,investigational_other,combination_regimen
-,Three-drug chemotherapy group,investigational,False,,,threedrugchemotherapygroup,CTGOV_INV,investigational_other,single_agent
 ,Tinengotinib,investigational,False,,,tinengotinib,CTGOV_INV,targeted_therapy,single_agent
 ,Tirzepatide,investigational,False,,,tirzepatide,CTGOV_INV,supportive_care,single_agent
 ,Tislelizumab in Combination with Oxaliplatin and Tegafur,investigational,False,,,tislelizumabincombinationwithoxaliplatinandtegafur,CTGOV_INV,targeted_therapy,combination_regimen
@@ -2665,8 +2587,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Tivozanib + temsirolimus,investigational,False,,,tivozanibtemsirolimus,CTGOV_INV,targeted_therapy,combination_regimen
 ,Tivozanib AV-951,investigational,False,,,tivozanibav951,CTGOV_INV,investigational_other,single_agent
 ,Tofacitinib,investigational,False,,,tofacitinib,CTGOV_INV,targeted_therapy,single_agent
-,Toripalimab Combined With S1 and Albumin Paclitaxel,investigational,False,,,toripalimabcombinedwiths1andalbuminpaclitaxel,CTGOV_INV,targeted_therapy,combination_regimen
-,Trametinib placebo,investigational,False,,,trametinibplacebo,CTGOV_INV,targeted_therapy,single_agent
 ,Tranexamic Acid TXA,investigational,False,,,tranexamicacidtxa,CTGOV_INV,supportive_care,combination_regimen
 ,Tranexamic acid,investigational,False,,,tranexamicacid,CTGOV_INV,supportive_care,single_agent
 ,Transcatheter Arterial Chemoembolization,investigational,False,,,transcatheterarterialchemoembolization,CTGOV_INV,investigational_other,combination_regimen
@@ -2679,7 +2599,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Trastuzumab emtansine Kadcyla/kg,investigational,False,,,trastuzumabemtansinekadcylakg,CTGOV_INV,targeted_therapy,single_agent
 ,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin,investigational,False,,,trastuzumabnivolumabgemcitabinecisplatin,CTGOV_INV,immunotherapy,single_agent
 ,Trastuzumab+TP,investigational,False,,,trastuzumabtp,CTGOV_INV,targeted_therapy,single_agent
-,"Trastuzumab, Pyrotinib Combined With Dalpiciclib and Endocrine Therapy",investigational,False,,,trastuzumabpyrotinibcombinedwithdalpiciclibandendocrinetherapy,CTGOV_INV,targeted_therapy,combination_regimen
 ,Treatment of Physician's Choice TPC,investigational,False,,,treatmentofphysicianschoicetpc,CTGOV_INV,investigational_other,combination_regimen
 ,Treatment with ARQ 197 in combination with sorafenib,investigational,False,,,treatmentwitharq197incombinationwithsorafenib,CTGOV_INV,investigational_therapy,combination_regimen
 ,Trichomylin® capsule 5 mg delta-9-tetrahydrocannabinol: cannabidiol: cannabichromene,investigational,False,,,trichomylincapsule5mgdelta9tetrahydrocannabinolcannabidiolcannabichromene,CTGOV_INV,investigational_other,single_agent
@@ -2771,7 +2690,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,ZD1839 Iressa,investigational,False,,,zd1839iressa,CTGOV_INV,investigational_other,single_agent
 ,ZD4054 Zibotentan,investigational,False,,,zd4054zibotentan,CTGOV_INV,investigational_other,single_agent
 ,ZD6474,investigational,False,,,zd6474,CTGOV_INV,investigational_other,single_agent
-,ZE50-0134 or placebo,investigational,False,,,ze500134orplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,ZG005,investigational,False,,,zg005,CTGOV_INV,investigational_other,single_agent
 ,ZG006,investigational,False,,,zg006,CTGOV_INV,investigational_other,single_agent
 ,ZIO-101 Darinaparsin,investigational,False,,,zio101darinaparsin,CTGOV_INV,investigational_other,single_agent
@@ -2788,7 +2706,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,acetaminophen mannitol,investigational,False,,,acetaminophenmannitol,CTGOV_INV,supportive_care,single_agent
 ,acetylcysteine,investigational,False,,,acetylcysteine,CTGOV_INV,investigational_other,single_agent
 ,"adebrelimab, camrelizumab plus apatinib",investigational,False,,,adebrelimabcamrelizumabplusapatinib,CTGOV_INV,targeted_therapy,combination_regimen
-,albumin-bound paclitaxe combined with bevacizumab biosimilar,investigational,False,,,albuminboundpaclitaxecombinedwithbevacizumabbiosimilar,CTGOV_INV,targeted_therapy,combination_regimen
 ,amifostine trihydrate,investigational,False,,,amifostinetrihydrate,CTGOV_INV,chemotherapy,single_agent
 ,aminocamptothecin colloidal dispersion,investigational,False,,,aminocamptothecincolloidaldispersion,CTGOV_INV,investigational_other,single_agent
 ,aminopterin,investigational,False,,,aminopterin,CTGOV_INV,investigational_other,single_agent
@@ -2828,7 +2745,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,cetuximab CTX or nimotuzumab NTZ,investigational,False,,,cetuximabctxornimotuzumabntz,CTGOV_INV,targeted_therapy,single_agent
 ,chemotherapies recommended in france,investigational,False,,,chemotherapiesrecommendedinfrance,CTGOV_INV,investigational_other,single_agent
 ,chemotherapy +/- disulfiram,investigational,False,,,chemotherapydisulfiram,CTGOV_INV,investigational_other,single_agent
-,chemotherapy followed by Zevalin,investigational,False,,,chemotherapyfollowedbyzevalin,CTGOV_INV,investigational_other,single_agent
 ,chemotherapy only,investigational,False,,,chemotherapyonly,CTGOV_INV,investigational_other,single_agent
 ,chemotherapy plus targeted therapy,investigational,False,,,chemotherapyplustargetedtherapy,CTGOV_INV,targeted_therapy,single_agent
 ,chiauranib,investigational,False,,,chiauranib,CTGOV_INV,investigational_other,single_agent
@@ -2843,8 +2759,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,"cisplatin, cetuximab, or carboplatin-paclitaxel",investigational,False,,,cisplatincetuximaborcarboplatinpaclitaxel,CTGOV_INV,targeted_therapy,combination_regimen
 ,clarithromycin,investigational,False,,,clarithromycin,CTGOV_INV,supportive_care,single_agent
 ,clino-san vaginal lubricant,investigational,False,,,clinosanvaginallubricant,CTGOV_INV,investigational_other,single_agent
-,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME,investigational,False,,,concurrentcapecitabinebasedlongtermradiotherapyfollowedby4cyclesxeloxandadelayedtme,CTGOV_INV,chemotherapy,combination_regimen
-,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX,investigational,False,,,concurrentcapecitabinebasedlongtermradiotherapyfollowedbyaregulartmeand6cyclesxelox,CTGOV_INV,chemotherapy,combination_regimen
 ,cyclosporine,investigational,False,,,cyclosporine,CTGOV_INV,supportive_care,single_agent
 ,cytarabine liposome,investigational,False,,,cytarabineliposome,CTGOV_INV,chemotherapy,single_agent
 ,dalpiciclib; fluvestrant; compound gossypol acetate tablets,investigational,False,,,dalpiciclibfluvestrantcompoundgossypolacetatetablets,CTGOV_INV,investigational_other,single_agent
@@ -2927,7 +2841,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,lobradimil,investigational,False,,,lobradimil,CTGOV_INV,investigational_other,single_agent
 ,lonafarnib,investigational,False,,,lonafarnib,CTGOV_INV,investigational_other,single_agent
 ,lopinavir,investigational,False,,,lopinavir,CTGOV_INV,investigational_other,single_agent
-,lorlatinib plus chemotherapy,investigational,False,,,lorlatinibpluschemotherapy,CTGOV_INV,targeted_therapy,single_agent
 ,"low calorie, low nitrogen parenteral nutrition for patient with NRS score 3",investigational,False,,,lowcalorielownitrogenparenteralnutritionforpatientwithnrsscore3,CTGOV_INV,investigational_other,combination_regimen
 ,lurbinectedin PM01183,investigational,False,,,lurbinectedinpm01183,CTGOV_INV,investigational_other,single_agent
 ,m-FOLFOX-6 regimen,investigational,False,,,mfolfox6regimen,CTGOV_INV,investigational_therapy,combination_regimen
@@ -2937,15 +2850,12 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,maintenance therapy,investigational,False,,,maintenancetherapy,CTGOV_INV,investigational_other,single_agent
 ,mannitol,investigational,False,,,mannitol,CTGOV_INV,supportive_care,single_agent
 ,mapatumumab,investigational,False,,,mapatumumab,CTGOV_INV,targeted_therapy,single_agent
-,matching placebo,investigational,False,,,matchingplacebo,CTGOV_INV,investigational_therapy,single_agent
 ,methylprednisolone,investigational,False,,,methylprednisolone,CTGOV_INV,supportive_care,single_agent
 ,"metoprolol, infliximab, etanercept, tocilizumab and/or other agents",investigational,False,,,metoprololinfliximabetanercepttocilizumabandorotheragents,CTGOV_INV,supportive_care,combination_regimen
 ,microparticles packaging methotrexate MPs-MTX,investigational,False,,,microparticlespackagingmethotrexatempsmtx,CTGOV_INV,chemotherapy,single_agent
 ,midazolam,investigational,False,,,midazolam,CTGOV_INV,supportive_care,single_agent
 ,mitomycin C,investigational,False,,,mitomycinc,CTGOV_INV,chemotherapy,single_agent
 ,mycophenolate mofetil,investigational,False,,,mycophenolatemofetil,CTGOV_INV,investigational_other,single_agent
-,neoadjuvant anti-PD-1 plus chemotherapy,investigational,False,,,neoadjuvantantipd1pluschemotherapy,CTGOV_INV,immunotherapy,single_agent
-,neoadjuvant mFOLFOX6 chemotherapy combined with PD-1 inhibitor therapy,investigational,False,,,neoadjuvantmfolfox6chemotherapycombinedwithpd1inhibitortherapy,CTGOV_INV,immunotherapy,combination_regimen
 ,nimesulide,investigational,False,,,nimesulide,CTGOV_INV,investigational_other,single_agent
 ,obatoclax mesylate,investigational,False,,,obatoclaxmesylate,CTGOV_INV,investigational_other,single_agent
 ,ofatumumab plus dexamethasone,investigational,False,,,ofatumumabplusdexamethasone,CTGOV_INV,supportive_care,single_agent
@@ -2981,9 +2891,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,pinaverium bromide,investigational,False,,,pinaveriumbromide,CTGOV_INV,investigational_other,single_agent
 ,piperacillin-tazobactam,investigational,False,,,piperacillintazobactam,CTGOV_INV,supportive_care,single_agent
 ,pixantrone dimaleate,investigational,False,,,pixantronedimaleate,CTGOV_INV,investigational_other,single_agent
-,placebo and docetaxel,investigational,False,,,placeboanddocetaxel,CTGOV_INV,chemotherapy,single_agent
-,placebo and vitamin D,investigational,False,,,placeboandvitamind,CTGOV_INV,supportive_care,single_agent
-,placebo for Nimotuzumab,investigational,False,,,placebofornimotuzumab,CTGOV_INV,targeted_therapy,single_agent
 ,platinum,investigational,False,,,platinum,CTGOV_INV,chemotherapy,single_agent
 ,plevitrexed,investigational,False,,,plevitrexed,CTGOV_INV,investigational_other,single_agent
 ,polifeprosan 20 with carmustine implant,investigational,False,,,polifeprosan20withcarmustineimplant,CTGOV_INV,chemotherapy,combination_regimen
@@ -3005,7 +2912,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,rituximab and lenalidomide,investigational,False,,,rituximabandlenalidomide,CTGOV_INV,targeted_therapy,combination_regimen
 ,rituximab+chlorambucil,investigational,False,,,rituximabchlorambucil,CTGOV_INV,targeted_therapy,single_agent
 ,"rituximab, cyclophosphamide, doxorubicin, vincristine, and prednisone",investigational,False,,,rituximabcyclophosphamidedoxorubicinvincristineandprednisone,CTGOV_INV,investigational_therapy,combination_regimen
-,"rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim",investigational,False,,,rituximabcyclophosphamideetoposideprednisonevorinostatandqolquestionnairepegfilgrastimorfilgrastim,CTGOV_INV,investigational_therapy,combination_regimen
 ,"rituximab, cyclophosphamide, reduced dose of doxorubicin, vincristine, and prednisone",investigational,False,,,rituximabcyclophosphamidereduceddoseofdoxorubicinvincristineandprednisone,CTGOV_INV,investigational_therapy,combination_regimen
 ,"rituximab, cyclophosphamide, vincristine, and prednisolone",investigational,False,,,rituximabcyclophosphamidevincristineandprednisolone,CTGOV_INV,investigational_therapy,combination_regimen
 ,"rituximab, cytarabine, dexamethasone, and oxaliplatin/carboplatin",investigational,False,,,rituximabcytarabinedexamethasoneandoxaliplatincarboplatin,CTGOV_INV,investigational_therapy,combination_regimen
@@ -3014,14 +2920,12 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,s-LMWH,investigational,False,,,slmwh,CTGOV_INV,investigational_other,single_agent
 ,sabarubicin,investigational,False,,,sabarubicin,CTGOV_INV,chemotherapy,single_agent
 ,saracatinib,investigational,False,,,saracatinib,CTGOV_INV,targeted_therapy,single_agent
-,selumetinib placebo,investigational,False,,,selumetinibplacebo,CTGOV_INV,targeted_therapy,single_agent
 ,sintilimab plus anlotinib,investigational,False,,,sintilimabplusanlotinib,CTGOV_INV,targeted_therapy,single_agent
 ,sodium salicylate,investigational,False,,,sodiumsalicylate,CTGOV_INV,supportive_care,single_agent
 ,sodium thiosulfate,investigational,False,,,sodiumthiosulfate,CTGOV_INV,supportive_care,single_agent
 ,sorafenib with temsirolimus,investigational,False,,,sorafenibwithtemsirolimus,CTGOV_INV,targeted_therapy,combination_regimen
 ,soybean oil soft gel,investigational,False,,,soybeanoilsoftgel,CTGOV_INV,investigational_other,single_agent
 ,standard medical treatment,investigational,False,,,standardmedicaltreatment,CTGOV_INV,investigational_other,single_agent
-,"standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001",investigational,False,,,standardplatinumbasedconcurrentchemoradiotherapyfollowedbyconsolidationwithpdr001,CTGOV_INV,chemotherapy,combination_regimen
 ,sulindac,investigational,False,,,sulindac,CTGOV_INV,supportive_care,single_agent
 ,sulpegfilgrastim,investigational,False,,,sulpegfilgrastim,CTGOV_INV,chemotherapy,single_agent
 ,sunitinib alone,investigational,False,,,sunitinibalone,CTGOV_INV,targeted_therapy,single_agent
@@ -3035,7 +2939,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,temozolomide or PCV,investigational,False,,,temozolomideorpcv,CTGOV_INV,chemotherapy,single_agent
 ,teniposide,investigational,False,,,teniposide,CTGOV_INV,chemotherapy,single_agent
 ,therapeutic hydrocortisone,investigational,False,,,therapeutichydrocortisone,CTGOV_INV,supportive_care,single_agent
-,third-generation EGFR-TKI combined with anlotinib,investigational,False,,,thirdgenerationegfrtkicombinedwithanlotinib,CTGOV_INV,targeted_therapy,combination_regimen
 ,tigilanol tiglate,investigational,False,,,tigilanoltiglate,CTGOV_INV,investigational_other,single_agent
 ,tipifarnib,investigational,False,,,tipifarnib,CTGOV_INV,investigational_other,single_agent
 ,tirapazamine,investigational,False,,,tirapazamine,CTGOV_INV,investigational_other,single_agent
@@ -3048,12 +2951,10 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,tretinoin,investigational,False,,,tretinoin,CTGOV_INV,chemotherapy,single_agent
 ,triple antibiotic irrigation,investigational,False,,,tripleantibioticirrigation,CTGOV_INV,supportive_care,single_agent
 ,tropisetron,investigational,False,,,tropisetron,CTGOV_INV,investigational_other,single_agent
-,two-drug chemotherapy group,investigational,False,,,twodrugchemotherapygroup,CTGOV_INV,investigational_other,single_agent
 ,tyrosinase peptide,investigational,False,,,tyrosinasepeptide,CTGOV_INV,investigational_other,single_agent
 ,undefined,investigational,False,,,undefined,CTGOV_INV,investigational_other,single_agent
 ,usual administration of exogenous recombinant FSH,investigational,False,,,usualadministrationofexogenousrecombinantfsh,CTGOV_INV,investigational_other,single_agent
 ,vargatef®,investigational,False,,,vargatef,CTGOV_INV,investigational_other,single_agent
-,venetoclax combined with decitabine,investigational,False,,,venetoclaxcombinedwithdecitabine,CTGOV_INV,chemotherapy,combination_regimen
 ,verapamil tablet,investigational,False,,,verapamiltablet,CTGOV_INV,supportive_care,single_agent
 ,vilastobart XTX101,investigational,False,,,vilastobartxtx101,CTGOV_INV,investigational_other,single_agent
 ,vindesine,investigational,False,,,vindesine,CTGOV_INV,investigational_other,single_agent
