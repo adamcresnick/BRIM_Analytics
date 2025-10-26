@@ -32,6 +32,8 @@
 --   2025-01-XX: Initial creation using comprehensive chemotherapy reference
 --   2025-10-25: Added name-based fallback matching (fixes 90% data loss issue)
 --   2025-10-25: Added investigational drug name extraction from notes
+--   2025-10-26: Added LENGTH > 2 filter to prevent spurious 2-letter code matches
+--               (e.g., "AC" matching "acetaminophen", "AG" matching "magnesium")
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_medications AS
@@ -120,8 +122,11 @@ name_matched_medications AS (
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
     CROSS JOIN fhir_prd_db.v_chemotherapy_drugs cd
     WHERE
+        -- Exclude very short drug names (<=2 chars) to prevent spurious substring matches
+        -- (e.g., "AC" matching "acetaminophen", "AG" matching "magnesium")
+        LENGTH(cd.preferred_name) > 2
         -- Match on medication name (case-insensitive, partial match)
-        (
+        AND (
             -- Try exact preferred name match first
             LOWER(m.code_text) LIKE '%' || LOWER(cd.preferred_name) || '%'
             -- Also try matching common variations
