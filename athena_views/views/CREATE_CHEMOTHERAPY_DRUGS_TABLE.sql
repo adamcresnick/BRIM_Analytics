@@ -13,7 +13,8 @@ CREATE EXTERNAL TABLE IF NOT EXISTS fhir_prd_db.chemotherapy_drugs (
     ncit_code STRING,
     normalized_key STRING,
     sources STRING,
-    drug_category STRING
+    drug_category STRING,
+    drug_type STRING
 )
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
 WITH SERDEPROPERTIES (

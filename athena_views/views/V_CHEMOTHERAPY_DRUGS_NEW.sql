@@ -13,5 +13,6 @@ SELECT
     ncit_code,
     normalized_key,
     sources,
-    drug_category
+    drug_category,
+    drug_type
 FROM fhir_prd_db.chemotherapy_drugs;
