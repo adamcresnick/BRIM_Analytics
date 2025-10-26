@@ -34,8 +34,13 @@ class TreatmentParadigmAnalyzer:
             chemo_data_path: Path to CSV from v_chemo_medications query
         """
         self.data = pd.read_csv(chemo_data_path)
-        # Use medication_authored_date if available, otherwise medication_start_date
-        date_col = 'medication_authored_date' if 'medication_authored_date' in self.data.columns else 'order_date'
+        # Use medication_authored_date if available, otherwise medication_start_date or order_date
+        if 'medication_authored_date' in self.data.columns:
+            date_col = 'medication_authored_date'
+        elif 'medication_start_date' in self.data.columns:
+            date_col = 'medication_start_date'
+        else:
+            date_col = 'order_date'
         self.data['order_date'] = pd.to_datetime(self.data[date_col], format='mixed', utc=True)
 
         # Results
