@@ -81,18 +81,36 @@ rx:2682434.0,Ojemda,brim_alias,BRIM_CLINICAL_NOTES,,ojemda
 
 ## Testing Results
 
-### Successful Detection:
-- ✅ **Dordaviprone**: All aliases detected (ONC201, ONC, Dordaviprone)
-- ✅ **Tovorafenib**: RxNorm-based detection works (FDA approved drug)
+### ✅ ALL DRUGS SUCCESSFULLY DETECTED (13/13 tests passed)
 
-### Partial Detection:
-- ⚠️ **Fimepinostat**: Main name may work via substring matching
-- ⚠️ **Unesbulin**: Main name may work via substring matching
+**Dordaviprone (ONC201)**:
+- ✅ ONC201 → drug_alias_exact
+- ✅ ONC → drug_alias_exact
+- ✅ Dordaviprone → rxnorm_ingredient (RxNorm 2721194)
 
-ChemotherapyFilter uses 3-strategy matching:
-1. RxNorm ingredient codes (for Dordaviprone, Tovorafenib)
-2. RxNorm product mapping
-3. Name-based matching with substring fallback (for Fimepinostat, Unesbulin)
+**Fimepinostat (CUDC-907)**:
+- ✅ CUDC-907 → drug_alias_exact
+- ✅ Fimepinostat → drug_alias_exact
+
+**Unesbulin (PTC596)**:
+- ✅ PTC596 → drug_alias_exact
+- ✅ PTC-596 → drug_alias_exact
+- ✅ Unesbulin → drug_alias_exact
+
+**Tovorafenib (TAK-580/Ojemda)**:
+- ✅ TAK-580 → drug_alias_exact
+- ✅ Tovorafenib → rxnorm_ingredient (RxNorm 2682434)
+- ✅ Ojemda → drug_alias_exact
+- ✅ DAY101 → drug_alias_exact
+- ✅ MLN2480 → drug_alias_exact
+
+### Critical Implementation Detail
+
+**drug_id Consistency Fix**: The key to successful detection was ensuring `drug_id` matches between drugs.csv and drug_alias.csv:
+- Drugs WITH RxNorm codes: `drug_id = "rx:RXCUI"` (e.g., "rx:2721194.0" for Dordaviprone)
+- Drugs WITHOUT RxNorm codes: `drug_id = normalized_key` (e.g., "fimepinostat" for Fimepinostat)
+
+This allows ChemotherapyFilter's alias lookup (lines 134-151 in chemotherapy_filter.py) to correctly match all aliases to their parent drugs.
 
 ## Impact
 
