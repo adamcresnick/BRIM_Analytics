@@ -37,6 +37,9 @@
 --   2025-10-26: Increased to LENGTH > 3 to prevent 3-letter code spurious matches
 --               (e.g., "ADE" matching "ropivacaine", "lidocaine", "adenosine")
 --               3-letter regimen codes (VAC, ADE, CVP, etc.) now ONLY match via RxNorm
+--   2025-10-26: Added drug_category column and excluded supportive care medications
+--               Filters out analgesics, antiemetics, anesthetics, antibiotics, etc.
+--               Reduces data from 1.27M to ~250K therapeutic orders (chemotherapy, targeted, immunotherapy)
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_medications AS
@@ -83,6 +86,7 @@ chemotherapy_rxnorm_matches AS (
         COALESCE(cd_direct.rxnorm_in, cd_product.rxnorm_in) AS chemo_rxnorm_ingredient,
         COALESCE(cd_direct.ncit_code, cd_product.ncit_code) AS chemo_ncit_code,
         COALESCE(cd_direct.sources, cd_product.sources) AS chemo_sources,
+        COALESCE(cd_direct.drug_category, cd_product.drug_category) AS chemo_drug_category,
         -- Match type for debugging
         CASE
             WHEN cd_direct.drug_id IS NOT NULL THEN 'rxnorm_ingredient'
@@ -120,7 +124,8 @@ name_matched_medications AS (
         cd.approval_status,
         cd.rxnorm_in,
         cd.ncit_code,
-        cd.sources
+        cd.sources,
+        cd.drug_category
     FROM fhir_prd_db.medication m
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
     CROSS JOIN fhir_prd_db.v_chemotherapy_drugs cd
@@ -188,6 +193,7 @@ investigational_with_extracted_names AS (
         cd.rxnorm_in AS chemo_rxnorm_ingredient,
         cd.ncit_code AS chemo_ncit_code,
         COALESCE(cd.sources, 'CLINICAL_TRIAL') AS chemo_sources,
+        COALESCE(cd.drug_category, 'investigational_therapy') AS chemo_drug_category,
         'investigational_extracted' AS match_type
     FROM investigational_drug_extraction ide
     INNER JOIN medications_without_chemo_match mwcm ON ide.medication_id = mwcm.medication_id
@@ -213,6 +219,7 @@ generic_investigational_matches AS (
         NULL AS chemo_rxnorm_ingredient,
         NULL AS chemo_ncit_code,
         'CLINICAL_TRIAL' AS chemo_sources,
+        'investigational_therapy' AS chemo_drug_category,
         'investigational_generic' AS match_type
     FROM fhir_prd_db.medication m
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
@@ -255,6 +262,7 @@ chemotherapy_name_matches AS (
         nmm.rxnorm_in AS chemo_rxnorm_ingredient,
         nmm.ncit_code AS chemo_ncit_code,
         nmm.sources AS chemo_sources,
+        nmm.drug_category AS chemo_drug_category,
         'name_match' AS match_type
     FROM name_matched_medications nmm
     LEFT JOIN name_matched_rxnorm_codes nmrc
@@ -361,6 +369,7 @@ SELECT
     cmm.chemo_rxnorm_ingredient,
     cmm.chemo_ncit_code,
     cmm.chemo_sources,
+    cmm.chemo_drug_category,
     cmm.match_type as rxnorm_match_type,
 
     -- Medication details
@@ -449,6 +458,15 @@ LEFT JOIN medication_based_on mbo
 LEFT JOIN medication_reason_references mrrefs
     ON mrrefs.medication_request_id = mr.id
 
--- Only include active, completed, or stopped medications
+-- ================================================================================
+-- FILTERS: Status + Exclude Supportive Care
+-- ================================================================================
 WHERE mr.status IN ('active', 'completed', 'stopped', 'on-hold')
+    -- Exclude supportive care medications (analgesics, antiemetics, anesthetics, etc.)
+    -- Keep all therapeutic categories: chemotherapy, targeted_therapy, immunotherapy,
+    -- hormone_therapy, investigational_therapy, investigational_other
+    AND (
+        cmm.chemo_drug_category NOT IN ('supportive_care')
+        OR cmm.chemo_drug_category IS NULL  -- Keep investigational_generic and uncategorized
+    )
 ;
