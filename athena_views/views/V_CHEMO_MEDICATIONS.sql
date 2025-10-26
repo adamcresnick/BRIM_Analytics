@@ -34,6 +34,9 @@
 --   2025-10-25: Added investigational drug name extraction from notes
 --   2025-10-26: Added LENGTH > 2 filter to prevent spurious 2-letter code matches
 --               (e.g., "AC" matching "acetaminophen", "AG" matching "magnesium")
+--   2025-10-26: Increased to LENGTH > 3 to prevent 3-letter code spurious matches
+--               (e.g., "ADE" matching "ropivacaine", "lidocaine", "adenosine")
+--               3-letter regimen codes (VAC, ADE, CVP, etc.) now ONLY match via RxNorm
 -- ================================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_medications AS
@@ -122,9 +125,11 @@ name_matched_medications AS (
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
     CROSS JOIN fhir_prd_db.v_chemotherapy_drugs cd
     WHERE
-        -- Exclude very short drug names (<=2 chars) to prevent spurious substring matches
-        -- (e.g., "AC" matching "acetaminophen", "AG" matching "magnesium")
-        LENGTH(cd.preferred_name) > 2
+        -- Exclude short drug names (<=3 chars) to prevent spurious substring matches
+        -- 2-letter codes: "AC" matching "acetaminophen", "AG" matching "magnesium"
+        -- 3-letter codes: "ADE" matching "ropivacaine", "lidocaine", "adenosine"
+        -- These codes will ONLY match via RxNorm (if they have RxNorm codes)
+        LENGTH(cd.preferred_name) > 3
         -- Match on medication name (case-insensitive, partial match)
         AND (
             -- Try exact preferred name match first
