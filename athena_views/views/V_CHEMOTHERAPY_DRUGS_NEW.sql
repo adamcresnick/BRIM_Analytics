@@ -14,5 +14,6 @@ SELECT
     normalized_key,
     sources,
     drug_category,
-    drug_type
+    drug_type,
+    therapeutic_normalized
 FROM fhir_prd_db.chemotherapy_drugs;
