@@ -1760,10 +1760,11 @@ investigational_with_extracted_names AS (
         'investigational_extracted' AS match_type
     FROM investigational_drug_extraction ide
     INNER JOIN medications_without_chemo_match mwcm ON ide.medication_id = mwcm.medication_id
-    -- Try to match extracted name to reference table
+    -- Try to match extracted name to reference table (EXACT match only)
+    -- FIXED 2025-10-26: Removed LIKE matching to prevent single drug names from matching combo-strings
+    -- Previously: "imatinib" would match "Imatinib, Fluorouracil, Oxaliplatin..." causing false combo entries
     LEFT JOIN fhir_prd_db.v_chemotherapy_drugs cd
         ON LOWER(cd.preferred_name) = LOWER(ide.extracted_drug_name)
-        OR LOWER(cd.preferred_name) LIKE '%' || LOWER(ide.extracted_drug_name) || '%'
     -- Exclude from name_matched_medications (prevent duplicates)
     WHERE ide.medication_id NOT IN (SELECT medication_id FROM name_matched_medications)
 ),
