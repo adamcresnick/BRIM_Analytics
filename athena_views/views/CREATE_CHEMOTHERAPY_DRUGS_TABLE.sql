@@ -8,6 +8,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS fhir_prd_db.chemotherapy_drugs (
     drug_id STRING,
     preferred_name STRING,
     approval_status STRING,
+    is_supportive_care STRING,
     rxnorm_in STRING,
     ncit_code STRING,
     normalized_key STRING,
