@@ -114,10 +114,19 @@ class ChemotherapyFilter:
 
         logger.info(f"  Found {len(chemo_drugs)} chemotherapy drugs (excluding supportive care and derivatives)")
 
-        # Build RxNorm ingredient lookup
+        # Build RxNorm ingredient lookup with therapeutic_normalized mapping
         self.valid_rxnorm_in = set(
             chemo_drugs['rxnorm_in'].dropna().astype(int)
         )
+
+        # Build RxNorm -> therapeutic_normalized mapping
+        self.rxnorm_to_therapeutic = {}
+        for _, row in chemo_drugs.iterrows():
+            if pd.notna(row['rxnorm_in']):
+                rxnorm_cui = int(row['rxnorm_in'])
+                therapeutic_norm = row.get('therapeutic_normalized', row['preferred_name'])
+                self.rxnorm_to_therapeutic[rxnorm_cui] = therapeutic_norm
+
         logger.info(f"  Built RxNorm ingredient lookup: {len(self.valid_rxnorm_in)} codes")
 
         # Build product-to-ingredient mapping
@@ -129,6 +138,13 @@ class ChemotherapyFilter:
                     self.product_to_ingredient[int(row['code_cui'])] = ingredient_cui
 
         logger.info(f"  Built product-to-ingredient mapping: {len(self.product_to_ingredient)} products")
+
+        # Build drug_id -> therapeutic_normalized mapping
+        self.drug_id_to_therapeutic = {}
+        for _, row in chemo_drugs.iterrows():
+            if pd.notna(row['drug_id']):
+                therapeutic_norm = row.get('therapeutic_normalized', row['preferred_name'])
+                self.drug_id_to_therapeutic[row['drug_id']] = therapeutic_norm
 
         # Build drug name alias lookup
         chemo_drug_ids = set(chemo_drugs['drug_id'].dropna())
@@ -195,10 +211,13 @@ class ChemotherapyFilter:
             codes = self._parse_rxnorm_codes(rx_norm_codes)
             matched_ingredients = [c for c in codes if c in self.valid_rxnorm_in]
             if matched_ingredients:
+                # Get therapeutic_normalized for first matched ingredient
+                therapeutic_norm = self.rxnorm_to_therapeutic.get(matched_ingredients[0])
                 return {
                     'is_chemo': True,
                     'strategy': 'rxnorm_ingredient',
                     'matched_codes': matched_ingredients,
+                    'therapeutic_normalized': therapeutic_norm,
                     'confidence': 'high'
                 }
 
@@ -207,11 +226,15 @@ class ChemotherapyFilter:
             codes = self._parse_rxnorm_codes(rx_norm_codes)
             matched_products = [c for c in codes if c in self.product_to_ingredient]
             if matched_products:
+                # Get therapeutic_normalized for first mapped ingredient
+                mapped_ingredient = self.product_to_ingredient[matched_products[0]]
+                therapeutic_norm = self.rxnorm_to_therapeutic.get(mapped_ingredient)
                 return {
                     'is_chemo': True,
                     'strategy': 'product_code_mapping',
                     'matched_codes': matched_products,
                     'mapped_ingredients': [self.product_to_ingredient[c] for c in matched_products],
+                    'therapeutic_normalized': therapeutic_norm,
                     'confidence': 'high'
                 }
 
@@ -220,11 +243,14 @@ class ChemotherapyFilter:
 
         # Try exact match first
         if normalized_name in self.alias_lookup:
+            drug_id = self.alias_lookup[normalized_name]
+            therapeutic_norm = self.drug_id_to_therapeutic.get(drug_id)
             return {
                 'is_chemo': True,
                 'strategy': 'drug_alias_exact',
                 'matched_alias': medication_name,
-                'drug_id': self.alias_lookup[normalized_name],
+                'drug_id': drug_id,
+                'therapeutic_normalized': therapeutic_norm,
                 'confidence': 'medium'
             }
 
@@ -232,11 +258,13 @@ class ChemotherapyFilter:
         for alias_key, drug_id in self.alias_lookup.items():
             # Only match if alias is substantial (>= 8 chars to avoid false positives)
             if len(alias_key) >= 8 and alias_key in normalized_name:
+                therapeutic_norm = self.drug_id_to_therapeutic.get(drug_id)
                 return {
                     'is_chemo': True,
                     'strategy': 'drug_alias_substring',
                     'matched_alias': alias_key,
                     'drug_id': drug_id,
+                    'therapeutic_normalized': therapeutic_norm,
                     'confidence': 'medium'
                 }
 

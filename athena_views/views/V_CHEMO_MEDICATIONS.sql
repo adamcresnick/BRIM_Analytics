@@ -87,6 +87,7 @@ chemotherapy_rxnorm_matches AS (
         COALESCE(cd_direct.ncit_code, cd_product.ncit_code) AS chemo_ncit_code,
         COALESCE(cd_direct.sources, cd_product.sources) AS chemo_sources,
         COALESCE(cd_direct.drug_category, cd_product.drug_category) AS chemo_drug_category,
+        COALESCE(cd_direct.therapeutic_normalized, cd_product.therapeutic_normalized) AS chemo_therapeutic_normalized,
         -- Match type for debugging
         CASE
             WHEN cd_direct.drug_id IS NOT NULL THEN 'rxnorm_ingredient'
@@ -125,7 +126,8 @@ name_matched_medications AS (
         cd.rxnorm_in,
         cd.ncit_code,
         cd.sources,
-        cd.drug_category
+        cd.drug_category,
+        cd.therapeutic_normalized
     FROM fhir_prd_db.medication m
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
     CROSS JOIN fhir_prd_db.v_chemotherapy_drugs cd
@@ -207,6 +209,7 @@ investigational_with_extracted_names AS (
         cd.ncit_code AS chemo_ncit_code,
         COALESCE(cd.sources, 'CLINICAL_TRIAL') AS chemo_sources,
         COALESCE(cd.drug_category, 'investigational_therapy') AS chemo_drug_category,
+        cd.therapeutic_normalized AS chemo_therapeutic_normalized,
         'investigational_extracted' AS match_type
     FROM investigational_drug_extraction ide
     INNER JOIN medications_without_chemo_match mwcm ON ide.medication_id = mwcm.medication_id
@@ -233,6 +236,7 @@ generic_investigational_matches AS (
         NULL AS chemo_ncit_code,
         'CLINICAL_TRIAL' AS chemo_sources,
         'investigational_therapy' AS chemo_drug_category,
+        'investigational chemotherapy (unspecified)' AS chemo_therapeutic_normalized,
         'investigational_generic' AS match_type
     FROM fhir_prd_db.medication m
     INNER JOIN medications_without_chemo_match mwcm ON m.id = mwcm.medication_id
@@ -276,6 +280,7 @@ chemotherapy_name_matches AS (
         nmm.ncit_code AS chemo_ncit_code,
         nmm.sources AS chemo_sources,
         nmm.drug_category AS chemo_drug_category,
+        nmm.therapeutic_normalized AS chemo_therapeutic_normalized,
         'name_match' AS match_type
     FROM name_matched_medications nmm
     LEFT JOIN name_matched_rxnorm_codes nmrc
@@ -383,6 +388,7 @@ SELECT
     cmm.chemo_ncit_code,
     cmm.chemo_sources,
     cmm.chemo_drug_category,
+    cmm.chemo_therapeutic_normalized,
     cmm.match_type as rxnorm_match_type,
 
     -- Medication details
