@@ -79,7 +79,8 @@ class TreatmentParadigmAnalyzer:
             patient_data = patient_data.sort_values('order_date')
 
             # Unique drugs (using therapeutic_normalized for accurate drug continuity)
-            unique_drugs = set(patient_data[self.drug_column].unique())
+            # Filter out NaN values
+            unique_drugs = set(patient_data[self.drug_column].dropna().unique())
 
             # Time-windowed combinations (30-day windows)
             combinations = self._find_concurrent_drugs(patient_data)
@@ -114,6 +115,10 @@ class TreatmentParadigmAnalyzer:
             current_date = row['order_date']
             current_drug = row[self.drug_column]
 
+            # Skip if current drug is NaN/NULL
+            if pd.isna(current_drug):
+                continue
+
             # Find other drugs within window
             window_start = current_date - timedelta(days=window_days)
             window_end = current_date + timedelta(days=window_days)
@@ -121,7 +126,8 @@ class TreatmentParadigmAnalyzer:
             concurrent = patient_data[
                 (patient_data['order_date'] >= window_start) &
                 (patient_data['order_date'] <= window_end) &
-                (patient_data[self.drug_column] != current_drug)
+                (patient_data[self.drug_column] != current_drug) &
+                (patient_data[self.drug_column].notna())  # Exclude NaN values
             ][self.drug_column].unique()
 
             if len(concurrent) > 0:

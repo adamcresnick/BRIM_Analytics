@@ -1,0 +1,24 @@
+# Ignore all output files (contain PHI)
+*.csv
+*.xlsx
+*.xls
+*.json
+*.txt
+
+# Except documentation/examples
+!README.md
+!EXAMPLE_*.csv
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Verification work files
+verification_queue*.csv
+verification_queue*.xlsx
