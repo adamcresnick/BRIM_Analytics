@@ -43,4 +43,4 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
-*.cover
+*.covertreatments_explore/data/chemotherapy_all_patients_raw.tsv
