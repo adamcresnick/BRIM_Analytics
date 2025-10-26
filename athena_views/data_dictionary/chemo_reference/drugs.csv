@@ -1372,7 +1372,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,CpG DNA,investigational,False,,,cpgdna,CTGOV_INV,investigational_other,single_agent
 ,Cripec Docetaxel,investigational,False,,,cripecdocetaxel,CTGOV_INV,chemotherapy,single_agent
 ,Cyclophophamide,investigational,False,,,cyclophophamide,CTGOV_INV,investigational_other,single_agent
-,Cyclophosphamid,investigational,False,,,cyclophosphamid,CTGOV_INV,chemotherapy,single_agent
 ,Cyclophosphamide CPA,investigational,False,,,cyclophosphamidecpa,CTGOV_INV,chemotherapy,single_agent
 ,Cyclophosphamide and Total Body Irradiation,investigational,False,,,cyclophosphamideandtotalbodyirradiation,CTGOV_INV,chemotherapy,combination_regimen
 ,Cyclophosphamide or Bendamustine,investigational,False,,,cyclophosphamideorbendamustine,CTGOV_INV,chemotherapy,single_agent
@@ -2563,7 +2562,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Td vaccine,investigational,False,,,tdvaccine,CTGOV_INV,investigational_other,single_agent
 ,Telaglenastat,investigational,False,,,telaglenastat,CTGOV_INV,investigational_other,single_agent
 ,Telaglenastat Hydrochloride,investigational,False,,,telaglenastathydrochloride,CTGOV_INV,investigational_other,single_agent
-,Temozolomide capsule,investigational,False,,,temozolomidecapsule,CTGOV_INV,chemotherapy,single_agent
 ,Temozolomide chemotherapy,investigational,False,,,temozolomidechemotherapy,CTGOV_INV,chemotherapy,single_agent
 ,Temsirolimus Torisel,investigational,False,,,temsirolimustorisel,CTGOV_INV,targeted_therapy,single_agent
 ,"Temsirolimus, Rituximab, Bendamustin",investigational,False,,,temsirolimusrituximabbendamustin,CTGOV_INV,targeted_therapy,combination_regimen
@@ -2664,7 +2662,6 @@ rx:77655.0,zoledronic acid,FDA_approved,False,77655.0,,zoledronicacid,FDA_old|FD
 ,Vilaprisan BAY1002670,investigational,False,,,vilaprisanbay1002670,CTGOV_INV,investigational_other,single_agent
 ,Vilobelimab,investigational,False,,,vilobelimab,CTGOV_INV,targeted_therapy,single_agent
 ,Vilobelimab + pembrolizumab combination therapy,investigational,False,,,vilobelimabpembrolizumabcombinationtherapy,CTGOV_INV,immunotherapy,combination_regimen
-,Vinblastin,investigational,False,,,vinblastin,CTGOV_INV,investigational_other,single_agent
 ,Vindesine + Cisplatin,investigational,False,,,vindesinecisplatin,CTGOV_INV,chemotherapy,combination_regimen
 ,Vinflunine,investigational,False,,,vinflunine,CTGOV_INV,investigational_other,single_agent
 ,Vinorelbine,investigational,False,,,vinorelbine,CTGOV_INV,chemotherapy,single_agent
