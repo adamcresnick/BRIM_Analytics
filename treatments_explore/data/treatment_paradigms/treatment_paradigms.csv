@@ -1,0 +1,1093 @@
+paradigm_id,type,patient_count,drug_count,drugs,description
+C055,drug_combination,50,2,G-CSF; plerixafor,G-CSF + plerixafor
+C054,drug_combination,50,2,filgrastim; plerixafor,filgrastim + plerixafor
+C056,drug_combination,43,2,mesna; plerixafor,mesna + plerixafor
+C057,drug_combination,40,2,pegfilgrastim; plerixafor,pegfilgrastim + plerixafor
+C058,drug_combination,38,2,Cyclophosphamide; plerixafor,Cyclophosphamide + plerixafor
+C059,drug_combination,38,2,Cyclophosphamid; plerixafor,Cyclophosphamid + plerixafor
+C060,drug_combination,37,2,Vinblastin; vinblastine,Vinblastin + vinblastine
+C061,drug_combination,34,2,plerixafor; vincristine,plerixafor + vincristine
+C062,drug_combination,33,2,cisplatin; plerixafor,cisplatin + plerixafor
+C063,drug_combination,32,2,irinotecan; vincristine,irinotecan + vincristine
+C064,drug_combination,31,2,etoposide; plerixafor,etoposide + plerixafor
+P001,complete_drug_set,31,2,carboplatin; vincristine,"2 drugs: carboplatin, vincristine"
+C066,drug_combination,31,2,Cyclophosphamid; topotecan,Cyclophosphamid + topotecan
+C065,drug_combination,31,2,Cyclophosphamide; topotecan,Cyclophosphamide + topotecan
+C067,drug_combination,29,2,filgrastim; topotecan,filgrastim + topotecan
+C068,drug_combination,27,2,pegfilgrastim; topotecan,pegfilgrastim + topotecan
+C069,drug_combination,24,2,Cyclophosphamide; Neulasta,Cyclophosphamide + Neulasta
+C070,drug_combination,24,2,Cyclophosphamid; Neulasta,Cyclophosphamid + Neulasta
+C071,drug_combination,24,2,etoposide; topotecan,etoposide + topotecan
+C072,drug_combination,21,2,Neulasta; vincristine,Neulasta + vincristine
+C073,drug_combination,21,2,Vinblastin; bevacizumab,Vinblastin + bevacizumab
+C074,drug_combination,21,2,bevacizumab; vinblastine,bevacizumab + vinblastine
+C075,drug_combination,20,2,methotrexate; triamcinolone,methotrexate + triamcinolone
+C076,drug_combination,19,2,Leucovorin; doxorubicin,Leucovorin + doxorubicin
+C077,drug_combination,19,2,Neulasta; cisplatin,Neulasta + cisplatin
+C078,drug_combination,19,2,bevacizumab; lomustine,bevacizumab + lomustine
+C079,drug_combination,19,2,filgrastim; irinotecan,filgrastim + irinotecan
+C080,drug_combination,18,2,irinotecan; pegfilgrastim,irinotecan + pegfilgrastim
+C084,drug_combination,17,2,G-CSF; topotecan,G-CSF + topotecan
+C081,drug_combination,17,2,Leucovorin; dexrazoxane,Leucovorin + dexrazoxane
+C082,drug_combination,17,2,Cyclophosphamide; bevacizumab,Cyclophosphamide + bevacizumab
+C083,drug_combination,17,2,Cyclophosphamid; bevacizumab,Cyclophosphamid + bevacizumab
+C085,drug_combination,16,2,temozolomide; triamcinolone,temozolomide + triamcinolone
+C086,drug_combination,16,2,G-CSF; Nivestym,G-CSF + Nivestym
+C087,drug_combination,16,2,Nivestym; filgrastim,Nivestym + filgrastim
+C088,drug_combination,16,2,bevacizumab; filgrastim,bevacizumab + filgrastim
+C089,drug_combination,16,2,Ziextenzo; etoposide,Ziextenzo + etoposide
+C090,drug_combination,15,2,Fulphila; pegfilgrastim,Fulphila + pegfilgrastim
+C091,drug_combination,15,2,Fulphila; filgrastim,Fulphila + filgrastim
+C098,drug_combination,14,2,Nivestym; pegfilgrastim,Nivestym + pegfilgrastim
+C097,drug_combination,14,2,Nivestym; etoposide,Nivestym + etoposide
+C092,drug_combination,14,2,gemcitabine; pegfilgrastim,gemcitabine + pegfilgrastim
+C093,drug_combination,14,2,filgrastim; gemcitabine,filgrastim + gemcitabine
+C094,drug_combination,14,2,Nivestym; mesna,Nivestym + mesna
+C095,drug_combination,14,2,Cyclophosphamide; Nivestym,Cyclophosphamide + Nivestym
+C099,drug_combination,14,2,G-CSF; ifosfamide,G-CSF + ifosfamide
+C100,drug_combination,14,2,carboplatin; plerixafor,carboplatin + plerixafor
+C101,drug_combination,14,2,Cyclophosphamide; thalidomide,Cyclophosphamide + thalidomide
+C102,drug_combination,14,2,Cyclophosphamid; thalidomide,Cyclophosphamid + thalidomide
+C096,drug_combination,14,2,Cyclophosphamid; Nivestym,Cyclophosphamid + Nivestym
+C103,drug_combination,13,2,Nivestym; vincristine,Nivestym + vincristine
+C105,drug_combination,13,2,GM-CSF; plerixafor,GM-CSF + plerixafor
+C106,drug_combination,13,2,bevacizumab; topotecan,bevacizumab + topotecan
+C107,drug_combination,13,2,etoposide; thalidomide,etoposide + thalidomide
+C104,drug_combination,13,2,Investigational Chemotherapy (unspecified); filgrastim,Investigational Chemotherapy (unspecified) + filgrastim
+P002,complete_drug_set,13,110,"***; 131-MIBG + Vorinostat; 1A46 Drug Substance; AMG386 and bevacizumab; AZD1775; AZD6244; Access to Experimental Drugs; Adjuvant Atezolizumab-Bevacizumab Therapy; Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Anti-PD-1 Drugs; Antibody-Drug Conjugates; BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Bevacizumab Avastin; Bevacizumab, Everolimus and LBH589; Bevacizumab-IRDye800CW; Bortezomib drug; CUDC-907; Cemiplimab REGN2810; Chemo with concomitant Capecitabine and KD018; Combination drug; Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Combination, Rogaratinib + palbociclib + fulvestrant; DFMO; DIFLUOROMETHYLORNITHINE; DS-8273a + nivolumab; Dabrafenib and trametinib combination; Drug-based intervention; Drugs Approved for Childhood Cancers; Drugs Approved for Conditions Related to Cancer; Drugs Approved for Different Types of Cancer; ETBX-071 PSA-based Oncolytic Virus; Enzalutamide,, soft capsules, once daily; Everolimus Afinitor tablets; FOLFIRI-BEVACIZUMAB; Fenretinide; Fimepinostat; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; Indoximod; Investigational Chemotherapy (unspecified); Ipilimumab -/kg; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; MK-1775; Mocetinostat Induction Phase + Ipilimumab + Nivolumab; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; Nivolumab & Ipilimumab; Nivolumab -/kg; Nivolumab Protocol; Nivolumab and Hyaluronidase-nvhy; Nivolumab and Relatlimab-rmbw; Nivolumab induction; Nivolumab maintenance; Nivolumab with chemoradiation; Nivolumab-relatlimab FDC; ONC201; ONO-7475 once daily; Oncaspar; Oncolytic virus VRT106; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; PTC596; Palbociclib100mg; Palbociclib125mg; Pemetrexed and Gemcitabine plus Bevacizumab; Placebo - Concentrate; Recombinant oncolytic herpes simplex virus type Ⅰ R130; Relatlimab FDC + Nivolumab; SAHA(Suberoylanilide; SAHA-Suberoylanilide; SAHA/Vorinostat; Serplulimab combined with bevacizumab and first-line chemotherapy; Surufatinib; Surufatinib and Serplulimab; Surufatinib plus chemotherapy; TAK-580; Three-drug chemotherapy group; Trametinib placebo; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; Trifluridine/tipiracil + bevacizumab; albumin-bound paclitaxe combined with bevacizumab biosimilar; bevacizumab; capecitabine, oxaliplatin, irinotecan and bevacizumab; carboplatin paclitaxel bevacizumab; chlorambucil drug; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; dasatinib; epirubicin - cyclophosphamide / docetaxel + bevacizumab; everolimus; fenretinide lipid matrix; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; ipilimumab; loncastuximab tesirine; loncastuximab tesirine-lpyl; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; nivolumab; ntifier:ADVL0921; once daily for two consecutive days Picato; paclitaxel + everolimus RAD001; palbociclib; palbociclib isethionate; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; selinexor; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; tazemetostat; tazemetostat hydrobromide; trametinib; trametinib dimethyl sulfoxide; two-drug chemotherapy group; vorinostat","110 drugs: ***, 131-MIBG + Vorinostat, 1A46 Drug Substance, AMG386 and bevacizumab, AZD1775"
+C111,drug_combination,12,2,bevacizumab; pegfilgrastim,bevacizumab + pegfilgrastim
+C110,drug_combination,12,2,Nivestym; cisplatin,Nivestym + cisplatin
+C109,drug_combination,12,2,Investigational Chemotherapy (unspecified); vincristine,Investigational Chemotherapy (unspecified) + vincristine
+C108,drug_combination,12,2,doxorubicin; triamcinolone,doxorubicin + triamcinolone
+C121,drug_combination,11,2,Etopophos; G-CSF,Etopophos + G-CSF
+C125,drug_combination,11,2,carboplatin; etoposide phosphate,carboplatin + etoposide phosphate
+C124,drug_combination,11,2,etoposide phosphate; filgrastim,etoposide phosphate + filgrastim
+C127,drug_combination,11,2,Glutamine; etoposide phosphate,Glutamine + etoposide phosphate
+C128,drug_combination,11,2,Etopophos; carboplatin,Etopophos + carboplatin
+C129,drug_combination,11,2,Etopophos; Glutamine,Etopophos + Glutamine
+C130,drug_combination,11,2,G-CSF; etoposide phosphate,G-CSF + etoposide phosphate
+C122,drug_combination,11,2,Etopophos; etoposide phosphate,Etopophos + etoposide phosphate
+C126,drug_combination,11,2,Etopophos; etoposide,Etopophos + etoposide
+C112,drug_combination,11,2,dexrazoxane; triamcinolone,dexrazoxane + triamcinolone
+C118,drug_combination,11,2,Neulasta; doxorubicin,Neulasta + doxorubicin
+C123,drug_combination,11,2,etoposide; etoposide phosphate,etoposide + etoposide phosphate
+C120,drug_combination,11,2,Etopophos; filgrastim,Etopophos + filgrastim
+C119,drug_combination,11,2,Progesterone; filgrastim,Progesterone + filgrastim
+C113,drug_combination,11,2,Leucovorin; triamcinolone,Leucovorin + triamcinolone
+C117,drug_combination,11,2,GM-CSF; isotretinoin,GM-CSF + isotretinoin
+C115,drug_combination,11,2,Rituxan; rituximab,Rituxan + rituximab
+C114,drug_combination,11,2,Leucovorin; cytarabine,Leucovorin + cytarabine
+C116,drug_combination,11,2,GM-CSF; tretinoin,GM-CSF + tretinoin
+C139,drug_combination,10,2,etoposide; tretinoin,etoposide + tretinoin
+C145,drug_combination,10,2,Glutamine; plerixafor,Glutamine + plerixafor
+C144,drug_combination,10,2,Cyclophosphamid; irinotecan,Cyclophosphamid + irinotecan
+C143,drug_combination,10,2,Cyclophosphamide; irinotecan,Cyclophosphamide + irinotecan
+C142,drug_combination,10,2,cisplatin; topotecan,cisplatin + topotecan
+C141,drug_combination,10,2,Progesterone; pegfilgrastim,Progesterone + pegfilgrastim
+C140,drug_combination,10,2,Neulasta; dexrazoxane,Neulasta + dexrazoxane
+C138,drug_combination,10,2,Investigational Chemotherapy (unspecified); pegfilgrastim,Investigational Chemotherapy (unspecified) + pegfilgrastim
+C137,drug_combination,10,2,G-CSF; bevacizumab,G-CSF + bevacizumab
+C136,drug_combination,10,2,trametinib; vincristine,trametinib + vincristine
+C134,drug_combination,10,2,Cyclophosphamid; gemcitabine,Cyclophosphamid + gemcitabine
+C133,drug_combination,10,2,gemcitabine; vincristine,gemcitabine + vincristine
+C132,drug_combination,10,2,Fulphila; vincristine,Fulphila + vincristine
+C131,drug_combination,10,2,Progesterone; bevacizumab,Progesterone + bevacizumab
+C135,drug_combination,10,2,Cyclophosphamide; gemcitabine,Cyclophosphamide + gemcitabine
+C146,drug_combination,9,2,Fulphila; etoposide,Fulphila + etoposide
+C147,drug_combination,9,2,Cyclophosphamide; pemetrexed,Cyclophosphamide + pemetrexed
+C148,drug_combination,9,2,filgrastim; pemetrexed,filgrastim + pemetrexed
+C153,drug_combination,9,2,gemcitabine; mesna,gemcitabine + mesna
+C158,drug_combination,9,2,ATRA; Cyclophosphamide,ATRA + Cyclophosphamide
+C156,drug_combination,9,2,gemcitabine; pemetrexed,gemcitabine + pemetrexed
+C155,drug_combination,9,2,mesna; pemetrexed,mesna + pemetrexed
+C154,drug_combination,9,2,pegfilgrastim; pemetrexed,pegfilgrastim + pemetrexed
+C149,drug_combination,9,2,cisplatin; gemcitabine,cisplatin + gemcitabine
+C152,drug_combination,9,2,cisplatin; pemetrexed,cisplatin + pemetrexed
+C151,drug_combination,9,2,pemetrexed; vincristine,pemetrexed + vincristine
+C150,drug_combination,9,2,Cyclophosphamid; pemetrexed,Cyclophosphamid + pemetrexed
+C159,drug_combination,9,2,Cyclophosphamid; Fulphila,Cyclophosphamid + Fulphila
+C160,drug_combination,9,2,cytarabine; triamcinolone,cytarabine + triamcinolone
+C161,drug_combination,9,2,Fulphila; cisplatin,Fulphila + cisplatin
+C162,drug_combination,9,2,Cyclophosphamide; Fulphila,Cyclophosphamide + Fulphila
+C163,drug_combination,9,2,Investigational Chemotherapy (unspecified); etoposide,Investigational Chemotherapy (unspecified) + etoposide
+C164,drug_combination,9,2,Temozolomide capsule; triamcinolone,Temozolomide capsule + triamcinolone
+C165,drug_combination,9,2,mercaptopurine; methotrexate,mercaptopurine + methotrexate
+C166,drug_combination,9,2,Daunorubicin; cytarabine,Daunorubicin + cytarabine
+C167,drug_combination,9,2,G-CSF; doxorubicin,G-CSF + doxorubicin
+C168,drug_combination,9,2,GM-CSF; irinotecan,GM-CSF + irinotecan
+C169,drug_combination,9,2,GM-CSF; topotecan,GM-CSF + topotecan
+C170,drug_combination,9,2,GM-CSF; dinutuximab,GM-CSF + dinutuximab
+C171,drug_combination,9,2,G-CSF; cytarabine,G-CSF + cytarabine
+P003,complete_drug_set,9,8,Cyclophosphamid; Cyclophosphamide; amifostine; cisplatin; filgrastim; mesna; pegfilgrastim; vincristine,"8 drugs: Cyclophosphamid, Cyclophosphamide, amifostine, cisplatin, filgrastim"
+C157,drug_combination,9,2,ATRA; Cyclophosphamid,ATRA + Cyclophosphamid
+C172,drug_combination,8,2,Cyclophosphamide; tretinoin,Cyclophosphamide + tretinoin
+C173,drug_combination,8,2,Cyclophosphamid; tretinoin,Cyclophosphamid + tretinoin
+C174,drug_combination,8,2,Cyclophosphamide; isotretinoin,Cyclophosphamide + isotretinoin
+C175,drug_combination,8,2,Cyclophosphamid; isotretinoin,Cyclophosphamid + isotretinoin
+C177,drug_combination,8,2,irinotecan; triamcinolone,irinotecan + triamcinolone
+C178,drug_combination,8,2,Nivestym; methotrexate,Nivestym + methotrexate
+C179,drug_combination,8,2,Cyclophosphamide; tazemetostat,Cyclophosphamide + tazemetostat
+C181,drug_combination,8,2,bevacizumab; cisplatin,bevacizumab + cisplatin
+C182,drug_combination,8,2,ipilimumab; vincristine,ipilimumab + vincristine
+C199,drug_combination,8,2,G-CSF; irinotecan,G-CSF + irinotecan
+C198,drug_combination,8,2,Glutamine; melphalan,Glutamine + melphalan
+C197,drug_combination,8,2,filgrastim; melphalan,filgrastim + melphalan
+C196,drug_combination,8,2,G-CSF; melphalan,G-CSF + melphalan
+C195,drug_combination,8,2,plerixafor; thiotepa,plerixafor + thiotepa
+C194,drug_combination,8,2,Nivestym; plerixafor,Nivestym + plerixafor
+C193,drug_combination,8,2,ifosfamide; plerixafor,ifosfamide + plerixafor
+C192,drug_combination,8,2,G-CSF; dexrazoxane,G-CSF + dexrazoxane
+C191,drug_combination,8,2,methotrexate; plerixafor,methotrexate + plerixafor
+C190,drug_combination,8,2,Ziextenzo; carboplatin,Ziextenzo + carboplatin
+C189,drug_combination,8,2,filgrastim; tretinoin,filgrastim + tretinoin
+C188,drug_combination,8,2,Cyclophosphamid; tazemetostat,Cyclophosphamid + tazemetostat
+C187,drug_combination,8,2,ipilimumab; pegfilgrastim,ipilimumab + pegfilgrastim
+C186,drug_combination,8,2,nivolumab; pegfilgrastim,nivolumab + pegfilgrastim
+C185,drug_combination,8,2,filgrastim; nivolumab,filgrastim + nivolumab
+C184,drug_combination,8,2,filgrastim; ipilimumab,filgrastim + ipilimumab
+C183,drug_combination,8,2,bevacizumab; tretinoin,bevacizumab + tretinoin
+C180,drug_combination,8,2,nivolumab; vincristine,nivolumab + vincristine
+C176,drug_combination,8,2,ATRA; filgrastim,ATRA + filgrastim
+P004,complete_drug_set,8,2,Temozolomide capsule; temozolomide,"2 drugs: Temozolomide capsule, temozolomide"
+C503,drug_combination,7,2,loncastuximab tesirine-lpyl; vincristine,loncastuximab tesirine-lpyl + vincristine
+C413,drug_combination,7,2,DS-8273a + nivolumab; vincristine,DS-8273a + nivolumab + vincristine
+C423,drug_combination,7,2,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; pegfilgrastim,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab + pegfilgrastim
+C422,drug_combination,7,2,Surufatinib plus chemotherapy; pegfilgrastim,Surufatinib plus chemotherapy + pegfilgrastim
+C421,drug_combination,7,2,"Combination, Rogaratinib + palbociclib + fulvestrant; filgrastim","Combination, Rogaratinib + palbociclib + fulvestrant + filgrastim"
+C420,drug_combination,7,2,Antibody-Drug Conjugates; filgrastim,Antibody-Drug Conjugates + filgrastim
+C419,drug_combination,7,2,ETBX-071 PSA-based Oncolytic Virus; filgrastim,ETBX-071 PSA-based Oncolytic Virus + filgrastim
+C418,drug_combination,7,2,Surufatinib; vincristine,Surufatinib + vincristine
+C417,drug_combination,7,2,***; vincristine,*** + vincristine
+C416,drug_combination,7,2,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; vincristine,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin + vincristine
+C415,drug_combination,7,2,"Bevacizumab, Everolimus and LBH589; pegfilgrastim","Bevacizumab, Everolimus and LBH589 + pegfilgrastim"
+C414,drug_combination,7,2,palbociclib; pegfilgrastim,palbociclib + pegfilgrastim
+C412,drug_combination,7,2,Nivolumab and Hyaluronidase-nvhy; vincristine,Nivolumab and Hyaluronidase-nvhy + vincristine
+C425,drug_combination,7,2,loncastuximab tesirine; pegfilgrastim,loncastuximab tesirine + pegfilgrastim
+C411,drug_combination,7,2,Bevacizumab Avastin; vincristine,Bevacizumab Avastin + vincristine
+C410,drug_combination,7,2,Nivolumab with chemoradiation; filgrastim,Nivolumab with chemoradiation + filgrastim
+C409,drug_combination,7,2,CUDC-907; pegfilgrastim,CUDC-907 + pegfilgrastim
+C408,drug_combination,7,2,Ipilimumab -/kg; pegfilgrastim,Ipilimumab -/kg + pegfilgrastim
+C407,drug_combination,7,2,Fenretinide; filgrastim,Fenretinide + filgrastim
+C406,drug_combination,7,2,DFMO; filgrastim,DFMO + filgrastim
+C405,drug_combination,7,2,SAHA-Suberoylanilide; pegfilgrastim,SAHA-Suberoylanilide + pegfilgrastim
+C404,drug_combination,7,2,Placebo - Concentrate; filgrastim,Placebo - Concentrate + filgrastim
+C403,drug_combination,7,2,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; filgrastim,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab + filgrastim
+C424,drug_combination,7,2,DFMO; pegfilgrastim,DFMO + pegfilgrastim
+C426,drug_combination,7,2,Nivolumab Protocol; filgrastim,Nivolumab Protocol + filgrastim
+C401,drug_combination,7,2,Drug-based intervention; vincristine,Drug-based intervention + vincristine
+C439,drug_combination,7,2,Cemiplimab REGN2810; filgrastim,Cemiplimab REGN2810 + filgrastim
+C449,drug_combination,7,2,Oncaspar; pegfilgrastim,Oncaspar + pegfilgrastim
+C448,drug_combination,7,2,Oncolytic virus VRT106; pegfilgrastim,Oncolytic virus VRT106 + pegfilgrastim
+C447,drug_combination,7,2,"pegfilgrastim; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim","pegfilgrastim + rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim"
+C446,drug_combination,7,2,carboplatin paclitaxel bevacizumab; pegfilgrastim,carboplatin paclitaxel bevacizumab + pegfilgrastim
+C445,drug_combination,7,2,"Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; vincristine","Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab + vincristine"
+C444,drug_combination,7,2,131-MIBG + Vorinostat; filgrastim,131-MIBG + Vorinostat + filgrastim
+C443,drug_combination,7,2,Nivolumab Protocol; pegfilgrastim,Nivolumab Protocol + pegfilgrastim
+C442,drug_combination,7,2,"rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; vincristine","rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim + vincristine"
+C441,drug_combination,7,2,1A46 Drug Substance; pegfilgrastim,1A46 Drug Substance + pegfilgrastim
+C440,drug_combination,7,2,Ipilimumab -/kg; vincristine,Ipilimumab -/kg + vincristine
+C438,drug_combination,7,2,Combination drug; filgrastim,Combination drug + filgrastim
+C427,drug_combination,7,2,Fenretinide; pegfilgrastim,Fenretinide + pegfilgrastim
+C437,drug_combination,7,2,MK-1775; vincristine,MK-1775 + vincristine
+C436,drug_combination,7,2,SAHA-Suberoylanilide; vincristine,SAHA-Suberoylanilide + vincristine
+C435,drug_combination,7,2,Fimepinostat; vincristine,Fimepinostat + vincristine
+C434,drug_combination,7,2,Three-drug chemotherapy group; filgrastim,Three-drug chemotherapy group + filgrastim
+C433,drug_combination,7,2,Oncaspar; filgrastim,Oncaspar + filgrastim
+C432,drug_combination,7,2,paclitaxel + everolimus RAD001; pegfilgrastim,paclitaxel + everolimus RAD001 + pegfilgrastim
+C431,drug_combination,7,2,131-MIBG + Vorinostat; vincristine,131-MIBG + Vorinostat + vincristine
+C430,drug_combination,7,2,albumin-bound paclitaxe combined with bevacizumab biosimilar; vincristine,albumin-bound paclitaxe combined with bevacizumab biosimilar + vincristine
+C429,drug_combination,7,2,Nivolumab with chemoradiation; pegfilgrastim,Nivolumab with chemoradiation + pegfilgrastim
+C428,drug_combination,7,2,Nivolumab and Hyaluronidase-nvhy; filgrastim,Nivolumab and Hyaluronidase-nvhy + filgrastim
+C402,drug_combination,7,2,Serplulimab combined with bevacizumab and first-line chemotherapy; filgrastim,Serplulimab combined with bevacizumab and first-line chemotherapy + filgrastim
+C400,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; vincristine,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX + vincristine
+C451,drug_combination,7,2,SAHA(Suberoylanilide; pegfilgrastim,SAHA(Suberoylanilide + pegfilgrastim
+C375,drug_combination,7,2,"Enzalutamide,, soft capsules, once daily; pegfilgrastim","Enzalutamide,, soft capsules, once daily + pegfilgrastim"
+C373,drug_combination,7,2,filgrastim; ntifier:ADVL0921,filgrastim + ntifier:ADVL0921
+C372,drug_combination,7,2,Indoximod; pegfilgrastim,Indoximod + pegfilgrastim
+C371,drug_combination,7,2,pegfilgrastim; trametinib dimethyl sulfoxide,pegfilgrastim + trametinib dimethyl sulfoxide
+C370,drug_combination,7,2,Anti-PD-1 Drugs; filgrastim,Anti-PD-1 Drugs + filgrastim
+C369,drug_combination,7,2,Access to Experimental Drugs; pegfilgrastim,Access to Experimental Drugs + pegfilgrastim
+C368,drug_combination,7,2,"PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; pegfilgrastim","PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001 + pegfilgrastim"
+C367,drug_combination,7,2,chlorambucil drug; filgrastim,chlorambucil drug + filgrastim
+C366,drug_combination,7,2,AZD6244; pegfilgrastim,AZD6244 + pegfilgrastim
+C365,drug_combination,7,2,Cyclophosphamide; nivolumab,Cyclophosphamide + nivolumab
+C364,drug_combination,7,2,ONO-7475 once daily; filgrastim,ONO-7475 once daily + filgrastim
+C363,drug_combination,7,2,"Enzalutamide,, soft capsules, once daily; filgrastim","Enzalutamide,, soft capsules, once daily + filgrastim"
+C362,drug_combination,7,2,Drugs Approved for Different Types of Cancer; pegfilgrastim,Drugs Approved for Different Types of Cancer + pegfilgrastim
+C361,drug_combination,7,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; filgrastim","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + filgrastim"
+C360,drug_combination,7,2,Chemo with concomitant Capecitabine and KD018; filgrastim,Chemo with concomitant Capecitabine and KD018 + filgrastim
+C359,drug_combination,7,2,Recombinant oncolytic herpes simplex virus type Ⅰ R130; pegfilgrastim,Recombinant oncolytic herpes simplex virus type Ⅰ R130 + pegfilgrastim
+C358,drug_combination,7,2,TAK-580; filgrastim,TAK-580 + filgrastim
+C357,drug_combination,7,2,epirubicin - cyclophosphamide / docetaxel + bevacizumab; filgrastim,epirubicin - cyclophosphamide / docetaxel + bevacizumab + filgrastim
+C356,drug_combination,7,2,Mocetinostat Induction Phase + Ipilimumab + Nivolumab; vincristine,Mocetinostat Induction Phase + Ipilimumab + Nivolumab + vincristine
+C355,drug_combination,7,2,Trifluridine/tipiracil + bevacizumab; filgrastim,Trifluridine/tipiracil + bevacizumab + filgrastim
+C354,drug_combination,7,2,chlorambucil drug; vincristine,chlorambucil drug + vincristine
+C353,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; vincristine,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME + vincristine
+C374,drug_combination,7,2,epirubicin - cyclophosphamide / docetaxel + bevacizumab; pegfilgrastim,epirubicin - cyclophosphamide / docetaxel + bevacizumab + pegfilgrastim
+C376,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; pegfilgrastim,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX + pegfilgrastim
+C399,drug_combination,7,2,FOLFIRI-BEVACIZUMAB; filgrastim,FOLFIRI-BEVACIZUMAB + filgrastim
+C377,drug_combination,7,2,filgrastim; trametinib,filgrastim + trametinib
+C398,drug_combination,7,2,albumin-bound paclitaxe combined with bevacizumab biosimilar; pegfilgrastim,albumin-bound paclitaxe combined with bevacizumab biosimilar + pegfilgrastim
+C397,drug_combination,7,2,SAHA/Vorinostat; pegfilgrastim,SAHA/Vorinostat + pegfilgrastim
+C396,drug_combination,7,2,pegfilgrastim; two-drug chemotherapy group,pegfilgrastim + two-drug chemotherapy group
+C395,drug_combination,7,2,"Bevacizumab, Everolimus and LBH589; filgrastim","Bevacizumab, Everolimus and LBH589 + filgrastim"
+C394,drug_combination,7,2,Indoximod; vincristine,Indoximod + vincristine
+C393,drug_combination,7,2,Access to Experimental Drugs; vincristine,Access to Experimental Drugs + vincristine
+C392,drug_combination,7,2,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; pegfilgrastim,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide + pegfilgrastim
+C391,drug_combination,7,2,Everolimus Afinitor tablets; filgrastim,Everolimus Afinitor tablets + filgrastim
+C390,drug_combination,7,2,CUDC-907; filgrastim,CUDC-907 + filgrastim
+C389,drug_combination,7,2,filgrastim; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody,filgrastim + mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody
+C388,drug_combination,7,2,Surufatinib; pegfilgrastim,Surufatinib + pegfilgrastim
+C387,drug_combination,7,2,"capecitabine, oxaliplatin, irinotecan and bevacizumab; pegfilgrastim","capecitabine, oxaliplatin, irinotecan and bevacizumab + pegfilgrastim"
+C386,drug_combination,7,2,fenretinide lipid matrix; vincristine,fenretinide lipid matrix + vincristine
+C385,drug_combination,7,2,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; pegfilgrastim,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin + pegfilgrastim
+C384,drug_combination,7,2,Anti-PD-1 Drugs; pegfilgrastim,Anti-PD-1 Drugs + pegfilgrastim
+C383,drug_combination,7,2,Bevacizumab Avastin; pegfilgrastim,Bevacizumab Avastin + pegfilgrastim
+C382,drug_combination,7,2,Drugs Approved for Different Types of Cancer; vincristine,Drugs Approved for Different Types of Cancer + vincristine
+C381,drug_combination,7,2,ntifier:ADVL0921; vincristine,ntifier:ADVL0921 + vincristine
+C380,drug_combination,7,2,Everolimus Afinitor tablets; vincristine,Everolimus Afinitor tablets + vincristine
+C379,drug_combination,7,2,Drug-based intervention; pegfilgrastim,Drug-based intervention + pegfilgrastim
+C378,drug_combination,7,2,ONO-7475 once daily; pegfilgrastim,ONO-7475 once daily + pegfilgrastim
+C450,drug_combination,7,2,Three-drug chemotherapy group; pegfilgrastim,Three-drug chemotherapy group + pegfilgrastim
+C452,drug_combination,7,2,Surufatinib plus chemotherapy; vincristine,Surufatinib plus chemotherapy + vincristine
+C504,drug_combination,7,2,ONC201; pegfilgrastim,ONC201 + pegfilgrastim
+C528,drug_combination,7,2,filgrastim; isotretinoin,filgrastim + isotretinoin
+C529,drug_combination,7,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; vincristine,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + vincristine
+C530,drug_combination,7,2,"PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; vincristine","PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001 + vincristine"
+C531,drug_combination,7,2,etoposide; isotretinoin,etoposide + isotretinoin
+C532,drug_combination,7,2,Drugs Approved for Different Types of Cancer; filgrastim,Drugs Approved for Different Types of Cancer + filgrastim
+C533,drug_combination,7,2,epirubicin - cyclophosphamide / docetaxel + bevacizumab; vincristine,epirubicin - cyclophosphamide / docetaxel + bevacizumab + vincristine
+C534,drug_combination,7,2,"Enzalutamide,, soft capsules, once daily; vincristine","Enzalutamide,, soft capsules, once daily + vincristine"
+C535,drug_combination,7,2,fenretinide lipid matrix; filgrastim,fenretinide lipid matrix + filgrastim
+C536,drug_combination,7,2,AZD6244; filgrastim,AZD6244 + filgrastim
+C537,drug_combination,7,2,ONO-7475 once daily; vincristine,ONO-7475 once daily + vincristine
+C538,drug_combination,7,2,"PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; filgrastim","PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001 + filgrastim"
+C539,drug_combination,7,2,Access to Experimental Drugs; filgrastim,Access to Experimental Drugs + filgrastim
+C540,drug_combination,7,2,Neulasta; methotrexate,Neulasta + methotrexate
+C541,drug_combination,7,2,Leucovorin; plerixafor,Leucovorin + plerixafor
+C542,drug_combination,7,2,topotecan; vincristine,topotecan + vincristine
+C543,drug_combination,7,2,Daunorubicin; dexrazoxane,Daunorubicin + dexrazoxane
+C544,drug_combination,7,2,asparaginase; cytarabine,asparaginase + cytarabine
+C545,drug_combination,7,2,dinutuximab; irinotecan,dinutuximab + irinotecan
+C546,drug_combination,7,2,dinutuximab; temozolomide,dinutuximab + temozolomide
+C548,drug_combination,7,2,irinotecan; mesna,irinotecan + mesna
+C549,drug_combination,7,2,Cyclophosphamide; Progesterone,Cyclophosphamide + Progesterone
+C550,drug_combination,7,2,Cyclophosphamid; Progesterone,Cyclophosphamid + Progesterone
+C351,drug_combination,7,2,PTC596; vincristine,PTC596 + vincristine
+C527,drug_combination,7,2,AZD6244; vincristine,AZD6244 + vincristine
+C502,drug_combination,7,2,filgrastim; paclitaxel + everolimus RAD001,filgrastim + paclitaxel + everolimus RAD001
+C526,drug_combination,7,2,Relatlimab FDC + Nivolumab; vincristine,Relatlimab FDC + Nivolumab + vincristine
+C505,drug_combination,7,2,PTC596; filgrastim,PTC596 + filgrastim
+C506,drug_combination,7,2,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; pegfilgrastim,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks + pegfilgrastim
+C507,drug_combination,7,2,Nivolumab -/kg; filgrastim,Nivolumab -/kg + filgrastim
+C508,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; filgrastim,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME + filgrastim
+C509,drug_combination,7,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; pegfilgrastim,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + pegfilgrastim
+C510,drug_combination,7,2,Mocetinostat Induction Phase + Ipilimumab + Nivolumab; filgrastim,Mocetinostat Induction Phase + Ipilimumab + Nivolumab + filgrastim
+C511,drug_combination,7,2,Nivolumab maintenance; vincristine,Nivolumab maintenance + vincristine
+C512,drug_combination,7,2,Palbociclib100mg; vincristine,Palbociclib100mg + vincristine
+C513,drug_combination,7,2,Palbociclib125mg; vincristine,Palbociclib125mg + vincristine
+C514,drug_combination,7,2,Trifluridine/tipiracil + bevacizumab; pegfilgrastim,Trifluridine/tipiracil + bevacizumab + pegfilgrastim
+C515,drug_combination,7,2,TAK-580; pegfilgrastim,TAK-580 + pegfilgrastim
+C516,drug_combination,7,2,Chemo with concomitant Capecitabine and KD018; pegfilgrastim,Chemo with concomitant Capecitabine and KD018 + pegfilgrastim
+C517,drug_combination,7,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; pegfilgrastim","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + pegfilgrastim"
+C518,drug_combination,7,2,palbociclib isethionate; pegfilgrastim,palbociclib isethionate + pegfilgrastim
+C519,drug_combination,7,2,once daily for two consecutive days Picato; vincristine,once daily for two consecutive days Picato + vincristine
+C520,drug_combination,7,2,filgrastim; trametinib dimethyl sulfoxide,filgrastim + trametinib dimethyl sulfoxide
+C521,drug_combination,7,2,Nivolumab -/kg; pegfilgrastim,Nivolumab -/kg + pegfilgrastim
+C522,drug_combination,7,2,Recombinant oncolytic herpes simplex virus type Ⅰ R130; vincristine,Recombinant oncolytic herpes simplex virus type Ⅰ R130 + vincristine
+C523,drug_combination,7,2,chlorambucil drug; pegfilgrastim,chlorambucil drug + pegfilgrastim
+C524,drug_combination,7,2,Mocetinostat Induction Phase + Ipilimumab + Nivolumab; pegfilgrastim,Mocetinostat Induction Phase + Ipilimumab + Nivolumab + pegfilgrastim
+C525,drug_combination,7,2,pegfilgrastim; tazemetostat,pegfilgrastim + tazemetostat
+C551,drug_combination,7,2,bevacizumab; thalidomide,bevacizumab + thalidomide
+C501,drug_combination,7,2,Relatlimab FDC + Nivolumab; pegfilgrastim,Relatlimab FDC + Nivolumab + pegfilgrastim
+C453,drug_combination,7,2,Dabrafenib and trametinib combination; vincristine,Dabrafenib and trametinib combination + vincristine
+C476,drug_combination,7,2,Drugs Approved for Conditions Related to Cancer; filgrastim,Drugs Approved for Conditions Related to Cancer + filgrastim
+C474,drug_combination,7,2,filgrastim; tazemetostat hydrobromide,filgrastim + tazemetostat hydrobromide
+C473,drug_combination,7,2,SAHA(Suberoylanilide; vincristine,SAHA(Suberoylanilide + vincristine
+C472,drug_combination,7,2,Oncolytic virus VRT106; vincristine,Oncolytic virus VRT106 + vincristine
+C471,drug_combination,7,2,pegfilgrastim; selinexor,pegfilgrastim + selinexor
+C470,drug_combination,7,2,Nivolumab induction; vincristine,Nivolumab induction + vincristine
+C469,drug_combination,7,2,dasatinib; pegfilgrastim,dasatinib + pegfilgrastim
+C468,drug_combination,7,2,carboplatin paclitaxel bevacizumab; vincristine,carboplatin paclitaxel bevacizumab + vincristine
+C467,drug_combination,7,2,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; pegfilgrastim,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody + pegfilgrastim
+C466,drug_combination,7,2,Surufatinib and Serplulimab; filgrastim,Surufatinib and Serplulimab + filgrastim
+C465,drug_combination,7,2,G-CSF; Investigational Chemotherapy (unspecified),G-CSF + Investigational Chemotherapy (unspecified)
+C464,drug_combination,7,2,1A46 Drug Substance; vincristine,1A46 Drug Substance + vincristine
+C463,drug_combination,7,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; filgrastim,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + filgrastim
+C462,drug_combination,7,2,pegfilgrastim; vorinostat,pegfilgrastim + vorinostat
+C461,drug_combination,7,2,Nivolumab & Ipilimumab; vincristine,Nivolumab & Ipilimumab + vincristine
+C460,drug_combination,7,2,Drugs Approved for Childhood Cancers; filgrastim,Drugs Approved for Childhood Cancers + filgrastim
+C459,drug_combination,7,2,filgrastim; once daily for two consecutive days Picato,filgrastim + once daily for two consecutive days Picato
+C458,drug_combination,7,2,Nivolumab and Relatlimab-rmbw; filgrastim,Nivolumab and Relatlimab-rmbw + filgrastim
+C457,drug_combination,7,2,Surufatinib and Serplulimab; vincristine,Surufatinib and Serplulimab + vincristine
+C456,drug_combination,7,2,Bortezomib drug; pegfilgrastim,Bortezomib drug + pegfilgrastim
+C455,drug_combination,7,2,"Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; filgrastim","Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab + filgrastim"
+C454,drug_combination,7,2,Combination drug; pegfilgrastim,Combination drug + pegfilgrastim
+C475,drug_combination,7,2,filgrastim; palbociclib,filgrastim + palbociclib
+C477,drug_combination,7,2,AZD1775; filgrastim,AZD1775 + filgrastim
+C500,drug_combination,7,2,Adjuvant Atezolizumab-Bevacizumab Therapy; filgrastim,Adjuvant Atezolizumab-Bevacizumab Therapy + filgrastim
+C478,drug_combination,7,2,loncastuximab tesirine-lpyl; pegfilgrastim,loncastuximab tesirine-lpyl + pegfilgrastim
+C499,drug_combination,7,2,Bevacizumab-IRDye800CW; filgrastim,Bevacizumab-IRDye800CW + filgrastim
+C498,drug_combination,7,2,dasatinib; vincristine,dasatinib + vincristine
+C497,drug_combination,7,2,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; vincristine,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody + vincristine
+C496,drug_combination,7,2,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; filgrastim,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide + filgrastim
+C495,drug_combination,7,2,Pemetrexed and Gemcitabine plus Bevacizumab; filgrastim,Pemetrexed and Gemcitabine plus Bevacizumab + filgrastim
+C494,drug_combination,7,2,AZD1775; pegfilgrastim,AZD1775 + pegfilgrastim
+C493,drug_combination,7,2,Trametinib placebo; filgrastim,Trametinib placebo + filgrastim
+C492,drug_combination,7,2,ONC201; filgrastim,ONC201 + filgrastim
+C491,drug_combination,7,2,once daily for two consecutive days Picato; pegfilgrastim,once daily for two consecutive days Picato + pegfilgrastim
+C490,drug_combination,7,2,selinexor; vincristine,selinexor + vincristine
+C489,drug_combination,7,2,"filgrastim; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001","filgrastim + standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001"
+C488,drug_combination,7,2,Bevacizumab-IRDye800CW; vincristine,Bevacizumab-IRDye800CW + vincristine
+C487,drug_combination,7,2,everolimus; pegfilgrastim,everolimus + pegfilgrastim
+C486,drug_combination,7,2,vincristine; vorinostat,vincristine + vorinostat
+C485,drug_combination,7,2,AMG386 and bevacizumab; pegfilgrastim,AMG386 and bevacizumab + pegfilgrastim
+C484,drug_combination,7,2,DIFLUOROMETHYLORNITHINE; vincristine,DIFLUOROMETHYLORNITHINE + vincristine
+C483,drug_combination,7,2,Palbociclib100mg; pegfilgrastim,Palbociclib100mg + pegfilgrastim
+C482,drug_combination,7,2,Nivolumab maintenance; pegfilgrastim,Nivolumab maintenance + pegfilgrastim
+C481,drug_combination,7,2,Bortezomib drug; vincristine,Bortezomib drug + vincristine
+C480,drug_combination,7,2,Nivolumab-relatlimab FDC; vincristine,Nivolumab-relatlimab FDC + vincristine
+C479,drug_combination,7,2,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; vincristine,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks + vincristine
+C352,drug_combination,7,2,Nivolumab -/kg; vincristine,Nivolumab -/kg + vincristine
+C547,drug_combination,7,2,carboplatin; temozolomide,carboplatin + temozolomide
+C350,drug_combination,7,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; filgrastim,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + filgrastim
+C246,drug_combination,7,2,Fimepinostat; filgrastim,Fimepinostat + filgrastim
+C253,drug_combination,7,2,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; vincristine,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab + vincristine
+C252,drug_combination,7,2,Ipilimumab -/kg; filgrastim,Ipilimumab -/kg + filgrastim
+C251,drug_combination,7,2,Serplulimab combined with bevacizumab and first-line chemotherapy; vincristine,Serplulimab combined with bevacizumab and first-line chemotherapy + vincristine
+C250,drug_combination,7,2,MK-1775; filgrastim,MK-1775 + filgrastim
+C249,drug_combination,7,2,SAHA-Suberoylanilide; filgrastim,SAHA-Suberoylanilide + filgrastim
+C248,drug_combination,7,2,***; pegfilgrastim,*** + pegfilgrastim
+C247,drug_combination,7,2,FOLFIRI-BEVACIZUMAB; vincristine,FOLFIRI-BEVACIZUMAB + vincristine
+C245,drug_combination,7,2,DS-8273a + nivolumab; pegfilgrastim,DS-8273a + nivolumab + pegfilgrastim
+C274,drug_combination,7,2,"Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; pegfilgrastim","Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab + pegfilgrastim"
+C244,drug_combination,7,2,"Bevacizumab, Everolimus and LBH589; vincristine","Bevacizumab, Everolimus and LBH589 + vincristine"
+C243,drug_combination,7,2,Nivolumab and Hyaluronidase-nvhy; pegfilgrastim,Nivolumab and Hyaluronidase-nvhy + pegfilgrastim
+C242,drug_combination,7,2,palbociclib; vincristine,palbociclib + vincristine
+C241,drug_combination,7,2,albumin-bound paclitaxe combined with bevacizumab biosimilar; filgrastim,albumin-bound paclitaxe combined with bevacizumab biosimilar + filgrastim
+C240,drug_combination,7,2,SAHA/Vorinostat; filgrastim,SAHA/Vorinostat + filgrastim
+C239,drug_combination,7,2,"Combination, Rogaratinib + palbociclib + fulvestrant; pegfilgrastim","Combination, Rogaratinib + palbociclib + fulvestrant + pegfilgrastim"
+C238,drug_combination,7,2,CUDC-907; vincristine,CUDC-907 + vincristine
+C254,drug_combination,7,2,Cyclophosphamid; Investigational Chemotherapy (unspecified),Cyclophosphamid + Investigational Chemotherapy (unspecified)
+C255,drug_combination,7,2,Placebo - Concentrate; vincristine,Placebo - Concentrate + vincristine
+C256,drug_combination,7,2,DFMO; vincristine,DFMO + vincristine
+C257,drug_combination,7,2,loncastuximab tesirine; vincristine,loncastuximab tesirine + vincristine
+C272,drug_combination,7,2,Cyclophosphamid; nivolumab,Cyclophosphamid + nivolumab
+C271,drug_combination,7,2,MK-1775; pegfilgrastim,MK-1775 + pegfilgrastim
+C270,drug_combination,7,2,"Combination, Rogaratinib + palbociclib + fulvestrant; vincristine","Combination, Rogaratinib + palbociclib + fulvestrant + vincristine"
+C269,drug_combination,7,2,Antibody-Drug Conjugates; vincristine,Antibody-Drug Conjugates + vincristine
+C268,drug_combination,7,2,ETBX-071 PSA-based Oncolytic Virus; vincristine,ETBX-071 PSA-based Oncolytic Virus + vincristine
+C267,drug_combination,7,2,Dabrafenib and trametinib combination; filgrastim,Dabrafenib and trametinib combination + filgrastim
+C266,drug_combination,7,2,Surufatinib plus chemotherapy; filgrastim,Surufatinib plus chemotherapy + filgrastim
+C265,drug_combination,7,2,Fimepinostat; pegfilgrastim,Fimepinostat + pegfilgrastim
+C264,drug_combination,7,2,131-MIBG + Vorinostat; pegfilgrastim,131-MIBG + Vorinostat + pegfilgrastim
+C263,drug_combination,7,2,paclitaxel + everolimus RAD001; vincristine,paclitaxel + everolimus RAD001 + vincristine
+C262,drug_combination,7,2,"filgrastim; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim","filgrastim + rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim"
+C261,drug_combination,7,2,Nivolumab with chemoradiation; vincristine,Nivolumab with chemoradiation + vincristine
+C260,drug_combination,7,2,Fenretinide; vincristine,Fenretinide + vincristine
+C259,drug_combination,7,2,Cemiplimab REGN2810; pegfilgrastim,Cemiplimab REGN2810 + pegfilgrastim
+C258,drug_combination,7,2,filgrastim; loncastuximab tesirine,filgrastim + loncastuximab tesirine
+C237,drug_combination,7,2,Antibody-Drug Conjugates; pegfilgrastim,Antibody-Drug Conjugates + pegfilgrastim
+C236,drug_combination,7,2,ETBX-071 PSA-based Oncolytic Virus; pegfilgrastim,ETBX-071 PSA-based Oncolytic Virus + pegfilgrastim
+C235,drug_combination,7,2,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; filgrastim,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide + filgrastim
+C215,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; filgrastim,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX + filgrastim
+C213,drug_combination,7,2,ntifier:ADVL0921; pegfilgrastim,ntifier:ADVL0921 + pegfilgrastim
+C212,drug_combination,7,2,Indoximod; filgrastim,Indoximod + filgrastim
+C211,drug_combination,7,2,filgrastim; two-drug chemotherapy group,filgrastim + two-drug chemotherapy group
+C210,drug_combination,7,2,Everolimus Afinitor tablets; pegfilgrastim,Everolimus Afinitor tablets + pegfilgrastim
+C209,drug_combination,7,2,Cyclophosphamid; ipilimumab,Cyclophosphamid + ipilimumab
+C208,drug_combination,7,2,GM-CSF; Nivestym,GM-CSF + Nivestym
+C207,drug_combination,7,2,Leucovorin; Nivestym,Leucovorin + Nivestym
+C206,drug_combination,7,2,cytarabine; mesna,cytarabine + mesna
+C205,drug_combination,7,2,dactinomycin; triamcinolone,dactinomycin + triamcinolone
+C204,drug_combination,7,2,temozolomide; topotecan,temozolomide + topotecan
+C203,drug_combination,7,2,G-CSF; Temozolomide capsule,G-CSF + Temozolomide capsule
+C202,drug_combination,7,2,leuprolide; leuprolide acetate,leuprolide + leuprolide acetate
+C201,drug_combination,7,2,carboplatin; doxorubicin,carboplatin + doxorubicin
+C200,drug_combination,7,2,carboplatin; dexrazoxane,carboplatin + dexrazoxane
+C349,drug_combination,7,2,tazemetostat hydrobromide; vincristine,tazemetostat hydrobromide + vincristine
+C214,drug_combination,7,2,Anti-PD-1 Drugs; vincristine,Anti-PD-1 Drugs + vincristine
+C216,drug_combination,7,2,FOLFIRI-BEVACIZUMAB; pegfilgrastim,FOLFIRI-BEVACIZUMAB + pegfilgrastim
+C234,drug_combination,7,2,Surufatinib; filgrastim,Surufatinib + filgrastim
+C217,drug_combination,7,2,Drug-based intervention; filgrastim,Drug-based intervention + filgrastim
+C233,drug_combination,7,2,Cyclophosphamid; dasatinib,Cyclophosphamid + dasatinib
+C232,drug_combination,7,2,"capecitabine, oxaliplatin, irinotecan and bevacizumab; filgrastim","capecitabine, oxaliplatin, irinotecan and bevacizumab + filgrastim"
+C231,drug_combination,7,2,filgrastim; palbociclib isethionate,filgrastim + palbociclib isethionate
+C230,drug_combination,7,2,filgrastim; loncastuximab tesirine-lpyl,filgrastim + loncastuximab tesirine-lpyl
+C229,drug_combination,7,2,***; filgrastim,*** + filgrastim
+C228,drug_combination,7,2,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; filgrastim,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin + filgrastim
+C227,drug_combination,7,2,SAHA/Vorinostat; vincristine,SAHA/Vorinostat + vincristine
+C226,drug_combination,7,2,DS-8273a + nivolumab; filgrastim,DS-8273a + nivolumab + filgrastim
+C225,drug_combination,7,2,Bevacizumab Avastin; filgrastim,Bevacizumab Avastin + filgrastim
+C223,drug_combination,7,2,Placebo - Concentrate; pegfilgrastim,Placebo - Concentrate + pegfilgrastim
+C222,drug_combination,7,2,Serplulimab combined with bevacizumab and first-line chemotherapy; pegfilgrastim,Serplulimab combined with bevacizumab and first-line chemotherapy + pegfilgrastim
+C221,drug_combination,7,2,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; vincristine,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide + vincristine
+C220,drug_combination,7,2,pegfilgrastim; trametinib,pegfilgrastim + trametinib
+C219,drug_combination,7,2,"capecitabine, oxaliplatin, irinotecan and bevacizumab; vincristine","capecitabine, oxaliplatin, irinotecan and bevacizumab + vincristine"
+C218,drug_combination,7,2,fenretinide lipid matrix; pegfilgrastim,fenretinide lipid matrix + pegfilgrastim
+C273,drug_combination,7,2,Nivolumab Protocol; vincristine,Nivolumab Protocol + vincristine
+C224,drug_combination,7,2,"standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; vincristine","standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001 + vincristine"
+C275,drug_combination,7,2,nivolumab; tretinoin,nivolumab + tretinoin
+C331,drug_combination,7,2,ONC201; vincristine,ONC201 + vincristine
+C329,drug_combination,7,2,Cyclophosphamide; dasatinib,Cyclophosphamide + dasatinib
+C328,drug_combination,7,2,everolimus; filgrastim,everolimus + filgrastim
+C327,drug_combination,7,2,trametinib dimethyl sulfoxide; vincristine,trametinib dimethyl sulfoxide + vincristine
+C326,drug_combination,7,2,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; pegfilgrastim,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME + pegfilgrastim
+C325,drug_combination,7,2,AMG386 and bevacizumab; filgrastim,AMG386 and bevacizumab + filgrastim
+C324,drug_combination,7,2,Palbociclib125mg; filgrastim,Palbociclib125mg + filgrastim
+C323,drug_combination,7,2,PTC596; pegfilgrastim,PTC596 + pegfilgrastim
+C322,drug_combination,7,2,Palbociclib100mg; filgrastim,Palbociclib100mg + filgrastim
+C321,drug_combination,7,2,Nivolumab maintenance; filgrastim,Nivolumab maintenance + filgrastim
+C320,drug_combination,7,2,AZD1775; vincristine,AZD1775 + vincristine
+C319,drug_combination,7,2,Drugs Approved for Conditions Related to Cancer; vincristine,Drugs Approved for Conditions Related to Cancer + vincristine
+C318,drug_combination,7,2,pegfilgrastim; tazemetostat hydrobromide,pegfilgrastim + tazemetostat hydrobromide
+C317,drug_combination,7,2,Adjuvant Atezolizumab-Bevacizumab Therapy; pegfilgrastim,Adjuvant Atezolizumab-Bevacizumab Therapy + pegfilgrastim
+C316,drug_combination,7,2,Bevacizumab-IRDye800CW; pegfilgrastim,Bevacizumab-IRDye800CW + pegfilgrastim
+C315,drug_combination,7,2,everolimus; vincristine,everolimus + vincristine
+C330,drug_combination,7,2,"pegfilgrastim; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001","pegfilgrastim + standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001"
+C332,drug_combination,7,2,Trametinib placebo; vincristine,Trametinib placebo + vincristine
+C313,drug_combination,7,2,AMG386 and bevacizumab; vincristine,AMG386 and bevacizumab + vincristine
+C333,drug_combination,7,2,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; vincristine,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks + vincristine
+C276,drug_combination,7,2,Oncaspar; vincristine,Oncaspar + vincristine
+C348,drug_combination,7,2,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; filgrastim,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks + filgrastim
+C347,drug_combination,7,2,tazemetostat; vincristine,tazemetostat + vincristine
+C346,drug_combination,7,2,Cyclophosphamide; Investigational Chemotherapy (unspecified),Cyclophosphamide + Investigational Chemotherapy (unspecified)
+C345,drug_combination,7,2,Adjuvant Atezolizumab-Bevacizumab Therapy; vincristine,Adjuvant Atezolizumab-Bevacizumab Therapy + vincristine
+C344,drug_combination,7,2,palbociclib isethionate; vincristine,palbociclib isethionate + vincristine
+C343,drug_combination,7,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; vincristine","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + vincristine"
+C342,drug_combination,7,2,Chemo with concomitant Capecitabine and KD018; vincristine,Chemo with concomitant Capecitabine and KD018 + vincristine
+C341,drug_combination,7,2,TAK-580; vincristine,TAK-580 + vincristine
+C340,drug_combination,7,2,Relatlimab FDC + Nivolumab; filgrastim,Relatlimab FDC + Nivolumab + filgrastim
+C339,drug_combination,7,2,Palbociclib125mg; pegfilgrastim,Palbociclib125mg + pegfilgrastim
+C338,drug_combination,7,2,Trifluridine/tipiracil + bevacizumab; vincristine,Trifluridine/tipiracil + bevacizumab + vincristine
+C337,drug_combination,7,2,filgrastim; tazemetostat,filgrastim + tazemetostat
+C335,drug_combination,7,2,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; vincristine,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide + vincristine
+C334,drug_combination,7,2,Pemetrexed and Gemcitabine plus Bevacizumab; vincristine,Pemetrexed and Gemcitabine plus Bevacizumab + vincristine
+C314,drug_combination,7,2,DIFLUOROMETHYLORNITHINE; pegfilgrastim,DIFLUOROMETHYLORNITHINE + pegfilgrastim
+C336,drug_combination,7,2,Recombinant oncolytic herpes simplex virus type Ⅰ R130; filgrastim,Recombinant oncolytic herpes simplex virus type Ⅰ R130 + filgrastim
+C312,drug_combination,7,2,trametinib; tretinoin,trametinib + tretinoin
+C285,drug_combination,7,2,Cemiplimab REGN2810; vincristine,Cemiplimab REGN2810 + vincristine
+C292,drug_combination,7,2,Nivolumab induction; filgrastim,Nivolumab induction + filgrastim
+C291,drug_combination,7,2,Surufatinib and Serplulimab; pegfilgrastim,Surufatinib and Serplulimab + pegfilgrastim
+C290,drug_combination,7,2,filgrastim; selinexor,filgrastim + selinexor
+C289,drug_combination,7,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; pegfilgrastim,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + pegfilgrastim
+C288,drug_combination,7,2,carboplatin paclitaxel bevacizumab; filgrastim,carboplatin paclitaxel bevacizumab + filgrastim
+C287,drug_combination,7,2,1A46 Drug Substance; filgrastim,1A46 Drug Substance + filgrastim
+C286,drug_combination,7,2,Drugs Approved for Childhood Cancers; pegfilgrastim,Drugs Approved for Childhood Cancers + pegfilgrastim
+C283,drug_combination,7,2,Nivolumab and Relatlimab-rmbw; pegfilgrastim,Nivolumab and Relatlimab-rmbw + pegfilgrastim
+C294,drug_combination,7,2,SAHA(Suberoylanilide; filgrastim,SAHA(Suberoylanilide + filgrastim
+C282,drug_combination,7,2,Dabrafenib and trametinib combination; pegfilgrastim,Dabrafenib and trametinib combination + pegfilgrastim
+C281,drug_combination,7,2,Nivolumab & Ipilimumab; filgrastim,Nivolumab & Ipilimumab + filgrastim
+C280,drug_combination,7,2,filgrastim; vorinostat,filgrastim + vorinostat
+C279,drug_combination,7,2,Three-drug chemotherapy group; vincristine,Three-drug chemotherapy group + vincristine
+C311,drug_combination,7,2,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; pegfilgrastim,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide + pegfilgrastim
+C278,drug_combination,7,2,bevacizumab; mesna,bevacizumab + mesna
+C277,drug_combination,7,2,two-drug chemotherapy group; vincristine,two-drug chemotherapy group + vincristine
+C293,drug_combination,7,2,Oncolytic virus VRT106; filgrastim,Oncolytic virus VRT106 + filgrastim
+C284,drug_combination,7,2,Combination drug; vincristine,Combination drug + vincristine
+C295,drug_combination,7,2,Drugs Approved for Conditions Related to Cancer; pegfilgrastim,Drugs Approved for Conditions Related to Cancer + pegfilgrastim
+C302,drug_combination,7,2,Cyclophosphamide; ipilimumab,Cyclophosphamide + ipilimumab
+C308,drug_combination,7,2,dasatinib; filgrastim,dasatinib + filgrastim
+C310,drug_combination,7,2,Nivolumab-relatlimab FDC; pegfilgrastim,Nivolumab-relatlimab FDC + pegfilgrastim
+C296,drug_combination,7,2,Nivolumab & Ipilimumab; pegfilgrastim,Nivolumab & Ipilimumab + pegfilgrastim
+C307,drug_combination,7,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; vincristine,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + vincristine
+C306,drug_combination,7,2,Trametinib placebo; pegfilgrastim,Trametinib placebo + pegfilgrastim
+C304,drug_combination,7,2,Drugs Approved for Childhood Cancers; vincristine,Drugs Approved for Childhood Cancers + vincristine
+C303,drug_combination,7,2,Nivolumab and Relatlimab-rmbw; vincristine,Nivolumab and Relatlimab-rmbw + vincristine
+C305,drug_combination,7,2,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; pegfilgrastim,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks + pegfilgrastim
+C309,drug_combination,7,2,Pemetrexed and Gemcitabine plus Bevacizumab; pegfilgrastim,Pemetrexed and Gemcitabine plus Bevacizumab + pegfilgrastim
+C301,drug_combination,7,2,Nivolumab induction; pegfilgrastim,Nivolumab induction + pegfilgrastim
+C300,drug_combination,7,2,DIFLUOROMETHYLORNITHINE; filgrastim,DIFLUOROMETHYLORNITHINE + filgrastim
+C299,drug_combination,7,2,filgrastim; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks,filgrastim + intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks
+C297,drug_combination,7,2,Nivolumab-relatlimab FDC; filgrastim,Nivolumab-relatlimab FDC + filgrastim
+C298,drug_combination,7,2,Bortezomib drug; filgrastim,Bortezomib drug + filgrastim
+C786,drug_combination,6,2,Nivolumab induction; tretinoin,Nivolumab induction + tretinoin
+C777,drug_combination,6,2,Nivolumab & Ipilimumab; tretinoin,Nivolumab & Ipilimumab + tretinoin
+C778,drug_combination,6,2,Cyclophosphamid; chlorambucil drug,Cyclophosphamid + chlorambucil drug
+C779,drug_combination,6,2,Cyclophosphamid; Palbociclib100mg,Cyclophosphamid + Palbociclib100mg
+C784,drug_combination,6,2,Cyclophosphamid; albumin-bound paclitaxe combined with bevacizumab biosimilar,Cyclophosphamid + albumin-bound paclitaxe combined with bevacizumab biosimilar
+C780,drug_combination,6,2,1A46 Drug Substance; tretinoin,1A46 Drug Substance + tretinoin
+C785,drug_combination,6,2,Cyclophosphamide; Everolimus Afinitor tablets,Cyclophosphamide + Everolimus Afinitor tablets
+C782,drug_combination,6,2,carboplatin paclitaxel bevacizumab; tretinoin,carboplatin paclitaxel bevacizumab + tretinoin
+C783,drug_combination,6,2,Cyclophosphamid; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks,Cyclophosphamid + intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks
+C776,drug_combination,6,2,Cyclophosphamid; Pemetrexed and Gemcitabine plus Bevacizumab,Cyclophosphamid + Pemetrexed and Gemcitabine plus Bevacizumab
+C781,drug_combination,6,2,Cyclophosphamid; Dabrafenib and trametinib combination,Cyclophosphamid + Dabrafenib and trametinib combination
+C771,drug_combination,6,2,Cyclophosphamid; Fimepinostat,Cyclophosphamid + Fimepinostat
+C775,drug_combination,6,2,Cyclophosphamide; Fenretinide,Cyclophosphamide + Fenretinide
+C774,drug_combination,6,2,Cyclophosphamid; Nivolumab & Ipilimumab,Cyclophosphamid + Nivolumab & Ipilimumab
+C773,drug_combination,6,2,AMG386 and bevacizumab; Cyclophosphamid,AMG386 and bevacizumab + Cyclophosphamid
+C772,drug_combination,6,2,AZD1775; Cyclophosphamide,AZD1775 + Cyclophosphamide
+C770,drug_combination,6,2,Cyclophosphamid; selinexor,Cyclophosphamid + selinexor
+C769,drug_combination,6,2,Cyclophosphamid; Mocetinostat Induction Phase + Ipilimumab + Nivolumab,Cyclophosphamid + Mocetinostat Induction Phase + Ipilimumab + Nivolumab
+C768,drug_combination,6,2,"Cyclophosphamid; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab","Cyclophosphamid + Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab"
+C767,drug_combination,6,2,Cyclophosphamide; trametinib dimethyl sulfoxide,Cyclophosphamide + trametinib dimethyl sulfoxide
+C788,drug_combination,6,2,SAHA(Suberoylanilide; tretinoin,SAHA(Suberoylanilide + tretinoin
+C765,drug_combination,6,2,Dabrafenib and trametinib combination; tretinoin,Dabrafenib and trametinib combination + tretinoin
+C766,drug_combination,6,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Cyclophosphamide,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + Cyclophosphamide
+C787,drug_combination,6,2,Oncolytic virus VRT106; tretinoin,Oncolytic virus VRT106 + tretinoin
+C804,drug_combination,6,2,Cyclophosphamide; Drugs Approved for Different Types of Cancer,Cyclophosphamide + Drugs Approved for Different Types of Cancer
+C789,drug_combination,6,2,Cyclophosphamid; ONO-7475 once daily,Cyclophosphamid + ONO-7475 once daily
+C802,drug_combination,6,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Cyclophosphamid","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + Cyclophosphamid"
+C812,drug_combination,6,2,Cyclophosphamide; palbociclib isethionate,Cyclophosphamide + palbociclib isethionate
+C763,drug_combination,6,2,Cyclophosphamid; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks,Cyclophosphamid + IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks
+C811,drug_combination,6,2,Cyclophosphamide; loncastuximab tesirine-lpyl,Cyclophosphamide + loncastuximab tesirine-lpyl
+C810,drug_combination,6,2,Cyclophosphamide; MK-1775,Cyclophosphamide + MK-1775
+C809,drug_combination,6,2,Cyclophosphamide; Drug-based intervention,Cyclophosphamide + Drug-based intervention
+C808,drug_combination,6,2,Cyclophosphamide; Surufatinib,Cyclophosphamide + Surufatinib
+C807,drug_combination,6,2,dasatinib; tretinoin,dasatinib + tretinoin
+C806,drug_combination,6,2,Cyclophosphamid; Nivolumab-relatlimab FDC,Cyclophosphamid + Nivolumab-relatlimab FDC
+C805,drug_combination,6,2,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; tretinoin,mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody + tretinoin
+C803,drug_combination,6,2,Cyclophosphamide; Nivolumab maintenance,Cyclophosphamide + Nivolumab maintenance
+C801,drug_combination,6,2,selinexor; tretinoin,selinexor + tretinoin
+C790,drug_combination,6,2,Cyclophosphamide; Three-drug chemotherapy group,Cyclophosphamide + Three-drug chemotherapy group
+C800,drug_combination,6,2,Chemo with concomitant Capecitabine and KD018; Cyclophosphamid,Chemo with concomitant Capecitabine and KD018 + Cyclophosphamid
+C799,drug_combination,6,2,Cyclophosphamid; Trifluridine/tipiracil + bevacizumab,Cyclophosphamid + Trifluridine/tipiracil + bevacizumab
+C798,drug_combination,6,2,Cyclophosphamide; Trametinib placebo,Cyclophosphamide + Trametinib placebo
+C797,drug_combination,6,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Cyclophosphamid,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + Cyclophosphamid
+C796,drug_combination,6,2,Adjuvant Atezolizumab-Bevacizumab Therapy; Cyclophosphamide,Adjuvant Atezolizumab-Bevacizumab Therapy + Cyclophosphamide
+C795,drug_combination,6,2,Bevacizumab-IRDye800CW; Cyclophosphamide,Bevacizumab-IRDye800CW + Cyclophosphamide
+C794,drug_combination,6,2,DIFLUOROMETHYLORNITHINE; tretinoin,DIFLUOROMETHYLORNITHINE + tretinoin
+C793,drug_combination,6,2,Bortezomib drug; tretinoin,Bortezomib drug + tretinoin
+C792,drug_combination,6,2,Nivolumab-relatlimab FDC; tretinoin,Nivolumab-relatlimab FDC + tretinoin
+C791,drug_combination,6,2,Cyclophosphamide; two-drug chemotherapy group,Cyclophosphamide + two-drug chemotherapy group
+C764,drug_combination,6,2,Surufatinib plus chemotherapy; tretinoin,Surufatinib plus chemotherapy + tretinoin
+C726,drug_combination,6,2,Cyclophosphamide; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab,Cyclophosphamide + Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab
+C762,drug_combination,6,2,Cyclophosphamid; fenretinide lipid matrix,Cyclophosphamid + fenretinide lipid matrix
+C723,drug_combination,6,2,Cyclophosphamide; PTC596,Cyclophosphamide + PTC596
+C734,drug_combination,6,2,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; tretinoin,Trastuzumab+Nivolumab+Gemcitabine+Cisplatin + tretinoin
+C733,drug_combination,6,2,"Cyclophosphamide; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001","Cyclophosphamide + standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001"
+C732,drug_combination,6,2,1A46 Drug Substance; Cyclophosphamid,1A46 Drug Substance + Cyclophosphamid
+C731,drug_combination,6,2,Cyclophosphamid; Nivolumab and Hyaluronidase-nvhy,Cyclophosphamid + Nivolumab and Hyaluronidase-nvhy
+C730,drug_combination,6,2,Cyclophosphamid; epirubicin - cyclophosphamide / docetaxel + bevacizumab,Cyclophosphamid + epirubicin - cyclophosphamide / docetaxel + bevacizumab
+C729,drug_combination,6,2,DS-8273a + nivolumab; tretinoin,DS-8273a + nivolumab + tretinoin
+C728,drug_combination,6,2,Nivolumab and Hyaluronidase-nvhy; tretinoin,Nivolumab and Hyaluronidase-nvhy + tretinoin
+C727,drug_combination,6,2,Bevacizumab Avastin; tretinoin,Bevacizumab Avastin + tretinoin
+C725,drug_combination,6,2,Cyclophosphamide; ONC201,Cyclophosphamide + ONC201
+C724,drug_combination,6,2,Cyclophosphamid; ETBX-071 PSA-based Oncolytic Virus,Cyclophosphamid + ETBX-071 PSA-based Oncolytic Virus
+C721,drug_combination,6,2,Cyclophosphamid; palbociclib isethionate,Cyclophosphamid + palbociclib isethionate
+C736,drug_combination,6,2,***; tretinoin,*** + tretinoin
+C720,drug_combination,6,2,Drug-based intervention; tretinoin,Drug-based intervention + tretinoin
+C719,drug_combination,6,2,Cyclophosphamid; loncastuximab tesirine-lpyl,Cyclophosphamid + loncastuximab tesirine-lpyl
+C718,drug_combination,6,2,Cyclophosphamid; MK-1775,Cyclophosphamid + MK-1775
+C717,drug_combination,6,2,Antibody-Drug Conjugates; Cyclophosphamide,Antibody-Drug Conjugates + Cyclophosphamide
+C716,drug_combination,6,2,Cyclophosphamid; Drug-based intervention,Cyclophosphamid + Drug-based intervention
+C715,drug_combination,6,2,"Cyclophosphamide; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001","Cyclophosphamide + PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001"
+C714,drug_combination,6,2,Cyclophosphamide; palbociclib,Cyclophosphamide + palbociclib
+C713,drug_combination,6,2,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; tretinoin,concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX + tretinoin
+C712,drug_combination,6,2,Cyclophosphamid; ntifier:ADVL0921,Cyclophosphamid + ntifier:ADVL0921
+C814,drug_combination,6,2,"Cyclophosphamid; Enzalutamide,, soft capsules, once daily","Cyclophosphamid + Enzalutamide,, soft capsules, once daily"
+C735,drug_combination,6,2,Cyclophosphamide; Nivolumab with chemoradiation,Cyclophosphamide + Nivolumab with chemoradiation
+C737,drug_combination,6,2,Cyclophosphamid; Nivolumab -/kg,Cyclophosphamid + Nivolumab -/kg
+C761,drug_combination,6,2,Cyclophosphamide; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin,Cyclophosphamide + Trastuzumab+Nivolumab+Gemcitabine+Cisplatin
+C750,drug_combination,6,2,Fimepinostat; tretinoin,Fimepinostat + tretinoin
+C760,drug_combination,6,2,Cyclophosphamide; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide,Cyclophosphamide + LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide
+C759,drug_combination,6,2,"Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; tretinoin","Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab + tretinoin"
+C758,drug_combination,6,2,"rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; tretinoin","rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim + tretinoin"
+C757,drug_combination,6,2,Cyclophosphamide; everolimus,Cyclophosphamide + everolimus
+C756,drug_combination,6,2,Cyclophosphamide; Nivolumab and Relatlimab-rmbw,Cyclophosphamide + Nivolumab and Relatlimab-rmbw
+C755,drug_combination,6,2,"Cyclophosphamide; capecitabine, oxaliplatin, irinotecan and bevacizumab","Cyclophosphamide + capecitabine, oxaliplatin, irinotecan and bevacizumab"
+C754,drug_combination,6,2,Cyclophosphamide; SAHA/Vorinostat,Cyclophosphamide + SAHA/Vorinostat
+C753,drug_combination,6,2,Ipilimumab -/kg; tretinoin,Ipilimumab -/kg + tretinoin
+C752,drug_combination,6,2,MK-1775; tretinoin,MK-1775 + tretinoin
+C751,drug_combination,6,2,SAHA-Suberoylanilide; tretinoin,SAHA-Suberoylanilide + tretinoin
+C749,drug_combination,6,2,Bortezomib drug; Cyclophosphamid,Bortezomib drug + Cyclophosphamid
+C738,drug_combination,6,2,Surufatinib; tretinoin,Surufatinib + tretinoin
+C748,drug_combination,6,2,Cyclophosphamid; Drugs Approved for Childhood Cancers,Cyclophosphamid + Drugs Approved for Childhood Cancers
+C747,drug_combination,6,2,Cyclophosphamide; paclitaxel + everolimus RAD001,Cyclophosphamide + paclitaxel + everolimus RAD001
+C746,drug_combination,6,2,Cyclophosphamide; Oncaspar,Cyclophosphamide + Oncaspar
+C745,drug_combination,6,2,Combination drug; Cyclophosphamid,Combination drug + Cyclophosphamid
+C744,drug_combination,6,2,"Cyclophosphamid; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim","Cyclophosphamid + rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim"
+C743,drug_combination,6,2,albumin-bound paclitaxe combined with bevacizumab biosimilar; tretinoin,albumin-bound paclitaxe combined with bevacizumab biosimilar + tretinoin
+C742,drug_combination,6,2,Cyclophosphamid; loncastuximab tesirine,Cyclophosphamid + loncastuximab tesirine
+C741,drug_combination,6,2,131-MIBG + Vorinostat; Cyclophosphamide,131-MIBG + Vorinostat + Cyclophosphamide
+C740,drug_combination,6,2,Cyclophosphamide; carboplatin paclitaxel bevacizumab,Cyclophosphamide + carboplatin paclitaxel bevacizumab
+C739,drug_combination,6,2,Cemiplimab REGN2810; Cyclophosphamide,Cemiplimab REGN2810 + Cyclophosphamide
+C813,drug_combination,6,2,Cyclophosphamid; Surufatinib and Serplulimab,Cyclophosphamid + Surufatinib and Serplulimab
+C889,drug_combination,6,2,Etopophos; thiotepa,Etopophos + thiotepa
+C815,drug_combination,6,2,Cyclophosphamide; ETBX-071 PSA-based Oncolytic Virus,Cyclophosphamide + ETBX-071 PSA-based Oncolytic Virus
+C816,drug_combination,6,2,loncastuximab tesirine-lpyl; tretinoin,loncastuximab tesirine-lpyl + tretinoin
+C891,drug_combination,6,2,cytarabine; pegaspargase,cytarabine + pegaspargase
+C890,drug_combination,6,2,Daunorubicin; methotrexate,Daunorubicin + methotrexate
+C710,drug_combination,6,2,tretinoin; two-drug chemotherapy group,tretinoin + two-drug chemotherapy group
+C888,drug_combination,6,2,etoposide phosphate; thiotepa,etoposide phosphate + thiotepa
+C887,drug_combination,6,2,Neulasta; dactinomycin,Neulasta + dactinomycin
+C886,drug_combination,6,2,Cyclophosphamide; albumin-bound paclitaxe combined with bevacizumab biosimilar,Cyclophosphamide + albumin-bound paclitaxe combined with bevacizumab biosimilar
+C885,drug_combination,6,2,Cyclophosphamide; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks,Cyclophosphamide + intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks
+C884,drug_combination,6,2,Cyclophosphamid; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody,Cyclophosphamid + mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody
+C883,drug_combination,6,2,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; tretinoin,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide + tretinoin
+C882,drug_combination,6,2,Cyclophosphamide; Dabrafenib and trametinib combination,Cyclophosphamide + Dabrafenib and trametinib combination
+C881,drug_combination,6,2,Investigational Chemotherapy (unspecified); cisplatin,Investigational Chemotherapy (unspecified) + cisplatin
+C880,drug_combination,6,2,Cyclophosphamide; Palbociclib100mg,Cyclophosphamide + Palbociclib100mg
+C879,drug_combination,6,2,"capecitabine, oxaliplatin, irinotecan and bevacizumab; tretinoin","capecitabine, oxaliplatin, irinotecan and bevacizumab + tretinoin"
+C878,drug_combination,6,2,Cyclophosphamide; chlorambucil drug,Cyclophosphamide + chlorambucil drug
+C877,drug_combination,6,2,G-CSF; tretinoin,G-CSF + tretinoin
+C876,drug_combination,6,2,Cyclophosphamide; Pemetrexed and Gemcitabine plus Bevacizumab,Cyclophosphamide + Pemetrexed and Gemcitabine plus Bevacizumab
+C875,drug_combination,6,2,Cyclophosphamide; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX,Cyclophosphamide + concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX
+C874,drug_combination,6,2,***; Cyclophosphamide,*** + Cyclophosphamide
+C873,drug_combination,6,2,Cyclophosphamide; Nivolumab & Ipilimumab,Cyclophosphamide + Nivolumab & Ipilimumab
+C872,drug_combination,6,2,"Combination, Rogaratinib + palbociclib + fulvestrant; Cyclophosphamid","Combination, Rogaratinib + palbociclib + fulvestrant + Cyclophosphamid"
+C871,drug_combination,6,2,Anti-PD-1 Drugs; tretinoin,Anti-PD-1 Drugs + tretinoin
+C870,drug_combination,6,2,Antibody-Drug Conjugates; Cyclophosphamid,Antibody-Drug Conjugates + Cyclophosphamid
+C869,drug_combination,6,2,Cyclophosphamide; Fimepinostat,Cyclophosphamide + Fimepinostat
+C892,drug_combination,6,2,Tabloid; lomustine,Tabloid + lomustine
+C893,drug_combination,6,2,Tabloid; vincristine,Tabloid + vincristine
+C894,drug_combination,6,2,G-CSF; Zarxio,G-CSF + Zarxio
+C907,drug_combination,6,2,carboplatin; melphalan,carboplatin + melphalan
+C917,drug_combination,6,2,G-CSF; Neulasta,G-CSF + Neulasta
+C916,drug_combination,6,2,carboplatin; irinotecan,carboplatin + irinotecan
+C915,drug_combination,6,2,thalidomide; topotecan,thalidomide + topotecan
+C914,drug_combination,6,2,mercaptopurine; vincristine,mercaptopurine + vincristine
+C913,drug_combination,6,2,Neupogen; filgrastim,Neupogen + filgrastim
+C912,drug_combination,6,2,Neupogen; pegfilgrastim,Neupogen + pegfilgrastim
+C911,drug_combination,6,2,Lupron Depot; bevacizumab,Lupron Depot + bevacizumab
+C910,drug_combination,6,2,bevacizumab; leuprolide,bevacizumab + leuprolide
+C909,drug_combination,6,2,Mekinist; triamcinolone,Mekinist + triamcinolone
+C908,drug_combination,6,2,ATRA; etoposide,ATRA + etoposide
+C906,drug_combination,6,2,etoposide; melphalan,etoposide + melphalan
+C895,drug_combination,6,2,Zarxio; filgrastim,Zarxio + filgrastim
+C905,drug_combination,6,2,vinblastine; vincristine,vinblastine + vincristine
+C904,drug_combination,6,2,Vinblastin; vincristine,Vinblastin + vincristine
+C903,drug_combination,6,2,Emend; bevacizumab,Emend + bevacizumab
+C902,drug_combination,6,2,Progesterone; etoposide,Progesterone + etoposide
+C901,drug_combination,6,2,Progesterone; mesna,Progesterone + mesna
+C900,drug_combination,6,2,filgrastim; propranolol,filgrastim + propranolol
+C899,drug_combination,6,2,G-CSF; propranolol,G-CSF + propranolol
+C898,drug_combination,6,2,Cyclophosphamid; Zarxio,Cyclophosphamid + Zarxio
+C897,drug_combination,6,2,Cyclophosphamide; Zarxio,Cyclophosphamide + Zarxio
+C896,drug_combination,6,2,Zarxio; pegfilgrastim,Zarxio + pegfilgrastim
+C868,drug_combination,6,2,Cyclophosphamide; selinexor,Cyclophosphamide + selinexor
+C867,drug_combination,6,2,Anti-PD-1 Drugs; Cyclophosphamide,Anti-PD-1 Drugs + Cyclophosphamide
+C866,drug_combination,6,2,Bevacizumab Avastin; Cyclophosphamide,Bevacizumab Avastin + Cyclophosphamide
+C828,drug_combination,6,2,Cyclophosphamid; DFMO,Cyclophosphamid + DFMO
+C838,drug_combination,6,2,Recombinant oncolytic herpes simplex virus type Ⅰ R130; tretinoin,Recombinant oncolytic herpes simplex virus type Ⅰ R130 + tretinoin
+C837,drug_combination,6,2,Cyclophosphamid; carboplatin paclitaxel bevacizumab,Cyclophosphamid + carboplatin paclitaxel bevacizumab
+C836,drug_combination,6,2,"Cyclophosphamide; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim","Cyclophosphamide + rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim"
+C835,drug_combination,6,2,Cyclophosphamide; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide,Cyclophosphamide + LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide
+C834,drug_combination,6,2,Cyclophosphamid; Recombinant oncolytic herpes simplex virus type Ⅰ R130,Cyclophosphamid + Recombinant oncolytic herpes simplex virus type Ⅰ R130
+C833,drug_combination,6,2,Cyclophosphamid; SAHA-Suberoylanilide,Cyclophosphamid + SAHA-Suberoylanilide
+C832,drug_combination,6,2,Cyclophosphamide; loncastuximab tesirine,Cyclophosphamide + loncastuximab tesirine
+C831,drug_combination,6,2,once daily for two consecutive days Picato; tretinoin,once daily for two consecutive days Picato + tretinoin
+C830,drug_combination,6,2,Cyclophosphamid; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab,Cyclophosphamid + Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab
+C829,drug_combination,6,2,Cyclophosphamide; Nivolumab -/kg,Cyclophosphamide + Nivolumab -/kg
+C827,drug_combination,6,2,Cyclophosphamid; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME,Cyclophosphamid + concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME
+C840,drug_combination,6,2,Cyclophosphamid; Nivolumab Protocol,Cyclophosphamid + Nivolumab Protocol
+C826,drug_combination,6,2,Cyclophosphamide; Nivolumab induction,Cyclophosphamide + Nivolumab induction
+C825,drug_combination,6,2,Palbociclib125mg; tretinoin,Palbociclib125mg + tretinoin
+C824,drug_combination,6,2,Palbociclib100mg; tretinoin,Palbociclib100mg + tretinoin
+C823,drug_combination,6,2,Nivolumab maintenance; tretinoin,Nivolumab maintenance + tretinoin
+C822,drug_combination,6,2,Cyclophosphamid; PTC596,Cyclophosphamid + PTC596
+C821,drug_combination,6,2,Cyclophosphamide; Nivolumab and Hyaluronidase-nvhy,Cyclophosphamide + Nivolumab and Hyaluronidase-nvhy
+C820,drug_combination,6,2,Cyclophosphamide; epirubicin - cyclophosphamide / docetaxel + bevacizumab,Cyclophosphamide + epirubicin - cyclophosphamide / docetaxel + bevacizumab
+C819,drug_combination,6,2,Cyclophosphamid; Palbociclib125mg,Cyclophosphamid + Palbociclib125mg
+C818,drug_combination,6,2,"Cyclophosphamid; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001","Cyclophosphamid + PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001"
+C817,drug_combination,6,2,Cyclophosphamid; palbociclib,Cyclophosphamid + palbociclib
+C839,drug_combination,6,2,CUDC-907; Cyclophosphamid,CUDC-907 + Cyclophosphamid
+C841,drug_combination,6,2,Relatlimab FDC + Nivolumab; tretinoin,Relatlimab FDC + Nivolumab + tretinoin
+C865,drug_combination,6,2,Cyclophosphamid; DS-8273a + nivolumab,Cyclophosphamid + DS-8273a + nivolumab
+C854,drug_combination,6,2,Cyclophosphamide; fenretinide lipid matrix,Cyclophosphamide + fenretinide lipid matrix
+C864,drug_combination,6,2,Cyclophosphamide; Mocetinostat Induction Phase + Ipilimumab + Nivolumab,Cyclophosphamide + Mocetinostat Induction Phase + Ipilimumab + Nivolumab
+C863,drug_combination,6,2,Cyclophosphamid; Indoximod,Cyclophosphamid + Indoximod
+C862,drug_combination,6,2,Cyclophosphamid; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin,Cyclophosphamid + Trastuzumab+Nivolumab+Gemcitabine+Cisplatin
+C861,drug_combination,6,2,Cyclophosphamide; Surufatinib plus chemotherapy,Cyclophosphamide + Surufatinib plus chemotherapy
+C860,drug_combination,6,2,Cyclophosphamid; trametinib,Cyclophosphamid + trametinib
+C859,drug_combination,6,2,ONO-7475 once daily; tretinoin,ONO-7475 once daily + tretinoin
+C858,drug_combination,6,2,"Cyclophosphamide; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab","Cyclophosphamide + Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab"
+C857,drug_combination,6,2,Cyclophosphamide; vorinostat,Cyclophosphamide + vorinostat
+C856,drug_combination,6,2,"Enzalutamide,, soft capsules, once daily; tretinoin","Enzalutamide,, soft capsules, once daily + tretinoin"
+C855,drug_combination,6,2,Cyclophosphamide; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks,Cyclophosphamide + IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks
+C853,drug_combination,6,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; tretinoin","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + tretinoin"
+C842,drug_combination,6,2,AZD6244; Cyclophosphamide,AZD6244 + Cyclophosphamide
+C852,drug_combination,6,2,Cyclophosphamid; Nivolumab and Relatlimab-rmbw,Cyclophosphamid + Nivolumab and Relatlimab-rmbw
+C851,drug_combination,6,2,epirubicin - cyclophosphamide / docetaxel + bevacizumab; tretinoin,epirubicin - cyclophosphamide / docetaxel + bevacizumab + tretinoin
+C850,drug_combination,6,2,Trifluridine/tipiracil + bevacizumab; tretinoin,Trifluridine/tipiracil + bevacizumab + tretinoin
+C849,drug_combination,6,2,"Cyclophosphamid; capecitabine, oxaliplatin, irinotecan and bevacizumab","Cyclophosphamid + capecitabine, oxaliplatin, irinotecan and bevacizumab"
+C848,drug_combination,6,2,Cyclophosphamid; SAHA/Vorinostat,Cyclophosphamid + SAHA/Vorinostat
+C847,drug_combination,6,2,"PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; tretinoin","PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001 + tretinoin"
+C846,drug_combination,6,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; tretinoin,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + tretinoin
+C845,drug_combination,6,2,Access to Experimental Drugs; Cyclophosphamide,Access to Experimental Drugs + Cyclophosphamide
+C844,drug_combination,6,2,AZD6244; tretinoin,AZD6244 + tretinoin
+C843,drug_combination,6,2,Cyclophosphamid; Ipilimumab -/kg,Cyclophosphamid + Ipilimumab -/kg
+C711,drug_combination,6,2,Cyclophosphamide; tazemetostat hydrobromide,Cyclophosphamide + tazemetostat hydrobromide
+C722,drug_combination,6,2,"Combination, Rogaratinib + palbociclib + fulvestrant; Cyclophosphamide","Combination, Rogaratinib + palbociclib + fulvestrant + Cyclophosphamide"
+C709,drug_combination,6,2,Indoximod; tretinoin,Indoximod + tretinoin
+C600,drug_combination,6,2,Antibody-Drug Conjugates; tretinoin,Antibody-Drug Conjugates + tretinoin
+C607,drug_combination,6,2,AZD1775; Cyclophosphamid,AZD1775 + Cyclophosphamid
+C606,drug_combination,6,2,Nivolumab Protocol; tretinoin,Nivolumab Protocol + tretinoin
+C605,drug_combination,6,2,Cyclophosphamide; DFMO,Cyclophosphamide + DFMO
+C604,drug_combination,6,2,Cyclophosphamide; SAHA(Suberoylanilide,Cyclophosphamide + SAHA(Suberoylanilide
+C603,drug_combination,6,2,Cyclophosphamide; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME,Cyclophosphamide + concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME
+C602,drug_combination,6,2,"Combination, Rogaratinib + palbociclib + fulvestrant; tretinoin","Combination, Rogaratinib + palbociclib + fulvestrant + tretinoin"
+C601,drug_combination,6,2,1A46 Drug Substance; Cyclophosphamide,1A46 Drug Substance + Cyclophosphamide
+C599,drug_combination,6,2,ETBX-071 PSA-based Oncolytic Virus; tretinoin,ETBX-071 PSA-based Oncolytic Virus + tretinoin
+C609,drug_combination,6,2,Oncaspar; tretinoin,Oncaspar + tretinoin
+C598,drug_combination,6,2,Cyclophosphamide; Palbociclib125mg,Cyclophosphamide + Palbociclib125mg
+C597,drug_combination,6,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Cyclophosphamid,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + Cyclophosphamid
+C596,drug_combination,6,2,Cyclophosphamid; Surufatinib,Cyclophosphamid + Surufatinib
+C595,drug_combination,6,2,paclitaxel + everolimus RAD001; tretinoin,paclitaxel + everolimus RAD001 + tretinoin
+C594,drug_combination,6,2,Investigational Chemotherapy (unspecified); tretinoin,Investigational Chemotherapy (unspecified) + tretinoin
+C593,drug_combination,6,2,"Cyclophosphamide; Enzalutamide,, soft capsules, once daily","Cyclophosphamide + Enzalutamide,, soft capsules, once daily"
+C592,drug_combination,6,2,Cyclophosphamide; Surufatinib and Serplulimab,Cyclophosphamide + Surufatinib and Serplulimab
+C608,drug_combination,6,2,Cyclophosphamid; Nivolumab induction,Cyclophosphamid + Nivolumab induction
+C610,drug_combination,6,2,Three-drug chemotherapy group; tretinoin,Three-drug chemotherapy group + tretinoin
+C590,drug_combination,6,2,Fenretinide; tretinoin,Fenretinide + tretinoin
+C620,drug_combination,6,2,Cyclophosphamide; Ipilimumab -/kg,Cyclophosphamide + Ipilimumab -/kg
+C627,drug_combination,6,2,Cyclophosphamide; ntifier:ADVL0921,Cyclophosphamide + ntifier:ADVL0921
+C626,drug_combination,6,2,ipilimumab; tretinoin,ipilimumab + tretinoin
+C625,drug_combination,6,2,Adjuvant Atezolizumab-Bevacizumab Therapy; Cyclophosphamid,Adjuvant Atezolizumab-Bevacizumab Therapy + Cyclophosphamid
+C624,drug_combination,6,2,Bevacizumab-IRDye800CW; Cyclophosphamid,Bevacizumab-IRDye800CW + Cyclophosphamid
+C623,drug_combination,6,2,Cyclophosphamid; once daily for two consecutive days Picato,Cyclophosphamid + once daily for two consecutive days Picato
+C622,drug_combination,6,2,Cyclophosphamid; Drugs Approved for Conditions Related to Cancer,Cyclophosphamid + Drugs Approved for Conditions Related to Cancer
+C621,drug_combination,6,2,Cyclophosphamid; Relatlimab FDC + Nivolumab,Cyclophosphamid + Relatlimab FDC + Nivolumab
+C619,drug_combination,6,2,131-MIBG + Vorinostat; tretinoin,131-MIBG + Vorinostat + tretinoin
+C611,drug_combination,6,2,Cyclophosphamide; SAHA-Suberoylanilide,Cyclophosphamide + SAHA-Suberoylanilide
+C618,drug_combination,6,2,Cyclophosphamid; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide,Cyclophosphamid + LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide
+C617,drug_combination,6,2,Cyclophosphamide; Nivolumab Protocol,Cyclophosphamide + Nivolumab Protocol
+C616,drug_combination,6,2,Cemiplimab REGN2810; tretinoin,Cemiplimab REGN2810 + tretinoin
+C615,drug_combination,6,2,Combination drug; tretinoin,Combination drug + tretinoin
+C614,drug_combination,6,2,Bortezomib drug; Cyclophosphamide,Bortezomib drug + Cyclophosphamide
+C613,drug_combination,6,2,Combination drug; Cyclophosphamide,Combination drug + Cyclophosphamide
+C612,drug_combination,6,2,Cyclophosphamide; Recombinant oncolytic herpes simplex virus type Ⅰ R130,Cyclophosphamide + Recombinant oncolytic herpes simplex virus type Ⅰ R130
+C591,drug_combination,6,2,Nivolumab with chemoradiation; tretinoin,Nivolumab with chemoradiation + tretinoin
+C589,drug_combination,6,2,Cyclophosphamid; DIFLUOROMETHYLORNITHINE,Cyclophosphamid + DIFLUOROMETHYLORNITHINE
+C629,drug_combination,6,2,Cyclophosphamide; trametinib,Cyclophosphamide + trametinib
+C559,drug_combination,6,2,Fulphila; carboplatin,Fulphila + carboplatin
+C566,drug_combination,6,2,"standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; tretinoin","standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001 + tretinoin"
+C565,drug_combination,6,2,Fulphila; mesna,Fulphila + mesna
+C564,drug_combination,6,2,ATRA; pegfilgrastim,ATRA + pegfilgrastim
+C563,drug_combination,6,2,ATRA; mesna,ATRA + mesna
+C562,drug_combination,6,2,Investigational Chemotherapy (unspecified); Mekinist,Investigational Chemotherapy (unspecified) + Mekinist
+C561,drug_combination,6,2,Progesterone; Temozolomide capsule,Progesterone + Temozolomide capsule
+C560,drug_combination,6,2,Progesterone; temozolomide,Progesterone + temozolomide
+C558,drug_combination,6,2,Valproic Acid; carboplatin,Valproic Acid + carboplatin
+C568,drug_combination,6,2,SAHA/Vorinostat; tretinoin,SAHA/Vorinostat + tretinoin
+C557,drug_combination,6,2,Cyclophosphamide; Rituxan,Cyclophosphamide + Rituxan
+C556,drug_combination,6,2,Cyclophosphamid; rituximab,Cyclophosphamid + rituximab
+C555,drug_combination,6,2,Cyclophosphamide; rituximab,Cyclophosphamide + rituximab
+C554,drug_combination,6,2,Cyclophosphamid; Rituxan,Cyclophosphamid + Rituxan
+C553,drug_combination,6,2,Progesterone; nivolumab,Progesterone + nivolumab
+C552,drug_combination,6,2,Progesterone; triamcinolone,Progesterone + triamcinolone
+C708,drug_combination,6,2,Cyclophosphamid; Drugs Approved for Different Types of Cancer,Cyclophosphamid + Drugs Approved for Different Types of Cancer
+C567,drug_combination,6,2,Cyclophosphamid; Placebo - Concentrate,Cyclophosphamid + Placebo - Concentrate
+C569,drug_combination,6,2,Cyclophosphamide; ONO-7475 once daily,Cyclophosphamide + ONO-7475 once daily
+C588,drug_combination,6,2,loncastuximab tesirine; tretinoin,loncastuximab tesirine + tretinoin
+C580,drug_combination,6,2,FOLFIRI-BEVACIZUMAB; tretinoin,FOLFIRI-BEVACIZUMAB + tretinoin
+C587,drug_combination,6,2,DFMO; tretinoin,DFMO + tretinoin
+C586,drug_combination,6,2,Placebo - Concentrate; tretinoin,Placebo - Concentrate + tretinoin
+C585,drug_combination,6,2,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; tretinoin,Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab + tretinoin
+C584,drug_combination,6,2,Cyclophosphamide; Nivolumab-relatlimab FDC,Cyclophosphamide + Nivolumab-relatlimab FDC
+C583,drug_combination,6,2,Serplulimab combined with bevacizumab and first-line chemotherapy; tretinoin,Serplulimab combined with bevacizumab and first-line chemotherapy + tretinoin
+C582,drug_combination,6,2,Cyclophosphamid; TAK-580,Cyclophosphamid + TAK-580
+C581,drug_combination,6,2,Cyclophosphamide; Serplulimab combined with bevacizumab and first-line chemotherapy,Cyclophosphamide + Serplulimab combined with bevacizumab and first-line chemotherapy
+C579,drug_combination,6,2,"Bevacizumab, Everolimus and LBH589; tretinoin","Bevacizumab, Everolimus and LBH589 + tretinoin"
+C570,drug_combination,6,2,Cemiplimab REGN2810; Cyclophosphamid,Cemiplimab REGN2810 + Cyclophosphamid
+C578,drug_combination,6,2,palbociclib; tretinoin,palbociclib + tretinoin
+C577,drug_combination,6,2,G-CSF; isotretinoin,G-CSF + isotretinoin
+C576,drug_combination,6,2,"Bevacizumab, Everolimus and LBH589; Cyclophosphamide","Bevacizumab, Everolimus and LBH589 + Cyclophosphamide"
+C574,drug_combination,6,2,Cyclophosphamid; Three-drug chemotherapy group,Cyclophosphamid + Three-drug chemotherapy group
+C573,drug_combination,6,2,Cyclophosphamid; Oncolytic virus VRT106,Cyclophosphamid + Oncolytic virus VRT106
+C572,drug_combination,6,2,131-MIBG + Vorinostat; Cyclophosphamid,131-MIBG + Vorinostat + Cyclophosphamid
+C571,drug_combination,6,2,Cyclophosphamid; Everolimus Afinitor tablets,Cyclophosphamid + Everolimus Afinitor tablets
+C628,drug_combination,6,2,Cyclophosphamid; FOLFIRI-BEVACIZUMAB,Cyclophosphamid + FOLFIRI-BEVACIZUMAB
+C575,drug_combination,6,2,CUDC-907; tretinoin,CUDC-907 + tretinoin
+C630,drug_combination,6,2,Cyclophosphamide; Indoximod,Cyclophosphamide + Indoximod
+C680,drug_combination,6,2,PTC596; tretinoin,PTC596 + tretinoin
+C687,drug_combination,6,2,Anti-PD-1 Drugs; Cyclophosphamid,Anti-PD-1 Drugs + Cyclophosphamid
+C686,drug_combination,6,2,Bevacizumab Avastin; Cyclophosphamid,Bevacizumab Avastin + Cyclophosphamid
+C685,drug_combination,6,2,Mocetinostat Induction Phase + Ipilimumab + Nivolumab; tretinoin,Mocetinostat Induction Phase + Ipilimumab + Nivolumab + tretinoin
+C684,drug_combination,6,2,chlorambucil drug; tretinoin,chlorambucil drug + tretinoin
+C683,drug_combination,6,2,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; tretinoin,concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME + tretinoin
+C682,drug_combination,6,2,Nivolumab -/kg; tretinoin,Nivolumab -/kg + tretinoin
+C681,drug_combination,6,2,Cyclophosphamid; trametinib dimethyl sulfoxide,Cyclophosphamid + trametinib dimethyl sulfoxide
+C679,drug_combination,6,2,tazemetostat hydrobromide; tretinoin,tazemetostat hydrobromide + tretinoin
+C689,drug_combination,6,2,***; Cyclophosphamid,*** + Cyclophosphamid
+C678,drug_combination,6,2,Cyclophosphamid; Serplulimab combined with bevacizumab and first-line chemotherapy,Cyclophosphamid + Serplulimab combined with bevacizumab and first-line chemotherapy
+C677,drug_combination,6,2,Cyclophosphamide; DIFLUOROMETHYLORNITHINE,Cyclophosphamide + DIFLUOROMETHYLORNITHINE
+C676,drug_combination,6,2,tazemetostat; tretinoin,tazemetostat + tretinoin
+C675,drug_combination,6,2,Cyclophosphamid; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide,Cyclophosphamid + LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide
+C674,drug_combination,6,2,Adjuvant Atezolizumab-Bevacizumab Therapy; tretinoin,Adjuvant Atezolizumab-Bevacizumab Therapy + tretinoin
+C673,drug_combination,6,2,Bevacizumab-IRDye800CW; tretinoin,Bevacizumab-IRDye800CW + tretinoin
+C672,drug_combination,6,2,palbociclib isethionate; tretinoin,palbociclib isethionate + tretinoin
+C688,drug_combination,6,2,Cyclophosphamid; Fenretinide,Cyclophosphamid + Fenretinide
+C690,drug_combination,6,2,Cyclophosphamid; SAHA(Suberoylanilide,Cyclophosphamid + SAHA(Suberoylanilide
+C670,drug_combination,6,2,Investigational Chemotherapy (unspecified); mesna,Investigational Chemotherapy (unspecified) + mesna
+C701,drug_combination,6,2,Cyclophosphamide; Drugs Approved for Conditions Related to Cancer,Cyclophosphamide + Drugs Approved for Conditions Related to Cancer
+C707,drug_combination,6,2,Cyclophosphamide; FOLFIRI-BEVACIZUMAB,Cyclophosphamide + FOLFIRI-BEVACIZUMAB
+C631,drug_combination,6,2,Cyclophosphamid; tazemetostat hydrobromide,Cyclophosphamid + tazemetostat hydrobromide
+C706,drug_combination,6,2,Cyclophosphamid; Nivolumab maintenance,Cyclophosphamid + Nivolumab maintenance
+C705,drug_combination,6,2,Access to Experimental Drugs; tretinoin,Access to Experimental Drugs + tretinoin
+C704,drug_combination,6,2,Cyclophosphamid; Trametinib placebo,Cyclophosphamid + Trametinib placebo
+C703,drug_combination,6,2,"Bevacizumab, Everolimus and LBH589; Cyclophosphamid","Bevacizumab, Everolimus and LBH589 + Cyclophosphamid"
+C702,drug_combination,6,2,Cyclophosphamide; once daily for two consecutive days Picato,Cyclophosphamide + once daily for two consecutive days Picato
+C700,drug_combination,6,2,fenretinide lipid matrix; tretinoin,fenretinide lipid matrix + tretinoin
+C691,drug_combination,6,2,pegfilgrastim; tretinoin,pegfilgrastim + tretinoin
+C699,drug_combination,6,2,Cyclophosphamide; Relatlimab FDC + Nivolumab,Cyclophosphamide + Relatlimab FDC + Nivolumab
+C698,drug_combination,6,2,Cyclophosphamide; Trifluridine/tipiracil + bevacizumab,Cyclophosphamide + Trifluridine/tipiracil + bevacizumab
+C697,drug_combination,6,2,Drugs Approved for Different Types of Cancer; tretinoin,Drugs Approved for Different Types of Cancer + tretinoin
+C696,drug_combination,6,2,Cyclophosphamid; two-drug chemotherapy group,Cyclophosphamid + two-drug chemotherapy group
+C694,drug_combination,6,2,Everolimus Afinitor tablets; tretinoin,Everolimus Afinitor tablets + tretinoin
+C693,drug_combination,6,2,CUDC-907; Cyclophosphamide,CUDC-907 + Cyclophosphamide
+C692,drug_combination,6,2,tretinoin; vincristine,tretinoin + vincristine
+C671,drug_combination,6,2,Cyclophosphamide; TAK-580,Cyclophosphamide + TAK-580
+C695,drug_combination,6,2,ntifier:ADVL0921; tretinoin,ntifier:ADVL0921 + tretinoin
+C669,drug_combination,6,2,Access to Experimental Drugs; Cyclophosphamid,Access to Experimental Drugs + Cyclophosphamid
+C650,drug_combination,6,2,Cyclophosphamide; Placebo - Concentrate,Cyclophosphamide + Placebo - Concentrate
+C648,drug_combination,6,2,Cyclophosphamid; Nivolumab with chemoradiation,Cyclophosphamid + Nivolumab with chemoradiation
+C647,drug_combination,6,2,AZD1775; tretinoin,AZD1775 + tretinoin
+C646,drug_combination,6,2,Drugs Approved for Conditions Related to Cancer; tretinoin,Drugs Approved for Conditions Related to Cancer + tretinoin
+C645,drug_combination,6,2,"Cyclophosphamid; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001","Cyclophosphamid + standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001"
+C644,drug_combination,6,2,Cyclophosphamid; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX,Cyclophosphamid + concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX
+C643,drug_combination,6,2,Cyclophosphamide; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody,Cyclophosphamide + mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody
+C642,drug_combination,6,2,everolimus; tretinoin,everolimus + tretinoin
+C641,drug_combination,6,2,AMG386 and bevacizumab; tretinoin,AMG386 and bevacizumab + tretinoin
+C640,drug_combination,6,2,Surufatinib and Serplulimab; tretinoin,Surufatinib and Serplulimab + tretinoin
+C638,drug_combination,6,2,AMG386 and bevacizumab; Cyclophosphamide,AMG386 and bevacizumab + Cyclophosphamide
+C637,drug_combination,6,2,Cyclophosphamid; Surufatinib plus chemotherapy,Cyclophosphamid + Surufatinib plus chemotherapy
+C636,drug_combination,6,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; tretinoin,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + tretinoin
+C635,drug_combination,6,2,Drugs Approved for Childhood Cancers; tretinoin,Drugs Approved for Childhood Cancers + tretinoin
+C634,drug_combination,6,2,Nivolumab and Relatlimab-rmbw; tretinoin,Nivolumab and Relatlimab-rmbw + tretinoin
+C668,drug_combination,6,2,Chemo with concomitant Capecitabine and KD018; tretinoin,Chemo with concomitant Capecitabine and KD018 + tretinoin
+C633,drug_combination,6,2,Cyclophosphamid; vorinostat,Cyclophosphamid + vorinostat
+C632,drug_combination,6,2,Cyclophosphamide; DS-8273a + nivolumab,Cyclophosphamide + DS-8273a + nivolumab
+C649,drug_combination,6,2,tretinoin; vorinostat,tretinoin + vorinostat
+C639,drug_combination,6,2,Cyclophosphamid; ONC201,Cyclophosphamid + ONC201
+C651,drug_combination,6,2,trametinib dimethyl sulfoxide; tretinoin,trametinib dimethyl sulfoxide + tretinoin
+C659,drug_combination,6,2,Trametinib placebo; tretinoin,Trametinib placebo + tretinoin
+C665,drug_combination,6,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Cyclophosphamide","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + Cyclophosphamide"
+C666,drug_combination,6,2,Cyclophosphamid; everolimus,Cyclophosphamid + everolimus
+C652,drug_combination,6,2,Cyclophosphamide; Drugs Approved for Childhood Cancers,Cyclophosphamide + Drugs Approved for Childhood Cancers
+C667,drug_combination,6,2,TAK-580; tretinoin,TAK-580 + tretinoin
+C664,drug_combination,6,2,Chemo with concomitant Capecitabine and KD018; Cyclophosphamide,Chemo with concomitant Capecitabine and KD018 + Cyclophosphamide
+C663,drug_combination,6,2,AZD6244; Cyclophosphamid,AZD6244 + Cyclophosphamid
+C661,drug_combination,6,2,Pemetrexed and Gemcitabine plus Bevacizumab; tretinoin,Pemetrexed and Gemcitabine plus Bevacizumab + tretinoin
+C660,drug_combination,6,2,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; tretinoin,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks + tretinoin
+C662,drug_combination,6,2,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; tretinoin,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide + tretinoin
+C655,drug_combination,6,2,Cyclophosphamid; paclitaxel + everolimus RAD001,Cyclophosphamid + paclitaxel + everolimus RAD001
+C657,drug_combination,6,2,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; tretinoin,intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks + tretinoin
+C656,drug_combination,6,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Cyclophosphamide,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + Cyclophosphamide
+C653,drug_combination,6,2,Cyclophosphamide; Oncolytic virus VRT106,Cyclophosphamide + Oncolytic virus VRT106
+C654,drug_combination,6,2,Cyclophosphamid; Oncaspar,Cyclophosphamid + Oncaspar
+C658,drug_combination,6,2,ONC201; tretinoin,ONC201 + tretinoin
+C1014,drug_combination,5,2,"Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; Mekinist","Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab + Mekinist"
+C1020,drug_combination,5,2,AZD1775; Mekinist,AZD1775 + Mekinist
+C1019,drug_combination,5,2,Drugs Approved for Conditions Related to Cancer; Mekinist,Drugs Approved for Conditions Related to Cancer + Mekinist
+C1018,drug_combination,5,2,Mekinist; fenretinide lipid matrix,Mekinist + fenretinide lipid matrix
+C1016,drug_combination,5,2,Drugs Approved for Childhood Cancers; Mekinist,Drugs Approved for Childhood Cancers + Mekinist
+C1017,drug_combination,5,2,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Mekinist,Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy + Mekinist
+C1012,drug_combination,5,2,MK-1775; Mekinist,MK-1775 + Mekinist
+C1015,drug_combination,5,2,"Mekinist; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim","Mekinist + rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim"
+C1013,drug_combination,5,2,Mekinist; loncastuximab tesirine,Mekinist + loncastuximab tesirine
+C1022,drug_combination,5,2,Mekinist; selinexor,Mekinist + selinexor
+C1021,drug_combination,5,2,Mekinist; Mocetinostat Induction Phase + Ipilimumab + Nivolumab,Mekinist + Mocetinostat Induction Phase + Ipilimumab + Nivolumab
+C1029,drug_combination,5,2,Mekinist; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks,Mekinist + intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks
+C1023,drug_combination,5,2,Mekinist; Nivolumab & Ipilimumab,Mekinist + Nivolumab & Ipilimumab
+C1024,drug_combination,5,2,Mekinist; Pemetrexed and Gemcitabine plus Bevacizumab,Mekinist + Pemetrexed and Gemcitabine plus Bevacizumab
+C1025,drug_combination,5,2,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; Mekinist,LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide + Mekinist
+C1026,drug_combination,5,2,Mekinist; chlorambucil drug,Mekinist + chlorambucil drug
+C1027,drug_combination,5,2,Mekinist; Palbociclib100mg,Mekinist + Palbociclib100mg
+C1028,drug_combination,5,2,DIFLUOROMETHYLORNITHINE; Mekinist,DIFLUOROMETHYLORNITHINE + Mekinist
+C1030,drug_combination,5,2,Mekinist; albumin-bound paclitaxe combined with bevacizumab biosimilar,Mekinist + albumin-bound paclitaxe combined with bevacizumab biosimilar
+C1031,drug_combination,5,2,Bevacizumab-IRDye800CW; Mekinist,Bevacizumab-IRDye800CW + Mekinist
+C1032,drug_combination,5,2,Adjuvant Atezolizumab-Bevacizumab Therapy; Mekinist,Adjuvant Atezolizumab-Bevacizumab Therapy + Mekinist
+C1033,drug_combination,5,2,Mekinist; ONO-7475 once daily,Mekinist + ONO-7475 once daily
+C1010,drug_combination,5,2,Mekinist; epirubicin - cyclophosphamide / docetaxel + bevacizumab,Mekinist + epirubicin - cyclophosphamide / docetaxel + bevacizumab
+C1035,drug_combination,5,2,Mekinist; Trifluridine/tipiracil + bevacizumab,Mekinist + Trifluridine/tipiracil + bevacizumab
+C1034,drug_combination,5,2,Mekinist; bevacizumab,Mekinist + bevacizumab
+C1011,drug_combination,5,2,Mekinist; Nivolumab and Hyaluronidase-nvhy,Mekinist + Nivolumab and Hyaluronidase-nvhy
+C992,drug_combination,5,2,Mekinist; Serplulimab combined with bevacizumab and first-line chemotherapy,Mekinist + Serplulimab combined with bevacizumab and first-line chemotherapy
+C1009,drug_combination,5,2,131-MIBG + Vorinostat; Mekinist,131-MIBG + Vorinostat + Mekinist
+C1008,drug_combination,5,2,Cemiplimab REGN2810; Mekinist,Cemiplimab REGN2810 + Mekinist
+C983,drug_combination,5,2,Mekinist; Nivolumab with chemoradiation,Mekinist + Nivolumab with chemoradiation
+C1037,drug_combination,5,2,Mekinist; Surufatinib and Serplulimab,Mekinist + Surufatinib and Serplulimab
+C984,drug_combination,5,2,BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Mekinist,BRAF inhibitor dabrafenib and MEK inhibitor trametinib + Mekinist
+C985,drug_combination,5,2,Chemo with concomitant Capecitabine and KD018; Mekinist,Chemo with concomitant Capecitabine and KD018 + Mekinist
+C986,drug_combination,5,2,"Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Mekinist","Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab + Mekinist"
+C987,drug_combination,5,2,"Enzalutamide,, soft capsules, once daily; Mekinist","Enzalutamide,, soft capsules, once daily + Mekinist"
+C988,drug_combination,5,2,Mekinist; Oncaspar,Mekinist + Oncaspar
+C989,drug_combination,5,2,Mekinist; paclitaxel + everolimus RAD001,Mekinist + paclitaxel + everolimus RAD001
+C990,drug_combination,5,2,Anti-PD-1 Drugs; Mekinist,Anti-PD-1 Drugs + Mekinist
+C991,drug_combination,5,2,Mekinist; everolimus,Mekinist + everolimus
+C993,drug_combination,5,2,Mekinist; trametinib dimethyl sulfoxide,Mekinist + trametinib dimethyl sulfoxide
+C994,drug_combination,5,2,CUDC-907; Mekinist,CUDC-907 + Mekinist
+C995,drug_combination,5,2,Everolimus Afinitor tablets; Mekinist,Everolimus Afinitor tablets + Mekinist
+C996,drug_combination,5,2,Mekinist; SAHA(Suberoylanilide,Mekinist + SAHA(Suberoylanilide
+C997,drug_combination,5,2,FOLFIRI-BEVACIZUMAB; Mekinist,FOLFIRI-BEVACIZUMAB + Mekinist
+C998,drug_combination,5,2,DFMO; Mekinist,DFMO + Mekinist
+C999,drug_combination,5,2,Mekinist; two-drug chemotherapy group,Mekinist + two-drug chemotherapy group
+C1000,drug_combination,5,2,ETBX-071 PSA-based Oncolytic Virus; Mekinist,ETBX-071 PSA-based Oncolytic Virus + Mekinist
+C1001,drug_combination,5,2,Antibody-Drug Conjugates; Mekinist,Antibody-Drug Conjugates + Mekinist
+C1002,drug_combination,5,2,"Combination, Rogaratinib + palbociclib + fulvestrant; Mekinist","Combination, Rogaratinib + palbociclib + fulvestrant + Mekinist"
+C1003,drug_combination,5,2,Mekinist; Trametinib placebo,Mekinist + Trametinib placebo
+C1004,drug_combination,5,2,Mekinist; Nivolumab maintenance,Mekinist + Nivolumab maintenance
+C1005,drug_combination,5,2,Mekinist; ntifier:ADVL0921,Mekinist + ntifier:ADVL0921
+C1006,drug_combination,5,2,Mekinist; loncastuximab tesirine-lpyl,Mekinist + loncastuximab tesirine-lpyl
+C1007,drug_combination,5,2,Mekinist; palbociclib isethionate,Mekinist + palbociclib isethionate
+C1036,drug_combination,5,2,Mekinist; Nivolumab-relatlimab FDC,Mekinist + Nivolumab-relatlimab FDC
+C1075,drug_combination,5,2,Mekinist; Surufatinib,Mekinist + Surufatinib
+C1038,drug_combination,5,2,Mekinist; palbociclib,Mekinist + palbociclib
+C1080,drug_combination,5,2,Mekinist; nivolumab,Mekinist + nivolumab
+C1068,drug_combination,5,2,Dabrafenib and trametinib combination; Mekinist,Dabrafenib and trametinib combination + Mekinist
+C1069,drug_combination,5,2,Mekinist; Oncolytic virus VRT106,Mekinist + Oncolytic virus VRT106
+C1070,drug_combination,5,2,Fenretinide; Mekinist,Fenretinide + Mekinist
+C1071,drug_combination,5,2,Mekinist; Three-drug chemotherapy group,Mekinist + Three-drug chemotherapy group
+C1072,drug_combination,5,2,Mekinist; TAK-580,Mekinist + TAK-580
+C1073,drug_combination,5,2,Mekinist; dasatinib,Mekinist + dasatinib
+C1074,drug_combination,5,2,1A46 Drug Substance; Mekinist,1A46 Drug Substance + Mekinist
+C1076,drug_combination,5,2,Combination drug; Mekinist,Combination drug + Mekinist
+C1077,drug_combination,5,2,Bortezomib drug; Mekinist,Bortezomib drug + Mekinist
+C1078,drug_combination,5,2,Mekinist; Nivolumab induction,Mekinist + Nivolumab induction
+C1079,drug_combination,5,2,Mekinist; Nivolumab -/kg,Mekinist + Nivolumab -/kg
+C1081,drug_combination,5,2,Mekinist; Relatlimab FDC + Nivolumab,Mekinist + Relatlimab FDC + Nivolumab
+C1066,drug_combination,5,2,"Bevacizumab, Everolimus and LBH589; Mekinist","Bevacizumab, Everolimus and LBH589 + Mekinist"
+C1082,drug_combination,5,2,Mekinist; once daily for two consecutive days Picato,Mekinist + once daily for two consecutive days Picato
+C1083,drug_combination,5,2,AMG386 and bevacizumab; Mekinist,AMG386 and bevacizumab + Mekinist
+C1084,drug_combination,5,2,Ziextenzo; methotrexate,Ziextenzo + methotrexate
+C1085,drug_combination,5,2,Leucovorin; Ziextenzo,Leucovorin + Ziextenzo
+C1086,drug_combination,5,2,cabozantinib; cabozantinib s-malate,cabozantinib + cabozantinib s-malate
+C1087,drug_combination,5,2,tazemetostat; topotecan,tazemetostat + topotecan
+C1088,drug_combination,5,2,dinutuximab; isotretinoin,dinutuximab + isotretinoin
+C1089,drug_combination,5,2,dinutuximab; tretinoin,dinutuximab + tretinoin
+C1090,drug_combination,5,2,carboplatin; vinblastine,carboplatin + vinblastine
+C1091,drug_combination,5,2,Vinblastin; carboplatin,Vinblastin + carboplatin
+C981,drug_combination,5,2,"Mekinist; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001","Mekinist + standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001"
+C1067,drug_combination,5,2,Mekinist; Placebo - Concentrate,Mekinist + Placebo - Concentrate
+C1065,drug_combination,5,2,Mekinist; ipilimumab,Mekinist + ipilimumab
+C1039,drug_combination,5,2,"Mekinist; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001","Mekinist + PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001"
+C1051,drug_combination,5,2,Mekinist; carboplatin paclitaxel bevacizumab,Mekinist + carboplatin paclitaxel bevacizumab
+C1040,drug_combination,5,2,Mekinist; Palbociclib125mg,Mekinist + Palbociclib125mg
+C1041,drug_combination,5,2,Mekinist; PTC596,Mekinist + PTC596
+C1042,drug_combination,5,2,Drugs Approved for Different Types of Cancer; Mekinist,Drugs Approved for Different Types of Cancer + Mekinist
+C1043,drug_combination,5,2,Mekinist; tazemetostat,Mekinist + tazemetostat
+C1044,drug_combination,5,2,Mekinist; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME,Mekinist + concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME
+C1045,drug_combination,5,2,Mekinist; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab,Mekinist + Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab
+C1046,drug_combination,5,2,AZD6244; Mekinist,AZD6244 + Mekinist
+C1047,drug_combination,5,2,Mekinist; SAHA-Suberoylanilide,Mekinist + SAHA-Suberoylanilide
+C1048,drug_combination,5,2,Access to Experimental Drugs; Mekinist,Access to Experimental Drugs + Mekinist
+C1049,drug_combination,5,2,Mekinist; Recombinant oncolytic herpes simplex virus type Ⅰ R130,Mekinist + Recombinant oncolytic herpes simplex virus type Ⅰ R130
+C1050,drug_combination,5,2,Indoximod; Mekinist,Indoximod + Mekinist
+C1052,drug_combination,5,2,Mekinist; Nivolumab Protocol,Mekinist + Nivolumab Protocol
+C1064,drug_combination,5,2,Mekinist; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody,Mekinist + mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody
+C1053,drug_combination,5,2,Drug-based intervention; Mekinist,Drug-based intervention + Mekinist
+C1054,drug_combination,5,2,Bevacizumab Avastin; Mekinist,Bevacizumab Avastin + Mekinist
+C1055,drug_combination,5,2,Mekinist; SAHA/Vorinostat,Mekinist + SAHA/Vorinostat
+C1056,drug_combination,5,2,DS-8273a + nivolumab; Mekinist,DS-8273a + nivolumab + Mekinist
+C1057,drug_combination,5,2,"Mekinist; capecitabine, oxaliplatin, irinotecan and bevacizumab","Mekinist + capecitabine, oxaliplatin, irinotecan and bevacizumab"
+C1058,drug_combination,5,2,Mekinist; Nivolumab and Relatlimab-rmbw,Mekinist + Nivolumab and Relatlimab-rmbw
+C1059,drug_combination,5,2,***; Mekinist,*** + Mekinist
+C1060,drug_combination,5,2,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; Mekinist,LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide + Mekinist
+C1061,drug_combination,5,2,Mekinist; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin,Mekinist + Trastuzumab+Nivolumab+Gemcitabine+Cisplatin
+C1062,drug_combination,5,2,Fimepinostat; Mekinist,Fimepinostat + Mekinist
+C1063,drug_combination,5,2,Ipilimumab -/kg; Mekinist,Ipilimumab -/kg + Mekinist
+C982,drug_combination,5,2,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; Mekinist,IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks + Mekinist
+C1092,drug_combination,5,2,cytarabine; topotecan,cytarabine + topotecan
+C980,drug_combination,5,2,Mekinist; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX,Mekinist + concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX
+C935,drug_combination,5,2,mesna; tretinoin,mesna + tretinoin
+C929,drug_combination,5,2,cytarabine; thiotepa,cytarabine + thiotepa
+C930,drug_combination,5,2,Cyclophosphamid; busulfan,Cyclophosphamid + busulfan
+C931,drug_combination,5,2,Cyclophosphamid; defibrotide,Cyclophosphamid + defibrotide
+C932,drug_combination,5,2,busulfan; mesna,busulfan + mesna
+C933,drug_combination,5,2,Cyclophosphamide; busulfan,Cyclophosphamide + busulfan
+C934,drug_combination,5,2,cisplatin; tretinoin,cisplatin + tretinoin
+C936,drug_combination,5,2,isotretinoin; pegfilgrastim,isotretinoin + pegfilgrastim
+C927,drug_combination,5,2,pegfilgrastim; sirolimus,pegfilgrastim + sirolimus
+C937,drug_combination,5,2,isotretinoin; vincristine,isotretinoin + vincristine
+C938,drug_combination,5,2,etoposide; tazemetostat,etoposide + tazemetostat
+C939,drug_combination,5,2,etoposide; nivolumab,etoposide + nivolumab
+C940,drug_combination,5,2,etoposide; vorinostat,etoposide + vorinostat
+C941,drug_combination,5,2,Ziextenzo; dexrazoxane,Ziextenzo + dexrazoxane
+C942,drug_combination,5,2,Ziextenzo; doxorubicin,Ziextenzo + doxorubicin
+C928,drug_combination,5,2,Cyclophosphamide; defibrotide,Cyclophosphamide + defibrotide
+C926,drug_combination,5,2,filgrastim; sirolimus,filgrastim + sirolimus
+C944,drug_combination,5,2,Progesterone; dexrazoxane,Progesterone + dexrazoxane
+P011,complete_drug_set,5,4,Temozolomide capsule; bevacizumab; irinotecan; temozolomide,"4 drugs: Temozolomide capsule, bevacizumab, irinotecan, temozolomide"
+P005,complete_drug_set,5,2,Progesterone; Valproic Acid,"2 drugs: Progesterone, Valproic Acid"
+P006,complete_drug_set,5,2,Ketoconazole; triamcinolone,"2 drugs: Ketoconazole, triamcinolone"
+P007,complete_drug_set,5,10,Cyclophosphamid; Cyclophosphamide; dexrazoxane; doxorubicin; etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim; vincristine,"10 drugs: Cyclophosphamid, Cyclophosphamide, dexrazoxane, doxorubicin, etoposide"
+P008,complete_drug_set,5,5,Dabrafenib Mesylate; Mekinist; Tafinlar; dabrafenib; trametinib,"5 drugs: Dabrafenib Mesylate, Mekinist, Tafinlar, dabrafenib, trametinib"
+P009,complete_drug_set,5,6,carboplatin; etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim,"6 drugs: carboplatin, etoposide, filgrastim, ifosfamide, mesna"
+P010,complete_drug_set,5,2,carboplatin; etoposide,"2 drugs: carboplatin, etoposide"
+C918,drug_combination,5,2,Ketoconazole; Progesterone,Ketoconazole + Progesterone
+C925,drug_combination,5,2,Valproic Acid; topotecan,Valproic Acid + topotecan
+C919,drug_combination,5,2,Progesterone; ipilimumab,Progesterone + ipilimumab
+C920,drug_combination,5,2,Cyclophosphamide; Emend,Cyclophosphamide + Emend
+C921,drug_combination,5,2,Emend; vincristine,Emend + vincristine
+C922,drug_combination,5,2,Cyclophosphamid; Emend,Cyclophosphamid + Emend
+C923,drug_combination,5,2,Emend; temozolomide,Emend + temozolomide
+C979,drug_combination,5,2,Mekinist; ONC201,Mekinist + ONC201
+C943,drug_combination,5,2,Neulasta; cytarabine,Neulasta + cytarabine
+C924,drug_combination,5,2,ATRA; Valproic Acid,ATRA + Valproic Acid
+C945,drug_combination,5,2,Progesterone; methotrexate,Progesterone + methotrexate
+C978,drug_combination,5,2,Mekinist; Surufatinib plus chemotherapy,Mekinist + Surufatinib plus chemotherapy
+C965,drug_combination,5,2,Glutamine; temozolomide,Glutamine + temozolomide
+C966,drug_combination,5,2,etoposide phosphate; melphalan,etoposide phosphate + melphalan
+C967,drug_combination,5,2,GM-CSF; dasatinib,GM-CSF + dasatinib
+C968,drug_combination,5,2,Etopophos; melphalan,Etopophos + melphalan
+C969,drug_combination,5,2,osimertinib; osimertinib mesylate,osimertinib + osimertinib mesylate
+C971,drug_combination,5,2,lomustine; pegfilgrastim,lomustine + pegfilgrastim
+C977,drug_combination,5,2,Mekinist; vorinostat,Mekinist + vorinostat
+C963,drug_combination,5,2,sirolimus; vorinostat,sirolimus + vorinostat
+C976,drug_combination,5,2,Mekinist; tazemetostat hydrobromide,Mekinist + tazemetostat hydrobromide
+C975,drug_combination,5,2,Neupogen; mesna,Neupogen + mesna
+C974,drug_combination,5,2,G-CSF; Neupogen,G-CSF + Neupogen
+C973,drug_combination,5,2,Ketoconazole; Mekinist,Ketoconazole + Mekinist
+C972,drug_combination,5,2,ATRA; trametinib,ATRA + trametinib
+C946,drug_combination,5,2,Ziextenzo; ifosfamide,Ziextenzo + ifosfamide
+C964,drug_combination,5,2,temozolomide; thiotepa,temozolomide + thiotepa
+C970,drug_combination,5,2,filgrastim; lomustine,filgrastim + lomustine
+C962,drug_combination,5,2,Investigational Chemotherapy (unspecified); irinotecan,Investigational Chemotherapy (unspecified) + irinotecan
+C954,drug_combination,5,2,cytarabine; gemtuzumab ozogamicin,cytarabine + gemtuzumab ozogamicin
+C948,drug_combination,5,2,GM-CSF; dexrazoxane,GM-CSF + dexrazoxane
+C949,drug_combination,5,2,pegaspargase; vincristine,pegaspargase + vincristine
+C950,drug_combination,5,2,methotrexate; pegaspargase,methotrexate + pegaspargase
+C951,drug_combination,5,2,IMPACT; pegfilgrastim,IMPACT + pegfilgrastim
+C952,drug_combination,5,2,cytarabine; mercaptopurine,cytarabine + mercaptopurine
+C953,drug_combination,5,2,IMPACT; filgrastim,IMPACT + filgrastim
+C955,drug_combination,5,2,Zarxio; mesna,Zarxio + mesna
+C947,drug_combination,5,2,irinotecan; topotecan,irinotecan + topotecan
+C956,drug_combination,5,2,Zarxio; plerixafor,Zarxio + plerixafor
+C957,drug_combination,5,2,Zarxio; vincristine,Zarxio + vincristine
+C958,drug_combination,5,2,Zarxio; cisplatin,Zarxio + cisplatin
+C959,drug_combination,5,2,thiotepa; topotecan,thiotepa + topotecan
+C960,drug_combination,5,2,dasatinib; irinotecan,dasatinib + irinotecan
+C961,drug_combination,5,2,GM-CSF; doxorubicin,GM-CSF + doxorubicin
+P014,complete_drug_set,4,3,bevacizumab; carboplatin; vincristine,"3 drugs: bevacizumab, carboplatin, vincristine"
+P012,complete_drug_set,4,2,Lupron Depot; leuprolide,"2 drugs: Lupron Depot, leuprolide"
+P013,complete_drug_set,4,5,Cyclophosphamid; Cyclophosphamide; cisplatin; lomustine; vincristine,"5 drugs: Cyclophosphamid, Cyclophosphamide, cisplatin, lomustine, vincristine"
+P015,complete_drug_set,3,6,Temozolomide capsule; Valproic Acid; bevacizumab; etoposide; irinotecan; temozolomide,"6 drugs: Temozolomide capsule, Valproic Acid, bevacizumab, etoposide, irinotecan"
+P016,complete_drug_set,3,14,Cyclophosphamid; Cyclophosphamide; Temozolomide capsule; cisplatin; cytarabine; dactinomycin; dexrazoxane; doxorubicin; etoposide; filgrastim; methotrexate; pegfilgrastim; temozolomide; vincristine,"14 drugs: Cyclophosphamid, Cyclophosphamide, Temozolomide capsule, cisplatin, cytarabine"
+P017,complete_drug_set,3,15,Cyclophosphamid; Cyclophosphamide; G-CSF; GM-CSF; Glutamine; Leucovorin; carboplatin; cisplatin; etoposide; filgrastim; mesna; methotrexate; pegfilgrastim; thiotepa; vincristine,"15 drugs: Cyclophosphamid, Cyclophosphamide, G-CSF, GM-CSF, Glutamine"
+P018,complete_drug_set,3,3,Temozolomide capsule; lomustine; temozolomide,"3 drugs: Temozolomide capsule, lomustine, temozolomide"
+P019,complete_drug_set,3,2,Testosterone Cypionate; triamcinolone,"2 drugs: Testosterone Cypionate, triamcinolone"
+P020,complete_drug_set,3,3,Temozolomide capsule; bevacizumab; temozolomide,"3 drugs: Temozolomide capsule, bevacizumab, temozolomide"
+P021,complete_drug_set,3,111,"***; 131-MIBG + Vorinostat; 1A46 Drug Substance; AMG386 and bevacizumab; AZD1775; AZD6244; Access to Experimental Drugs; Adjuvant Atezolizumab-Bevacizumab Therapy; Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Anti-PD-1 Drugs; Antibody-Drug Conjugates; BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Bevacizumab Avastin; Bevacizumab, Everolimus and LBH589; Bevacizumab-IRDye800CW; Bortezomib drug; CUDC-907; Cemiplimab REGN2810; Chemo with concomitant Capecitabine and KD018; Combination drug; Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Combination, Rogaratinib + palbociclib + fulvestrant; DFMO; DIFLUOROMETHYLORNITHINE; DS-8273a + nivolumab; Dabrafenib and trametinib combination; Drug-based intervention; Drugs Approved for Childhood Cancers; Drugs Approved for Conditions Related to Cancer; Drugs Approved for Different Types of Cancer; ETBX-071 PSA-based Oncolytic Virus; Enzalutamide,, soft capsules, once daily; Everolimus Afinitor tablets; FOLFIRI-BEVACIZUMAB; Fenretinide; Fimepinostat; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; Indoximod; Investigational Chemotherapy (unspecified); Ipilimumab -/kg; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; MK-1775; Mocetinostat Induction Phase + Ipilimumab + Nivolumab; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; Nivolumab & Ipilimumab; Nivolumab -/kg; Nivolumab Protocol; Nivolumab and Hyaluronidase-nvhy; Nivolumab and Relatlimab-rmbw; Nivolumab induction; Nivolumab maintenance; Nivolumab with chemoradiation; Nivolumab-relatlimab FDC; ONC201; ONO-7475 once daily; Oncaspar; Oncolytic virus VRT106; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; PTC596; Palbociclib100mg; Palbociclib125mg; Pemetrexed and Gemcitabine plus Bevacizumab; Placebo - Concentrate; Recombinant oncolytic herpes simplex virus type Ⅰ R130; Relatlimab FDC + Nivolumab; SAHA(Suberoylanilide; SAHA-Suberoylanilide; SAHA/Vorinostat; Serplulimab combined with bevacizumab and first-line chemotherapy; Surufatinib; Surufatinib and Serplulimab; Surufatinib plus chemotherapy; TAK-580; Three-drug chemotherapy group; Trametinib placebo; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; Trifluridine/tipiracil + bevacizumab; albumin-bound paclitaxe combined with bevacizumab biosimilar; bevacizumab; capecitabine, oxaliplatin, irinotecan and bevacizumab; carboplatin paclitaxel bevacizumab; chlorambucil drug; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; dasatinib; epirubicin - cyclophosphamide / docetaxel + bevacizumab; everolimus; fenretinide lipid matrix; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; ipilimumab; loncastuximab tesirine; loncastuximab tesirine-lpyl; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; nivolumab; ntifier:ADVL0921; once daily for two consecutive days Picato; paclitaxel + everolimus RAD001; palbociclib; palbociclib isethionate; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; selinexor; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; tazemetostat; tazemetostat hydrobromide; trametinib; trametinib dimethyl sulfoxide; triamcinolone; two-drug chemotherapy group; vorinostat","111 drugs: ***, 131-MIBG + Vorinostat, 1A46 Drug Substance, AMG386 and bevacizumab, AZD1775"
+P022,complete_drug_set,3,3,cisplatin; lomustine; vincristine,"3 drugs: cisplatin, lomustine, vincristine"
+P023,complete_drug_set,3,2,tretinoin; triamcinolone,"2 drugs: tretinoin, triamcinolone"
+P024,complete_drug_set,3,7,Neulasta; carboplatin; etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim,"7 drugs: Neulasta, carboplatin, etoposide, filgrastim, ifosfamide"
+P025,complete_drug_set,3,2,Ketoconazole; Valproic Acid,"2 drugs: Ketoconazole, Valproic Acid"
+P028,complete_drug_set,2,3,ATRA; carboplatin; vincristine,"3 drugs: ATRA, carboplatin, vincristine"
+P026,complete_drug_set,2,3,Progesterone; carboplatin; vincristine,"3 drugs: Progesterone, carboplatin, vincristine"
+P027,complete_drug_set,2,3,Ketoconazole; carboplatin; vincristine,"3 drugs: Ketoconazole, carboplatin, vincristine"
+P042,complete_drug_set,2,3,Vitrakvi; larotrectinib; triamcinolone,"3 drugs: Vitrakvi, larotrectinib, triamcinolone"
+P029,complete_drug_set,2,2,Testosterone Cypionate; lanreotide acetate,"2 drugs: Testosterone Cypionate, lanreotide acetate"
+P030,complete_drug_set,2,4,carboplatin; etoposide; filgrastim; pegfilgrastim,"4 drugs: carboplatin, etoposide, filgrastim, pegfilgrastim"
+P053,complete_drug_set,2,14,Cyclophosphamid; Cyclophosphamide; G-CSF; GM-CSF; Glutamine; carboplatin; cisplatin; etoposide; filgrastim; mesna; pegfilgrastim; thiotepa; triamcinolone; vincristine,"14 drugs: Cyclophosphamid, Cyclophosphamide, G-CSF, GM-CSF, Glutamine"
+P052,complete_drug_set,2,8,Cyclophosphamid; Cyclophosphamide; Ziextenzo; cisplatin; filgrastim; mesna; pegfilgrastim; vincristine,"8 drugs: Cyclophosphamid, Cyclophosphamide, Ziextenzo, cisplatin, filgrastim"
+P051,complete_drug_set,2,4,Temozolomide capsule; bevacizumab; nivolumab; temozolomide,"4 drugs: Temozolomide capsule, bevacizumab, nivolumab, temozolomide"
+P050,complete_drug_set,2,8,Cyclophosphamid; Cyclophosphamide; etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim; vincristine,"8 drugs: Cyclophosphamid, Cyclophosphamide, etoposide, filgrastim, ifosfamide"
+P049,complete_drug_set,2,5,etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim,"5 drugs: etoposide, filgrastim, ifosfamide, mesna, pegfilgrastim"
+P048,complete_drug_set,2,113,"***; 131-MIBG + Vorinostat; 1A46 Drug Substance; AMG386 and bevacizumab; AZD1775; AZD6244; Access to Experimental Drugs; Adjuvant Atezolizumab-Bevacizumab Therapy; Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Anti-PD-1 Drugs; Antibody-Drug Conjugates; BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Bevacizumab Avastin; Bevacizumab, Everolimus and LBH589; Bevacizumab-IRDye800CW; Bortezomib drug; CUDC-907; Cemiplimab REGN2810; Chemo with concomitant Capecitabine and KD018; Combination drug; Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Combination, Rogaratinib + palbociclib + fulvestrant; DFMO; DIFLUOROMETHYLORNITHINE; DS-8273a + nivolumab; Dabrafenib and trametinib combination; Drug-based intervention; Drugs Approved for Childhood Cancers; Drugs Approved for Conditions Related to Cancer; Drugs Approved for Different Types of Cancer; ETBX-071 PSA-based Oncolytic Virus; Enzalutamide,, soft capsules, once daily; Everolimus Afinitor tablets; FOLFIRI-BEVACIZUMAB; Fenretinide; Fimepinostat; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; Indoximod; Investigational Chemotherapy (unspecified); Ipilimumab -/kg; Ketoconazole; Koselugo; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; MK-1775; Mocetinostat Induction Phase + Ipilimumab + Nivolumab; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; Nivolumab & Ipilimumab; Nivolumab -/kg; Nivolumab Protocol; Nivolumab and Hyaluronidase-nvhy; Nivolumab and Relatlimab-rmbw; Nivolumab induction; Nivolumab maintenance; Nivolumab with chemoradiation; Nivolumab-relatlimab FDC; ONC201; ONO-7475 once daily; Oncaspar; Oncolytic virus VRT106; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; PTC596; Palbociclib100mg; Palbociclib125mg; Pemetrexed and Gemcitabine plus Bevacizumab; Placebo - Concentrate; Recombinant oncolytic herpes simplex virus type Ⅰ R130; Relatlimab FDC + Nivolumab; SAHA(Suberoylanilide; SAHA-Suberoylanilide; SAHA/Vorinostat; Serplulimab combined with bevacizumab and first-line chemotherapy; Surufatinib; Surufatinib and Serplulimab; Surufatinib plus chemotherapy; TAK-580; Three-drug chemotherapy group; Trametinib placebo; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; Trifluridine/tipiracil + bevacizumab; albumin-bound paclitaxe combined with bevacizumab biosimilar; bevacizumab; capecitabine, oxaliplatin, irinotecan and bevacizumab; carboplatin paclitaxel bevacizumab; chlorambucil drug; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; dasatinib; epirubicin - cyclophosphamide / docetaxel + bevacizumab; everolimus; fenretinide lipid matrix; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; ipilimumab; loncastuximab tesirine; loncastuximab tesirine-lpyl; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; nivolumab; ntifier:ADVL0921; once daily for two consecutive days Picato; paclitaxel + everolimus RAD001; palbociclib; palbociclib isethionate; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; selinexor; selumetinib; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; tazemetostat; tazemetostat hydrobromide; trametinib; trametinib dimethyl sulfoxide; two-drug chemotherapy group; vorinostat","113 drugs: ***, 131-MIBG + Vorinostat, 1A46 Drug Substance, AMG386 and bevacizumab, AZD1775"
+P047,complete_drug_set,2,7,Cyclophosphamid; Cyclophosphamide; dactinomycin; filgrastim; mesna; pegfilgrastim; vincristine,"7 drugs: Cyclophosphamid, Cyclophosphamide, dactinomycin, filgrastim, mesna"
+P046,complete_drug_set,2,4,lomustine; procarbazine; thioguanine; vincristine,"4 drugs: lomustine, procarbazine, thioguanine, vincristine"
+P045,complete_drug_set,2,112,"***; 131-MIBG + Vorinostat; 1A46 Drug Substance; AMG386 and bevacizumab; AZD1775; AZD6244; Access to Experimental Drugs; Adjuvant Atezolizumab-Bevacizumab Therapy; Anlotinib hydrochloride capsule Combined With Concurrent Chemoradiotherapy; Anti-PD-1 Drugs; Antibody-Drug Conjugates; BRAF inhibitor dabrafenib and MEK inhibitor trametinib; Bevacizumab Avastin; Bevacizumab, Everolimus and LBH589; Bevacizumab-IRDye800CW; Bortezomib drug; CUDC-907; Cemiplimab REGN2810; Chemo with concomitant Capecitabine and KD018; Combination drug; Combination of Gemcitabine, Oxaliplatin, Sintilimab and Bevacizumab; Combination, Rogaratinib + palbociclib + fulvestrant; DFMO; DIFLUOROMETHYLORNITHINE; DS-8273a + nivolumab; Dabrafenib and trametinib combination; Drug-based intervention; Drugs Approved for Childhood Cancers; Drugs Approved for Conditions Related to Cancer; Drugs Approved for Different Types of Cancer; ETBX-071 PSA-based Oncolytic Virus; Enzalutamide,, soft capsules, once daily; Everolimus Afinitor tablets; FOLFIRI-BEVACIZUMAB; Fenretinide; Fimepinostat; IV FOLFIRI+ target agent bevacizumab or cetuximab every 2 weeks; Imatinib, Fluorouracil, Oxaliplatin, Leucovorin and Bevacizumab; Indoximod; Investigational Chemotherapy (unspecified); Ipilimumab -/kg; LVGN3616 + LVGN6051 + Bevacizumab + Cyclophosphamide; LVGN3616 + LVGN6051 + LVGN7409 + Bevacizumab + Cyclophosphamide; MK-1775; Mocetinostat Induction Phase + Ipilimumab + Nivolumab; Mocetinostat Maintenance Phase + Ipilimumab + Nivolumab; Nivolumab & Ipilimumab; Nivolumab -/kg; Nivolumab Protocol; Nivolumab and Hyaluronidase-nvhy; Nivolumab and Relatlimab-rmbw; Nivolumab induction; Nivolumab maintenance; Nivolumab with chemoradiation; Nivolumab-relatlimab FDC; ONC201; ONO-7475 once daily; Oncaspar; Oncolytic virus VRT106; PDR001 concurrent with standard platinum-based chemoradiation, followed by consolidation with PDR001; PTC596; Palbociclib100mg; Palbociclib125mg; Pemetrexed and Gemcitabine plus Bevacizumab; Placebo - Concentrate; Recombinant oncolytic herpes simplex virus type Ⅰ R130; Relatlimab FDC + Nivolumab; SAHA(Suberoylanilide; SAHA-Suberoylanilide; SAHA/Vorinostat; Serplulimab combined with bevacizumab and first-line chemotherapy; Surufatinib; Surufatinib and Serplulimab; Surufatinib plus chemotherapy; TAK-580; Temozolomide capsule; Three-drug chemotherapy group; Trametinib placebo; Trastuzumab+Nivolumab+Gemcitabine+Cisplatin; Trifluridine/tipiracil + bevacizumab; albumin-bound paclitaxe combined with bevacizumab biosimilar; bevacizumab; capecitabine, oxaliplatin, irinotecan and bevacizumab; carboplatin paclitaxel bevacizumab; chlorambucil drug; concurrent capecitabine-based long-term radiotherapy followed by 4 cycles XELOX and a delayed TME; concurrent capecitabine-based long-term radiotherapy followed by a Regular TME and 6 Cycles XELOX; dasatinib; epirubicin - cyclophosphamide / docetaxel + bevacizumab; everolimus; fenretinide lipid matrix; intra-arterial oxaliplatin + Systemic FOLFIRI + target agent bevacizumab or cetuximab every 2 weeks; ipilimumab; loncastuximab tesirine; loncastuximab tesirine-lpyl; mFOLFOX6 + Bevacizumab + PD-1 monoclonal antibody; nivolumab; ntifier:ADVL0921; once daily for two consecutive days Picato; paclitaxel + everolimus RAD001; palbociclib; palbociclib isethionate; rituximab, cyclophosphamide, etoposide, prednisone, vorinostat and QOL questionnaire, peg-filgrastim or filgrastim; selinexor; standard platinum-based concurrent chemoradiotherapy, followed by consolidation with PDR001; tazemetostat; tazemetostat hydrobromide; temozolomide; trametinib; trametinib dimethyl sulfoxide; two-drug chemotherapy group; vorinostat","112 drugs: ***, 131-MIBG + Vorinostat, 1A46 Drug Substance, AMG386 and bevacizumab, AZD1775"
+P044,complete_drug_set,2,13,Cyclophosphamid; Cyclophosphamide; G-CSF; GM-CSF; Glutamine; carboplatin; cisplatin; etoposide; filgrastim; mesna; pegfilgrastim; thiotepa; vincristine,"13 drugs: Cyclophosphamid, Cyclophosphamide, G-CSF, GM-CSF, Glutamine"
+P043,complete_drug_set,2,3,Temozolomide capsule; Valproic Acid; temozolomide,"3 drugs: Temozolomide capsule, Valproic Acid, temozolomide"
+P041,complete_drug_set,2,2,isotretinoin; tretinoin,"2 drugs: isotretinoin, tretinoin"
+P040,complete_drug_set,2,2,imiquimod; triamcinolone,"2 drugs: imiquimod, triamcinolone"
+P039,complete_drug_set,2,7,dexrazoxane; doxorubicin; etoposide; filgrastim; ifosfamide; mesna; pegfilgrastim,"7 drugs: dexrazoxane, doxorubicin, etoposide, filgrastim, ifosfamide"
+P037,complete_drug_set,2,2,Valproic Acid; triamcinolone,"2 drugs: Valproic Acid, triamcinolone"
+P036,complete_drug_set,2,2,Progesterone; cabergoline,"2 drugs: Progesterone, cabergoline"
+P035,complete_drug_set,2,3,Temozolomide capsule; irinotecan; temozolomide,"3 drugs: Temozolomide capsule, irinotecan, temozolomide"
+P034,complete_drug_set,2,12,Cyclophosphamid; Cyclophosphamide; cisplatin; cytarabine; dexrazoxane; doxorubicin; etoposide; filgrastim; methotrexate; pegfilgrastim; temozolomide; vincristine,"12 drugs: Cyclophosphamid, Cyclophosphamide, cisplatin, cytarabine, dexrazoxane"
+P033,complete_drug_set,2,2,ATRA; triamcinolone,"2 drugs: ATRA, triamcinolone"
+P032,complete_drug_set,2,2,Ketoconazole; tretinoin,"2 drugs: Ketoconazole, tretinoin"
+P031,complete_drug_set,2,7,Cyclophosphamid; Cyclophosphamide; carboplatin; etoposide; filgrastim; pegfilgrastim; vincristine,"7 drugs: Cyclophosphamid, Cyclophosphamide, carboplatin, etoposide, filgrastim"
+P038,complete_drug_set,2,12,Cyclophosphamid; Cyclophosphamide; G-CSF; GM-CSF; Valproic Acid; cisplatin; etoposide; filgrastim; mesna; pegfilgrastim; temozolomide; vincristine,"12 drugs: Cyclophosphamid, Cyclophosphamide, G-CSF, GM-CSF, Valproic Acid"
