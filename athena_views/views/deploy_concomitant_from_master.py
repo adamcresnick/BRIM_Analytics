@@ -15,16 +15,17 @@ import re
 def extract_view_sql(file_path):
     """Extract v_concomitant_medications view SQL from master file."""
     with open(file_path, 'r') as f:
-        content = f.read()
+        lines = f.readlines()
 
-    # Find the CREATE OR REPLACE VIEW statement for v_concomitant_medications
-    pattern = r'CREATE OR REPLACE VIEW fhir_prd_db\.v_concomitant_medications.*?(?=\n\n--|$)'
-    match = re.search(pattern, content, re.DOTALL)
+    # v_concomitant_medications view is from line 448 to 767 (0-indexed: 447 to 766)
+    # Extract these lines
+    view_lines = lines[447:767]
+    view_sql = ''.join(view_lines).strip()
 
-    if not match:
-        raise ValueError("Could not find v_concomitant_medications view in file")
+    if not view_sql:
+        raise ValueError("Could not extract v_concomitant_medications view from file")
 
-    return match.group(0)
+    return view_sql
 
 def deploy_view(athena):
     """Deploy updated v_concomitant_medications view."""
