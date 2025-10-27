@@ -566,7 +566,35 @@ all_medications AS (
             WHEN mcc.code_coding_code IN ('26225', '4896', '288635', '135', '7533', '51272')
                 THEN 'antiemetic'
             -- Corticosteroids (reduce swelling, prevent allergic reactions)
-            WHEN mcc.code_coding_code IN ('3264', '8640', '6902', '5492', '4850')
+            -- RxNorm ingredient codes from RxClass API (ATC H02AB + H02AA)
+            -- Ingredient codes automatically capture ALL formulations (tablets, injections, etc.)
+            WHEN mcc.code_coding_code IN (
+                -- GLUCOCORTICOIDS (ATC H02AB) - High volume in oncology
+                '3264',    -- dexamethasone (MOST COMMON)
+                '8640',    -- prednisone
+                '8638',    -- prednisolone
+                '6902',    -- methylprednisolone
+                '5492',    -- hydrocortisone
+                '1514',    -- betamethasone
+                '10759',   -- triamcinolone
+
+                -- GLUCOCORTICOIDS (ATC H02AB) - Less common but comprehensive
+                '2878',    -- cortisone
+                '22396',   -- deflazacort
+                '7910',    -- paramethasone
+                '29523',   -- meprednisone
+                '4463',    -- fluocortolone
+                '55681',   -- rimexolone
+                '12473',   -- prednylidene
+                '21285',   -- cloprednol
+                '21660',   -- cortivazol
+                '2669799', -- vamorolone
+
+                -- MINERALOCORTICOIDS (ATC H02AA)
+                '4452',    -- fludrocortisone
+                '3256',    -- desoxycorticosterone
+                '1312358'  -- aldosterone
+            )
                 THEN 'corticosteroid'
             -- Growth factors (stimulate blood cell production)
             WHEN mcc.code_coding_code IN ('105585', '358810', '4716', '139825')
@@ -586,8 +614,29 @@ all_medications AS (
             -- H2 blockers
             WHEN mcc.code_coding_code IN ('8772', '10156', '4278')
                 THEN 'h2_blocker'
+            -- TEXT MATCHING FALLBACK (for systems without RxNorm codes or free text entries)
             WHEN LOWER(mcc.code_coding_display) LIKE '%ondansetron%' OR LOWER(m.code_text) LIKE '%zofran%' THEN 'antiemetic'
-            WHEN LOWER(mcc.code_coding_display) LIKE '%dexamethasone%' OR LOWER(m.code_text) LIKE '%prednisone%' THEN 'corticosteroid'
+
+            -- Corticosteroid text matching (generic names and common brands)
+            WHEN LOWER(mcc.code_coding_display) LIKE '%dexamethasone%' OR LOWER(m.code_text) LIKE '%dexamethasone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%decadron%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%prednisone%' OR LOWER(m.code_text) LIKE '%prednisone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%deltasone%' OR LOWER(mr.medication_reference_display) LIKE '%rayos%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%prednisolone%' OR LOWER(m.code_text) LIKE '%prednisolone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%orapred%' OR LOWER(mr.medication_reference_display) LIKE '%millipred%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%methylprednisolone%' OR LOWER(m.code_text) LIKE '%methylprednisolone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%medrol%' OR LOWER(mr.medication_reference_display) LIKE '%solu-medrol%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%hydrocortisone%' OR LOWER(m.code_text) LIKE '%hydrocortisone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%cortef%' OR LOWER(mr.medication_reference_display) LIKE '%solu-cortef%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%betamethasone%' OR LOWER(m.code_text) LIKE '%betamethasone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%celestone%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%triamcinolone%' OR LOWER(m.code_text) LIKE '%triamcinolone%'
+                OR LOWER(mr.medication_reference_display) LIKE '%kenalog%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%cortisone%' OR LOWER(m.code_text) LIKE '%cortisone%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%fludrocortisone%' OR LOWER(m.code_text) LIKE '%fludrocortisone%' THEN 'corticosteroid'
+            WHEN LOWER(mcc.code_coding_display) LIKE '%deflazacort%' OR LOWER(m.code_text) LIKE '%deflazacort%'
+                OR LOWER(mr.medication_reference_display) LIKE '%emflaza%' THEN 'corticosteroid'
+
             WHEN LOWER(mcc.code_coding_display) LIKE '%filgrastim%' OR LOWER(m.code_text) LIKE '%neupogen%' THEN 'growth_factor'
             WHEN LOWER(mcc.code_coding_display) LIKE '%levetiracetam%' OR LOWER(m.code_text) LIKE '%keppra%' THEN 'anticonvulsant'
             ELSE 'other'
@@ -3015,7 +3064,7 @@ mobilization_agents AS (
     FROM fhir_prd_db.medication_request mr
     LEFT JOIN mobilization_timing_bounds mtb ON mr.id = mtb.medication_request_id
     LEFT JOIN fhir_prd_db.medication m
-        ON m.id = SUBSTRING(mr.medication_reference_reference, 12)
+        ON m.id = mr.medication_reference_reference
     LEFT JOIN fhir_prd_db.medication_code_coding mcc
         ON mcc.medication_id = m.id
         AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
@@ -3824,7 +3873,7 @@ corticosteroid_medications AS (
     FROM fhir_prd_db.medication_request mr
     LEFT JOIN medication_timing_bounds mtb ON mr.id = mtb.medication_request_id
     LEFT JOIN fhir_prd_db.medication m
-        ON m.id = SUBSTRING(mr.medication_reference_reference, 12)
+        ON m.id = mr.medication_reference_reference
     LEFT JOIN fhir_prd_db.medication_code_coding mcc
         ON mcc.medication_id = m.id
         AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
@@ -3973,44 +4022,64 @@ imaging_corticosteroid_matches AS (
         END as days_from_imaging_to_med_stop,
 
         -- Temporal relationship categories
+        -- UPDATED: Only captures corticosteroid use AT imaging or within 7 days PRIOR
+        -- No future use (after imaging) is captured
         CASE
             WHEN DATE(CAST(img.imaging_date AS TIMESTAMP))
                  BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP))
                      AND COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)),
                                   DATE(CAST(img.imaging_date AS TIMESTAMP)))
-                THEN 'exact_date_match'
+                THEN 'on_corticosteroid_at_imaging'
             WHEN DATE(CAST(img.imaging_date AS TIMESTAMP))
                  BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '7' DAY
-                     AND COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)) + INTERVAL '7' DAY,
-                                  DATE(CAST(img.imaging_date AS TIMESTAMP)) + INTERVAL '7' DAY)
-                THEN 'within_7day_window'
+                     AND DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '1' DAY
+                THEN 'within_7days_prior_to_imaging'
             WHEN DATE(CAST(img.imaging_date AS TIMESTAMP))
-                 BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '14' DAY
-                     AND COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)) + INTERVAL '14' DAY,
-                                  DATE(CAST(img.imaging_date AS TIMESTAMP)) + INTERVAL '14' DAY)
-                THEN 'within_14day_window'
+                 > COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)),
+                           DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)))
+                 AND DATE_DIFF('day',
+                              COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)),
+                                      DATE(CAST(cm.medication_start_datetime AS TIMESTAMP))),
+                              DATE(CAST(img.imaging_date AS TIMESTAMP))) <= 7
+                THEN 'within_7days_after_stop'
             ELSE 'outside_window'
         END as temporal_relationship
 
     FROM fhir_prd_db.v_imaging img
     LEFT JOIN corticosteroid_medications cm
         ON img.patient_fhir_id = cm.patient_fhir_id
-        -- Apply temporal filter: medication active within ±14 days of imaging
-        AND DATE(CAST(img.imaging_date AS TIMESTAMP))
-            BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '14' DAY
-                AND COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)) + INTERVAL '14' DAY,
-                             DATE(CAST(img.imaging_date AS TIMESTAMP)) + INTERVAL '14' DAY)
+        -- Apply temporal filter: medication active at imaging OR within 7 days prior
+        -- Only captures PAST or CURRENT use, not FUTURE use
+        AND (
+            -- Case 1: Medication active at imaging date
+            (DATE(CAST(img.imaging_date AS TIMESTAMP))
+             BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP))
+                 AND COALESCE(DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)),
+                             DATE(CAST(img.imaging_date AS TIMESTAMP))))
+            OR
+            -- Case 2: Medication stopped within 7 days before imaging
+            (cm.medication_stop_datetime IS NOT NULL
+             AND DATE(CAST(img.imaging_date AS TIMESTAMP))
+                 BETWEEN DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP))
+                     AND DATE(CAST(cm.medication_stop_datetime AS TIMESTAMP)) + INTERVAL '7' DAY)
+            OR
+            -- Case 3: Medication started within 7 days before imaging (but not yet at imaging)
+            (DATE(CAST(img.imaging_date AS TIMESTAMP))
+             BETWEEN DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '7' DAY
+                 AND DATE(CAST(cm.medication_start_datetime AS TIMESTAMP)) - INTERVAL '1' DAY)
+        )
 ),
 
 corticosteroid_counts AS (
     -- Count concurrent corticosteroids per imaging study
+    -- UPDATED: Only counts corticosteroids active at imaging or within 7 days prior
     SELECT
         imaging_procedure_id,
         COUNT(DISTINCT corticosteroid_generic_name) as total_corticosteroids_count,
         LISTAGG(DISTINCT corticosteroid_generic_name, '; ')
             WITHIN GROUP (ORDER BY corticosteroid_generic_name) as corticosteroid_list
     FROM imaging_corticosteroid_matches
-    WHERE temporal_relationship IN ('exact_date_match', 'within_7day_window', 'within_14day_window')
+    WHERE temporal_relationship IN ('on_corticosteroid_at_imaging', 'within_7days_prior_to_imaging', 'within_7days_after_stop')
     GROUP BY imaging_procedure_id
 )
 
@@ -4023,9 +4092,10 @@ SELECT
     icm.imaging_procedure,
 
     -- Corticosteroid exposure flag
+    -- UPDATED: TRUE only if patient was on corticosteroid at imaging or within 7 days prior
     CASE
         WHEN icm.medication_request_fhir_id IS NOT NULL
-             AND icm.temporal_relationship IN ('exact_date_match', 'within_7day_window')
+             AND icm.temporal_relationship IN ('on_corticosteroid_at_imaging', 'within_7days_prior_to_imaging', 'within_7days_after_stop')
             THEN true
         ELSE false
     END as on_corticosteroid,
