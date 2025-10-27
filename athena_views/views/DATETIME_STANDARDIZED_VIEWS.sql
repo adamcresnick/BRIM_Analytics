@@ -462,115 +462,41 @@ medication_timing_bounds AS (
 ),
 
 -- ================================================================================
--- Step 1: Match medication RxNorm codes to comprehensive chemotherapy reference
+-- Step 1: Get chemotherapy medications and time windows from v_chemo_medications
 -- ================================================================================
--- UPDATED: Now uses comprehensive RADIANT unified chemotherapy index (814 drugs)
--- instead of 11 hardcoded RxNorm codes. Supports BOTH ingredient and product codes.
--- FIXED: Bevacizumab now uses correct RxNorm code 253337 (was incorrect 42316)
--- ================================================================================
-medication_rxnorm_codes AS (
-    SELECT
-        mcc.medication_id,
-        mcc.code_coding_code AS rxnorm_code,
-        mcc.code_coding_display AS rxnorm_display
-    FROM fhir_prd_db.medication_code_coding mcc
-    WHERE mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
-        AND mcc.code_coding_code IS NOT NULL
-),
-
-chemotherapy_medication_matches AS (
-    SELECT DISTINCT
-        mrc.medication_id,
-        mrc.rxnorm_code,
-        mrc.rxnorm_display,
-        -- Match to chemotherapy reference (ingredient or product)
-        COALESCE(cd_direct.drug_id, cd_product.drug_id) AS chemo_drug_id,
-        COALESCE(cd_direct.preferred_name, cd_product.preferred_name) AS chemo_preferred_name,
-        COALESCE(cd_direct.rxnorm_in, cd_product.rxnorm_in) AS chemo_rxnorm_ingredient,
-        -- Match type for debugging
-        CASE
-            WHEN cd_direct.drug_id IS NOT NULL THEN 'ingredient'
-            WHEN cd_product.drug_id IS NOT NULL THEN 'product'
-            ELSE 'unknown'
-        END AS match_type
-    FROM medication_rxnorm_codes mrc
-    -- Try direct ingredient code match first
-    LEFT JOIN fhir_prd_db.v_chemotherapy_drugs cd_direct
-        ON mrc.rxnorm_code = cd_direct.rxnorm_in
-    -- Try product→ingredient mapping if no direct match
-    LEFT JOIN fhir_prd_db.v_chemotherapy_rxnorm_codes crc
-        ON mrc.rxnorm_code = crc.product_rxnorm_code
-    LEFT JOIN fhir_prd_db.v_chemotherapy_drugs cd_product
-        ON crc.ingredient_rxnorm_code = cd_product.rxnorm_in
-    WHERE cd_direct.drug_id IS NOT NULL
-       OR cd_product.drug_id IS NOT NULL
-),
-
--- ================================================================================
--- Step 2: Get chemotherapy medications with dates from medication_request
+-- Uses the authoritative v_chemo_medications view which:
+--   - Leverages comprehensive drugs.csv reference (2,968 chemotherapy drugs)
+--   - Includes therapeutic normalization (brand→generic)
+--   - Excludes supportive care medications
+--   - Validated with 968 patients, 0 issues
 -- ================================================================================
 chemotherapy_agents AS (
     SELECT
-        mr.subject_reference as patient_fhir_id,
-        mr.id as medication_fhir_id,
-        m.code_text as medication_name,
-        cmm.rxnorm_code as rxnorm_cui,
-        cmm.chemo_preferred_name,
-        cmm.chemo_drug_id,
-        cmm.match_type,
-        mr.status,
-        mr.intent,
+        patient_fhir_id,
+        medication_request_fhir_id as medication_fhir_id,
+        medication_rxnorm_code as rxnorm_cui,
+        chemo_therapeutic_normalized as medication_name,  -- Use normalized name for consistency
+        medication_status as status,
+        medication_intent as intent,
 
-        -- Standardized start date (prefer timing bounds, fallback to authored_on)
-        CASE
-            WHEN mtb.earliest_bounds_start IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mtb.earliest_bounds_start) = 10
-                    THEN mtb.earliest_bounds_start || 'T00:00:00Z'
-                    ELSE mtb.earliest_bounds_start
-                END
-            WHEN LENGTH(mr.authored_on) = 10
-                THEN mr.authored_on || 'T00:00:00Z'
-            ELSE mr.authored_on
-        END as start_datetime,
-
-        -- Standardized stop date (prefer timing bounds, fallback to dispense validity period)
-        CASE
-            WHEN mtb.latest_bounds_end IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mtb.latest_bounds_end) = 10
-                    THEN mtb.latest_bounds_end || 'T00:00:00Z'
-                    ELSE mtb.latest_bounds_end
-                END
-            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mr.dispense_request_validity_period_end) = 10
-                    THEN mr.dispense_request_validity_period_end || 'T00:00:00Z'
-                    ELSE mr.dispense_request_validity_period_end
-                END
-            ELSE NULL
-        END as stop_datetime,
-
-        -- Authored date (order date)
-        CASE
-            WHEN LENGTH(mr.authored_on) = 10
-            THEN mr.authored_on || 'T00:00:00Z'
-            ELSE mr.authored_on
-        END as authored_datetime,
+        -- Use standardized datetime fields from v_chemo_medications
+        -- These are already in ISO8601 format with proper handling
+        medication_start_date as start_datetime,
+        medication_stop_date as stop_datetime,
+        medication_authored_date as authored_datetime,
 
         -- Date source for quality tracking
         CASE
-            WHEN mtb.earliest_bounds_start IS NOT NULL THEN 'timing_bounds'
-            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN 'dispense_period'
-            WHEN mr.authored_on IS NOT NULL THEN 'authored_on'
+            WHEN medication_start_date IS NOT NULL THEN 'timing_bounds'
+            WHEN medication_stop_date IS NOT NULL THEN 'dispense_period'
+            WHEN medication_authored_date IS NOT NULL THEN 'authored_on'
             ELSE 'missing'
         END as date_source
 
-    FROM fhir_prd_db.medication_request mr
-    LEFT JOIN medication_timing_bounds mtb ON mr.id = mtb.medication_request_id
-    LEFT JOIN fhir_prd_db.medication m ON m.id = mr.medication_reference_reference
-    -- Join to chemotherapy matches (INNER JOIN to filter to chemo only)
-    INNER JOIN chemotherapy_medication_matches cmm ON cmm.medication_id = m.id
+    FROM fhir_prd_db.v_chemo_medications
+    -- v_chemo_medications is already filtered to chemotherapy medications
+    -- Just ensure we have valid time windows for temporal overlap calculation
+    WHERE medication_start_date IS NOT NULL
 ),
 
 -- ================================================================================

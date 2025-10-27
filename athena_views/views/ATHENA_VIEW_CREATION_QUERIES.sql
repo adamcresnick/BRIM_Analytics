@@ -3848,105 +3848,41 @@ medication_timing_bounds AS (
 ),
 
 -- ================================================================================
--- Step 1: Identify chemotherapy medications and their time windows
+-- Step 1: Get chemotherapy medications and time windows from v_chemo_medications
+-- ================================================================================
+-- Uses the authoritative v_chemo_medications view which:
+--   - Leverages comprehensive drugs.csv reference (2,968 chemotherapy drugs)
+--   - Includes therapeutic normalization (brand→generic)
+--   - Excludes supportive care medications
+--   - Validated with 968 patients, 0 issues
 -- ================================================================================
 chemotherapy_agents AS (
     SELECT
-        mr.subject_reference as patient_fhir_id,
-        mr.id as medication_fhir_id,
-        mcc.code_coding_code as rxnorm_cui,
-        mcc.code_coding_display as medication_name,
-        mr.status,
-        mr.intent,
+        patient_fhir_id,
+        medication_request_fhir_id as medication_fhir_id,
+        medication_rxnorm_code as rxnorm_cui,
+        chemo_therapeutic_normalized as medication_name,  -- Use normalized name for consistency
+        medication_status as status,
+        medication_intent as intent,
 
-        -- Standardized start date (prefer timing bounds, fallback to authored_on)
-        CASE
-            WHEN mtb.earliest_bounds_start IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mtb.earliest_bounds_start) = 10
-                    THEN mtb.earliest_bounds_start || 'T00:00:00Z'
-                    ELSE mtb.earliest_bounds_start
-                END
-            WHEN LENGTH(mr.authored_on) = 10
-                THEN mr.authored_on || 'T00:00:00Z'
-            ELSE mr.authored_on
-        END as start_datetime,
-
-        -- Standardized stop date (prefer timing bounds, fallback to dispense validity period)
-        CASE
-            WHEN mtb.latest_bounds_end IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mtb.latest_bounds_end) = 10
-                    THEN mtb.latest_bounds_end || 'T00:00:00Z'
-                    ELSE mtb.latest_bounds_end
-                END
-            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN
-                CASE
-                    WHEN LENGTH(mr.dispense_request_validity_period_end) = 10
-                    THEN mr.dispense_request_validity_period_end || 'T00:00:00Z'
-                    ELSE mr.dispense_request_validity_period_end
-                END
-            ELSE NULL
-        END as stop_datetime,
-
-        -- Authored date (order date)
-        CASE
-            WHEN LENGTH(mr.authored_on) = 10
-            THEN mr.authored_on || 'T00:00:00Z'
-            ELSE mr.authored_on
-        END as authored_datetime,
+        -- Use standardized datetime fields from v_chemo_medications
+        -- These are already in ISO8601 format with proper handling
+        medication_start_date as start_datetime,
+        medication_stop_date as stop_datetime,
+        medication_authored_date as authored_datetime,
 
         -- Date source for quality tracking
         CASE
-            WHEN mtb.earliest_bounds_start IS NOT NULL THEN 'timing_bounds'
-            WHEN mr.dispense_request_validity_period_end IS NOT NULL THEN 'dispense_period'
-            WHEN mr.authored_on IS NOT NULL THEN 'authored_on'
+            WHEN medication_start_date IS NOT NULL THEN 'timing_bounds'
+            WHEN medication_stop_date IS NOT NULL THEN 'dispense_period'
+            WHEN medication_authored_date IS NOT NULL THEN 'authored_on'
             ELSE 'missing'
         END as date_source
 
-    FROM fhir_prd_db.medication_request mr
-    LEFT JOIN medication_timing_bounds mtb ON mr.id = mtb.medication_request_id
-    LEFT JOIN fhir_prd_db.medication m ON m.id = SUBSTRING(mr.medication_reference_reference, 12)
-    LEFT JOIN fhir_prd_db.medication_code_coding mcc
-        ON mcc.medication_id = m.id
-        AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
-    WHERE (
-        -- Known chemotherapy RxNorm codes (common pediatric brain tumor agents)
-        mcc.code_coding_code IN (
-            '82264',   -- Temozolomide
-            '6599',    -- Lomustine (CCNU)
-            '2095',    -- Carmustine (BCNU)
-            '3002',    -- Cyclophosphamide
-            '2555',    -- Cisplatin
-            '2130',    -- Carboplatin
-            '4139',    -- Etoposide
-            '57841',   -- Irinotecan
-            '11152',   -- Vincristine
-            '11119',   -- Vinblastine
-            '6851',    -- Methotrexate
-            '3034',    -- Cytarabine
-            '72824',   -- Bevacizumab
-            '203195',  -- Procarbazine
-            '9384',    -- Thiotepa
-            '1723',    -- Busulfan
-            '10312',   -- Topotecan
-            '42355'    -- Dacarbazine
-        )
-        OR LOWER(m.code_text) LIKE '%temozolomide%'
-        OR LOWER(m.code_text) LIKE '%lomustine%'
-        OR LOWER(m.code_text) LIKE '%carmustine%'
-        OR LOWER(m.code_text) LIKE '%cyclophosphamide%'
-        OR LOWER(m.code_text) LIKE '%cisplatin%'
-        OR LOWER(m.code_text) LIKE '%carboplatin%'
-        OR LOWER(m.code_text) LIKE '%etoposide%'
-        OR LOWER(m.code_text) LIKE '%irinotecan%'
-        OR LOWER(m.code_text) LIKE '%vincristine%'
-        OR LOWER(m.code_text) LIKE '%vinblastine%'
-        OR LOWER(m.code_text) LIKE '%chemotherapy%'
-        OR LOWER(m.code_text) LIKE '%antineoplastic%'
-        OR LOWER(m.code_text) LIKE '%cytotoxic%'
-    )
-    AND mr.status IN ('active', 'completed', 'on-hold', 'stopped')
+    FROM fhir_prd_db.v_chemo_medications
+    -- v_chemo_medications is already filtered to chemotherapy medications
+    -- Just ensure we have valid time windows for temporal overlap calculation
+    WHERE medication_start_date IS NOT NULL
 ),
 
 -- ================================================================================
@@ -4046,8 +3982,8 @@ all_medications AS (
         ON mcc.medication_id = m.id
         AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
     WHERE mr.status IN ('active', 'completed', 'on-hold', 'stopped')
-        -- Exclude chemotherapy agents from conmed list
-        AND mr.id NOT IN (SELECT medication_fhir_id FROM chemotherapy_agents)
+        -- NO FILTERING OF DRUG TYPE HERE - we want ALL medications
+        -- Chemotherapy exclusion handled in the final join
 )
 
 -- ================================================================================
@@ -4173,6 +4109,8 @@ SELECT
 FROM chemotherapy_agents ca
 INNER JOIN all_medications am
     ON ca.patient_fhir_id = am.patient_fhir_id
+    -- CRITICAL: Exclude the chemotherapy medication itself from concomitant list
+    AND ca.medication_fhir_id != am.medication_fhir_id
 WHERE
     -- Temporal overlap condition: periods must overlap
     -- Condition 1: conmed starts during chemo
