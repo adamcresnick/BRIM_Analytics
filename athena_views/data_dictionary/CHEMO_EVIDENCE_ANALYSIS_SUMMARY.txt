@@ -1,0 +1,59 @@
+
+================================================================================
+COMPREHENSIVE CHEMOTHERAPY EVIDENCE ANALYSIS - FINAL REPORT
+================================================================================
+Date: 2025-10-26
+Patients Analyzed: 89 (manually identified as having received chemotherapy)
+
+OVERALL FINDINGS:
+================================================================================
+
+Total Patients: 89
+  - With medication records in database: 86 (96.6%)
+  - Without any medication records: 3 (3.4%)
+
+CHEMOTHERAPY EVIDENCE BREAKDOWN:
+================================================================================
+
+1. ACTUAL CHEMOTHERAPY DRUGS FOUND: 0 patients (0.0%)
+   - NO actual chemotherapy drug names were found in ANY field
+   - Searched medication_name, dosage_text, notes, and all other text fields
+   
+2. CHEMOTHERAPY CONTEXT MENTIONED: 8 patients (9.0%)
+   - Keywords like "status post chemotherapy", "cancer therapy", "oncology"
+   - Found in reason codes, dosage instructions, or care plan fields
+   - BUT no actual chemotherapy drug names present
+
+3. CANCER DIAGNOSIS ONLY: 19 patients (21.3%)
+   - Cancer diagnoses mentioned (medulloblastoma, glioma, etc.)
+   - NO chemotherapy context or drug names
+
+4. NO EVIDENCE AT ALL: 59 patients (66.3%)
+   - Have medication records but NO mention of chemotherapy or cancer
+   - 3 additional patients have NO medication records at all
+
+INTERPRETATION:
+================================================================================
+
+✅ VALIDATION COMPLETE: Your v_chemo_medications view is working correctly
+
+The filtering is NOT the problem. The issue is DATA AVAILABILITY:
+
+- 0/89 patients (0%) have actual chemotherapy drugs in medication_request data
+- 8/89 patients (9%) have indirect evidence ("post chemotherapy" mentions)
+- 81/89 patients (91%) have no chemotherapy evidence at all in medications
+
+CONCLUSION:
+
+The chemotherapy treatments these patients received are NOT captured in the
+FHIR medication_request resources. They are likely documented in:
+  1. Clinical notes (unstructured text)
+  2. Other FHIR resources (Procedure, MedicationAdministration, Claim)
+  3. External facility records
+  4. Historical data not migrated to FHIR
+
+Your view is correctly identifying and filtering chemotherapy from available
+structured medication data. The gap represents missing source data, not a
+filtering issue.
+
+================================================================================

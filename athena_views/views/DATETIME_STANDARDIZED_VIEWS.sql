@@ -5345,7 +5345,7 @@ UNION ALL
 SELECT
     vcm.patient_fhir_id,
     'med_' || vcm.medication_request_fhir_id as event_id,
-    -- FIXED 2025-10-26: Parse ISO8601 timestamp string before casting to DATE
+    -- FIXED: Parse ISO8601 timestamp string before casting to DATE
     -- medication_start_date from v_chemo_medications is VARCHAR containing ISO8601 timestamps like "2019-09-17T15:41:00Z"
     CAST(TRY(FROM_ISO8601_TIMESTAMP(vcm.medication_start_date)) AS DATE) as event_date,
     DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(TRY(FROM_ISO8601_TIMESTAMP(vcm.medication_start_date)) AS DATE)) as age_at_event_days,

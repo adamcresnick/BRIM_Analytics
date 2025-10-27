@@ -5,41 +5,33 @@
       "carboplatin",
       "vincristine"
     ],
-    "patient_count": 34,
+    "patient_count": 33,
     "description": "2 drugs: carboplatin, vincristine"
   },
   "P002": {
     "type": "complete_drug_set",
     "drugs": [
+      "azd6244",
       "bevacizumab",
       "dasatinib",
       "everolimus",
       "fenretinide",
+      "fimepinostat",
+      "indoximod",
+      "investigational chemotherapy (unspecified)",
       "ipilimumab",
       "nivolumab",
       "palbociclib",
       "selinexor",
       "surufatinib",
       "tazemetostat",
-      "trametinib"
+      "trametinib",
+      "vorinostat"
     ],
     "patient_count": 17,
-    "description": "11 drugs: bevacizumab, dasatinib, everolimus, fenretinide, ipilimumab"
+    "description": "16 drugs: azd6244, bevacizumab, dasatinib, everolimus, fenretinide"
   },
   "P003": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "carboplatin",
-      "etoposide",
-      "filgrastim",
-      "ifosfamide",
-      "mesna",
-      "pegfilgrastim"
-    ],
-    "patient_count": 11,
-    "description": "6 drugs: carboplatin, etoposide, filgrastim, ifosfamide, mesna"
-  },
-  "P004": {
     "type": "complete_drug_set",
     "drugs": [
       "amifostine",
@@ -50,8 +42,17 @@
       "pegfilgrastim",
       "vincristine"
     ],
-    "patient_count": 10,
+    "patient_count": 9,
     "description": "7 drugs: amifostine, cisplatin, cyclophosphamide, filgrastim, mesna"
+  },
+  "P004": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "dabrafenib",
+      "trametinib"
+    ],
+    "patient_count": 9,
+    "description": "2 drugs: dabrafenib, trametinib"
   },
   "P005": {
     "type": "complete_drug_set",
@@ -66,47 +67,61 @@
       "pegfilgrastim",
       "vincristine"
     ],
-    "patient_count": 7,
+    "patient_count": 6,
     "description": "9 drugs: cyclophosphamide, dexrazoxane, doxorubicin, etoposide, filgrastim"
   },
   "P006": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "irinotecan",
-      "temozolomide"
+      "carboplatin",
+      "etoposide",
+      "filgrastim",
+      "ifosfamide",
+      "mesna",
+      "pegfilgrastim"
     ],
-    "patient_count": 7,
-    "description": "3 drugs: bevacizumab, irinotecan, temozolomide"
+    "patient_count": 6,
+    "description": "6 drugs: carboplatin, etoposide, filgrastim, ifosfamide, mesna"
   },
   "P007": {
     "type": "complete_drug_set",
     "drugs": [
-      "dabrafenib",
-      "mekinist",
-      "tafinlar",
-      "trametinib"
+      "carboplatin",
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "glutamine",
+      "gm-csf",
+      "leucovorin",
+      "mesna",
+      "methotrexate",
+      "pegfilgrastim",
+      "thiotepa",
+      "vincristine"
     ],
-    "patient_count": 6,
-    "description": "4 drugs: dabrafenib, mekinist, tafinlar, trametinib"
+    "patient_count": 5,
+    "description": "14 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
   },
   "P008": {
     "type": "complete_drug_set",
     "drugs": [
-      "leuprolide",
-      "lupron depot"
+      "progesterone",
+      "valproic acid"
     ],
-    "patient_count": 6,
-    "description": "2 drugs: leuprolide, lupron depot"
+    "patient_count": 5,
+    "description": "2 drugs: progesterone, valproic acid"
   },
   "P009": {
     "type": "complete_drug_set",
     "drugs": [
-      "tretinoin",
-      "triamcinolone"
+      "cisplatin",
+      "lomustine",
+      "vincristine"
     ],
     "patient_count": 5,
-    "description": "2 drugs: tretinoin, triamcinolone"
+    "description": "3 drugs: cisplatin, lomustine, vincristine"
   },
   "P010": {
     "type": "complete_drug_set",
@@ -120,51 +135,24 @@
   "P011": {
     "type": "complete_drug_set",
     "drugs": [
-      "cisplatin",
-      "cyclophosphamide",
-      "cytarabine",
-      "dactinomycin",
-      "dexrazoxane",
-      "doxorubicin",
-      "etoposide",
-      "filgrastim",
-      "methotrexate",
-      "pegfilgrastim",
-      "temozolomide",
-      "vincristine"
+      "bevacizumab",
+      "irinotecan",
+      "temozolomide"
     ],
-    "patient_count": 4,
-    "description": "12 drugs: cisplatin, cyclophosphamide, cytarabine, dactinomycin, dexrazoxane"
+    "patient_count": 5,
+    "description": "3 drugs: bevacizumab, irinotecan, temozolomide"
   },
   "P012": {
     "type": "complete_drug_set",
     "drugs": [
       "carboplatin",
-      "vincristine",
-      "zofran"
+      "leuprolide",
+      "vincristine"
     ],
     "patient_count": 4,
-    "description": "3 drugs: carboplatin, vincristine, zofran"
+    "description": "3 drugs: carboplatin, leuprolide, vincristine"
   },
   "P013": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "lomustine",
-      "temozolomide"
-    ],
-    "patient_count": 4,
-    "description": "2 drugs: lomustine, temozolomide"
-  },
-  "P014": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "testosterone cypionate",
-      "triamcinolone"
-    ],
-    "patient_count": 4,
-    "description": "2 drugs: testosterone cypionate, triamcinolone"
-  },
-  "P015": {
     "type": "complete_drug_set",
     "drugs": [
       "cisplatin",
@@ -175,14 +163,47 @@
     "patient_count": 4,
     "description": "4 drugs: cisplatin, cyclophosphamide, lomustine, vincristine"
   },
+  "P014": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "bevacizumab",
+      "temozolomide"
+    ],
+    "patient_count": 4,
+    "description": "2 drugs: bevacizumab, temozolomide"
+  },
+  "P015": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "carboplatin",
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "glutamine",
+      "gm-csf",
+      "mesna",
+      "pegfilgrastim",
+      "thiotepa",
+      "vincristine"
+    ],
+    "patient_count": 4,
+    "description": "12 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
+  },
   "P016": {
     "type": "complete_drug_set",
     "drugs": [
-      "isotretinoin",
-      "tretinoin"
+      "carboplatin",
+      "etoposide",
+      "filgrastim",
+      "ifosfamide",
+      "mesna",
+      "neulasta",
+      "pegfilgrastim"
     ],
     "patient_count": 4,
-    "description": "2 drugs: isotretinoin, tretinoin"
+    "description": "7 drugs: carboplatin, etoposide, filgrastim, ifosfamide, mesna"
   },
   "P017": {
     "type": "complete_drug_set",
@@ -200,150 +221,94 @@
       "bevacizumab",
       "etoposide",
       "irinotecan",
-      "temozolomide"
+      "temozolomide",
+      "valproic acid"
     ],
     "patient_count": 3,
-    "description": "4 drugs: bevacizumab, etoposide, irinotecan, temozolomide"
+    "description": "5 drugs: bevacizumab, etoposide, irinotecan, temozolomide, valproic acid"
   },
   "P019": {
     "type": "complete_drug_set",
     "drugs": [
-      "carboplatin",
       "cisplatin",
       "cyclophosphamide",
+      "cytarabine",
+      "dactinomycin",
+      "dexrazoxane",
+      "doxorubicin",
       "etoposide",
       "filgrastim",
-      "gm-csf",
-      "leucovorin",
-      "mesna",
       "methotrexate",
       "pegfilgrastim",
-      "thiotepa",
+      "temozolomide",
       "vincristine"
     ],
     "patient_count": 3,
-    "description": "12 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
+    "description": "12 drugs: cisplatin, cyclophosphamide, cytarabine, dactinomycin, dexrazoxane"
   },
   "P020": {
     "type": "complete_drug_set",
     "drugs": [
-      "atra",
-      "triamcinolone"
+      "ketoconazole",
+      "tretinoin"
     ],
     "patient_count": 3,
-    "description": "2 drugs: atra, triamcinolone"
+    "description": "2 drugs: ketoconazole, tretinoin"
   },
   "P021": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "lomustine",
-      "temozolomide"
+      "cisplatin",
+      "cyclophosphamide",
+      "filgrastim",
+      "g-csf",
+      "mesna",
+      "pegfilgrastim",
+      "plerixafor",
+      "vincristine"
     ],
     "patient_count": 3,
-    "description": "3 drugs: bevacizumab, lomustine, temozolomide"
+    "description": "8 drugs: cisplatin, cyclophosphamide, filgrastim, g-csf, mesna"
   },
   "P022": {
     "type": "complete_drug_set",
     "drugs": [
-      "cisplatin",
-      "cyclophosphamide",
-      "etoposide",
-      "filgrastim",
-      "gm-csf",
-      "mesna",
-      "pegfilgrastim",
-      "temozolomide",
-      "vincristine"
+      "lomustine",
+      "temozolomide"
     ],
     "patient_count": 3,
-    "description": "9 drugs: cisplatin, cyclophosphamide, etoposide, filgrastim, gm-csf"
+    "description": "2 drugs: lomustine, temozolomide"
   },
   "P023": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "temozolomide"
+      "cabergoline",
+      "progesterone"
     ],
     "patient_count": 3,
-    "description": "2 drugs: bevacizumab, temozolomide"
+    "description": "2 drugs: cabergoline, progesterone"
   },
   "P024": {
     "type": "complete_drug_set",
     "drugs": [
+      "bevacizumab",
       "carboplatin",
-      "leuprolide",
+      "vinblastine",
       "vincristine"
     ],
     "patient_count": 3,
-    "description": "3 drugs: carboplatin, leuprolide, vincristine"
+    "description": "4 drugs: bevacizumab, carboplatin, vinblastine, vincristine"
   },
   "P025": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "dasatinib",
-      "everolimus",
-      "fenretinide",
-      "ipilimumab",
-      "nivolumab",
-      "palbociclib",
-      "selinexor",
-      "surufatinib",
-      "tazemetostat",
-      "trametinib",
-      "triamcinolone"
+      "ketoconazole",
+      "valproic acid"
     ],
     "patient_count": 3,
-    "description": "12 drugs: bevacizumab, dasatinib, everolimus, fenretinide, ipilimumab"
+    "description": "2 drugs: ketoconazole, valproic acid"
   },
   "P026": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "cisplatin",
-      "lomustine",
-      "vincristine"
-    ],
-    "patient_count": 3,
-    "description": "3 drugs: cisplatin, lomustine, vincristine"
-  },
-  "P027": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "carboplatin",
-      "cisplatin",
-      "cyclophosphamide",
-      "etoposide",
-      "filgrastim",
-      "gm-csf",
-      "mesna",
-      "pegfilgrastim",
-      "thiotepa",
-      "vincristine"
-    ],
-    "patient_count": 3,
-    "description": "10 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
-  },
-  "P028": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "bevacizumab",
-      "dasatinib",
-      "everolimus",
-      "fenretinide",
-      "ipilimumab",
-      "nivolumab",
-      "palbociclib",
-      "selinexor",
-      "surufatinib",
-      "tazemetostat",
-      "temozolomide",
-      "trametinib"
-    ],
-    "patient_count": 3,
-    "description": "12 drugs: bevacizumab, dasatinib, everolimus, fenretinide, ipilimumab"
-  },
-  "P029": {
     "type": "complete_drug_set",
     "drugs": [
       "carboplatin",
@@ -353,7 +318,28 @@
     "patient_count": 2,
     "description": "3 drugs: carboplatin, progesterone, vincristine"
   },
-  "P030": {
+  "P027": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "carboplatin",
+      "ketoconazole",
+      "vincristine"
+    ],
+    "patient_count": 2,
+    "description": "3 drugs: carboplatin, ketoconazole, vincristine"
+  },
+  "P028": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "bevacizumab",
+      "carboplatin",
+      "irinotecan",
+      "vincristine"
+    ],
+    "patient_count": 2,
+    "description": "4 drugs: bevacizumab, carboplatin, irinotecan, vincristine"
+  },
+  "P029": {
     "type": "complete_drug_set",
     "drugs": [
       "atra",
@@ -363,25 +349,28 @@
     "patient_count": 2,
     "description": "3 drugs: atra, carboplatin, vincristine"
   },
+  "P030": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "carboplatin",
+      "dabrafenib",
+      "trametinib",
+      "vincristine"
+    ],
+    "patient_count": 2,
+    "description": "4 drugs: carboplatin, dabrafenib, trametinib, vincristine"
+  },
   "P031": {
     "type": "complete_drug_set",
     "drugs": [
       "carboplatin",
-      "cisplatin",
-      "cyclophosphamide",
       "etoposide",
       "filgrastim",
-      "gm-csf",
-      "leucovorin",
-      "mesna",
-      "methotrexate",
-      "nivestym",
       "pegfilgrastim",
-      "thiotepa",
       "vincristine"
     ],
     "patient_count": 2,
-    "description": "13 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
+    "description": "5 drugs: carboplatin, etoposide, filgrastim, pegfilgrastim, vincristine"
   },
   "P032": {
     "type": "complete_drug_set",
@@ -406,23 +395,21 @@
   "P034": {
     "type": "complete_drug_set",
     "drugs": [
-      "progesterone",
-      "triamcinolone"
+      "ketoconazole",
+      "progesterone"
     ],
     "patient_count": 2,
-    "description": "2 drugs: progesterone, triamcinolone"
+    "description": "2 drugs: ketoconazole, progesterone"
   },
   "P035": {
     "type": "complete_drug_set",
     "drugs": [
-      "cisplatin",
-      "cyclophosphamide",
-      "filgrastim",
-      "pegfilgrastim",
+      "carboplatin",
+      "trametinib",
       "vincristine"
     ],
     "patient_count": 2,
-    "description": "5 drugs: cisplatin, cyclophosphamide, filgrastim, pegfilgrastim, vincristine"
+    "description": "3 drugs: carboplatin, trametinib, vincristine"
   },
   "P036": {
     "type": "complete_drug_set",
@@ -442,28 +429,23 @@
     "drugs": [
       "cisplatin",
       "cyclophosphamide",
-      "cytarabine",
-      "dactinomycin",
-      "dexrazoxane",
-      "doxorubicin",
-      "etoposide",
       "filgrastim",
-      "methotrexate",
       "pegfilgrastim",
       "vincristine"
     ],
     "patient_count": 2,
-    "description": "11 drugs: cisplatin, cyclophosphamide, cytarabine, dactinomycin, dexrazoxane"
+    "description": "5 drugs: cisplatin, cyclophosphamide, filgrastim, pegfilgrastim, vincristine"
   },
   "P038": {
     "type": "complete_drug_set",
     "drugs": [
-      "afinitor",
-      "everolimus",
-      "triamcinolone"
+      "bevacizumab",
+      "lomustine",
+      "temozolomide",
+      "valproic acid"
     ],
     "patient_count": 2,
-    "description": "3 drugs: afinitor, everolimus, triamcinolone"
+    "description": "4 drugs: bevacizumab, lomustine, temozolomide, valproic acid"
   },
   "P039": {
     "type": "complete_drug_set",
@@ -486,13 +468,11 @@
   "P040": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "irinotecan",
-      "lomustine",
-      "temozolomide"
+      "atra",
+      "valproic acid"
     ],
     "patient_count": 2,
-    "description": "4 drugs: bevacizumab, irinotecan, lomustine, temozolomide"
+    "description": "2 drugs: atra, valproic acid"
   },
   "P041": {
     "type": "complete_drug_set",
@@ -506,31 +486,31 @@
   "P042": {
     "type": "complete_drug_set",
     "drugs": [
-      "cabergoline",
-      "progesterone"
+      "tretinoin",
+      "valproic acid"
     ],
     "patient_count": 2,
-    "description": "2 drugs: cabergoline, progesterone"
+    "description": "2 drugs: tretinoin, valproic acid"
   },
   "P043": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "triamcinolone"
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "gm-csf",
+      "mesna",
+      "pegfilgrastim",
+      "temozolomide",
+      "valproic acid",
+      "vincristine"
     ],
     "patient_count": 2,
-    "description": "2 drugs: bevacizumab, triamcinolone"
+    "description": "11 drugs: cisplatin, cyclophosphamide, etoposide, filgrastim, g-csf"
   },
   "P044": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "temozolomide",
-      "triamcinolone"
-    ],
-    "patient_count": 2,
-    "description": "2 drugs: temozolomide, triamcinolone"
-  },
-  "P045": {
     "type": "complete_drug_set",
     "drugs": [
       "dexrazoxane",
@@ -544,98 +524,88 @@
     "patient_count": 2,
     "description": "7 drugs: dexrazoxane, doxorubicin, etoposide, filgrastim, ifosfamide"
   },
-  "P046": {
+  "P045": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
+      "atra",
       "carboplatin",
-      "vinblastine",
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "glutamine",
+      "leucovorin",
+      "mesna",
+      "methotrexate",
+      "pegfilgrastim",
+      "plerixafor",
+      "thiotepa",
       "vincristine"
     ],
     "patient_count": 2,
-    "description": "4 drugs: bevacizumab, carboplatin, vinblastine, vincristine"
+    "description": "15 drugs: atra, carboplatin, cisplatin, cyclophosphamide, etoposide"
+  },
+  "P046": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "carboplatin",
+      "selumetinib",
+      "vincristine"
+    ],
+    "patient_count": 2,
+    "description": "3 drugs: carboplatin, selumetinib, vincristine"
   },
   "P047": {
     "type": "complete_drug_set",
     "drugs": [
-      "bevacizumab",
-      "carboplatin",
-      "dasatinib",
-      "everolimus",
-      "fenretinide",
-      "ipilimumab",
-      "nivolumab",
-      "palbociclib",
-      "selinexor",
-      "surufatinib",
-      "tazemetostat",
-      "trametinib",
-      "triamcinolone",
-      "vinblastine",
-      "vincristine"
+      "isotretinoin",
+      "tretinoin"
     ],
     "patient_count": 2,
-    "description": "15 drugs: bevacizumab, carboplatin, dasatinib, everolimus, fenretinide"
+    "description": "2 drugs: isotretinoin, tretinoin"
   },
   "P048": {
     "type": "complete_drug_set",
     "drugs": [
-      "imiquimod",
-      "triamcinolone"
+      "lomustine",
+      "procarbazine",
+      "progesterone",
+      "thioguanine",
+      "vincristine"
     ],
     "patient_count": 2,
-    "description": "2 drugs: imiquimod, triamcinolone"
+    "description": "5 drugs: lomustine, procarbazine, progesterone, thioguanine, vincristine"
   },
   "P049": {
     "type": "complete_drug_set",
     "drugs": [
-      "larotrectinib",
-      "triamcinolone",
-      "vitrakvi"
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "gm-csf",
+      "leucovorin",
+      "mesna",
+      "methotrexate",
+      "pegfilgrastim",
+      "vincristine"
     ],
     "patient_count": 2,
-    "description": "3 drugs: larotrectinib, triamcinolone, vitrakvi"
+    "description": "11 drugs: cisplatin, cyclophosphamide, etoposide, filgrastim, g-csf"
   },
   "P050": {
     "type": "complete_drug_set",
     "drugs": [
-      "carboplatin",
-      "etoposide",
-      "filgrastim",
-      "pegfilgrastim",
-      "ziextenzo"
-    ],
-    "patient_count": 2,
-    "description": "5 drugs: carboplatin, etoposide, filgrastim, pegfilgrastim, ziextenzo"
-  },
-  "P051": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "bevacizumab",
-      "carboplatin",
-      "dasatinib",
-      "everolimus",
-      "fenretinide",
-      "ipilimumab",
-      "nivolumab",
-      "palbociclib",
-      "selinexor",
-      "surufatinib",
-      "tazemetostat",
-      "trametinib",
-      "triamcinolone",
-      "vincristine"
-    ],
-    "patient_count": 2,
-    "description": "14 drugs: bevacizumab, carboplatin, dasatinib, everolimus, fenretinide"
-  },
-  "P052": {
-    "type": "complete_drug_set",
-    "drugs": [
+      "azd6244",
       "bevacizumab",
       "dasatinib",
       "everolimus",
       "fenretinide",
+      "fimepinostat",
+      "indoximod",
+      "investigational chemotherapy (unspecified)",
       "ipilimumab",
       "nivolumab",
       "palbociclib",
@@ -644,70 +614,77 @@
       "tazemetostat",
       "temozolomide",
       "trametinib",
-      "triamcinolone"
+      "valproic acid",
+      "vorinostat"
     ],
     "patient_count": 2,
-    "description": "13 drugs: bevacizumab, dasatinib, everolimus, fenretinide, ipilimumab"
+    "description": "18 drugs: azd6244, bevacizumab, dasatinib, everolimus, fenretinide"
+  },
+  "P051": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "temozolomide",
+      "valproic acid"
+    ],
+    "patient_count": 2,
+    "description": "2 drugs: temozolomide, valproic acid"
+  },
+  "P052": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "testosterone",
+      "testosterone cypionate"
+    ],
+    "patient_count": 2,
+    "description": "2 drugs: testosterone, testosterone cypionate"
   },
   "P053": {
     "type": "complete_drug_set",
     "drugs": [
-      "koselugo",
-      "selumetinib",
-      "triamcinolone"
+      "azd6244",
+      "bevacizumab",
+      "dasatinib",
+      "everolimus",
+      "fenretinide",
+      "fimepinostat",
+      "indoximod",
+      "investigational chemotherapy (unspecified)",
+      "ipilimumab",
+      "nivolumab",
+      "palbociclib",
+      "selinexor",
+      "surufatinib",
+      "tazemetostat",
+      "temozolomide",
+      "trametinib",
+      "vorinostat"
     ],
     "patient_count": 2,
-    "description": "3 drugs: koselugo, selumetinib, triamcinolone"
+    "description": "17 drugs: azd6244, bevacizumab, dasatinib, everolimus, fenretinide"
   },
   "P054": {
     "type": "complete_drug_set",
     "drugs": [
+      "carboplatin",
+      "cisplatin",
+      "cyclophosphamide",
+      "etoposide",
+      "filgrastim",
+      "g-csf",
+      "glutamine",
+      "gm-csf",
+      "leucovorin",
+      "mesna",
       "methotrexate",
-      "triamcinolone"
+      "pegfilgrastim",
+      "plerixafor",
+      "thiotepa",
+      "vincristine"
     ],
     "patient_count": 2,
-    "description": "2 drugs: methotrexate, triamcinolone"
+    "description": "15 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
   },
   "P055": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "cisplatin",
-      "cyclophosphamide",
-      "filgrastim",
-      "mesna",
-      "pegfilgrastim",
-      "plerixafor",
-      "progesterone",
-      "vincristine"
-    ],
-    "patient_count": 2,
-    "description": "8 drugs: cisplatin, cyclophosphamide, filgrastim, mesna, pegfilgrastim"
-  },
-  "P056": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "triamcinolone",
-      "zofran"
-    ],
-    "patient_count": 2,
-    "description": "2 drugs: triamcinolone, zofran"
-  },
-  "P057": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "anastrozole",
-      "cisplatin",
-      "cyclophosphamide",
-      "filgrastim",
-      "mesna",
-      "pegfilgrastim",
-      "plerixafor",
-      "vincristine"
-    ],
-    "patient_count": 2,
-    "description": "8 drugs: anastrozole, cisplatin, cyclophosphamide, filgrastim, mesna"
-  },
-  "P058": {
     "type": "complete_drug_set",
     "drugs": [
       "lomustine",
@@ -718,7 +695,17 @@
     "patient_count": 2,
     "description": "4 drugs: lomustine, procarbazine, thioguanine, vincristine"
   },
-  "P059": {
+  "P056": {
+    "type": "complete_drug_set",
+    "drugs": [
+      "carboplatin",
+      "valproic acid",
+      "vincristine"
+    ],
+    "patient_count": 2,
+    "description": "3 drugs: carboplatin, valproic acid, vincristine"
+  },
+  "P057": {
     "type": "complete_drug_set",
     "drugs": [
       "cyclophosphamide",
@@ -731,42 +718,32 @@
     "patient_count": 2,
     "description": "6 drugs: cyclophosphamide, dactinomycin, filgrastim, mesna, pegfilgrastim"
   },
-  "P060": {
+  "P058": {
     "type": "complete_drug_set",
     "drugs": [
-      "cisplatin",
-      "cyclophosphamide",
-      "etoposide",
-      "filgrastim",
-      "gm-csf",
-      "mesna",
-      "pegfilgrastim",
-      "vincristine"
-    ],
-    "patient_count": 2,
-    "description": "8 drugs: cisplatin, cyclophosphamide, etoposide, filgrastim, gm-csf"
-  },
-  "P061": {
-    "type": "complete_drug_set",
-    "drugs": [
+      "azd6244",
       "bevacizumab",
       "dasatinib",
       "everolimus",
       "fenretinide",
+      "fimepinostat",
+      "indoximod",
+      "investigational chemotherapy (unspecified)",
       "ipilimumab",
-      "koselugo",
+      "ketoconazole",
       "nivolumab",
       "palbociclib",
       "selinexor",
       "selumetinib",
       "surufatinib",
       "tazemetostat",
-      "trametinib"
+      "trametinib",
+      "vorinostat"
     ],
     "patient_count": 2,
-    "description": "13 drugs: bevacizumab, dasatinib, everolimus, fenretinide, ipilimumab"
+    "description": "18 drugs: azd6244, bevacizumab, dasatinib, everolimus, fenretinide"
   },
-  "P062": {
+  "P059": {
     "type": "complete_drug_set",
     "drugs": [
       "etoposide",
@@ -778,7 +755,7 @@
     "patient_count": 2,
     "description": "5 drugs: etoposide, filgrastim, ifosfamide, mesna, pegfilgrastim"
   },
-  "P063": {
+  "P060": {
     "type": "complete_drug_set",
     "drugs": [
       "cyclophosphamide",
@@ -792,19 +769,7 @@
     "patient_count": 2,
     "description": "7 drugs: cyclophosphamide, etoposide, filgrastim, ifosfamide, mesna"
   },
-  "P064": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "dabrafenib",
-      "mekinist",
-      "progesterone",
-      "tafinlar",
-      "trametinib"
-    ],
-    "patient_count": 2,
-    "description": "5 drugs: dabrafenib, mekinist, progesterone, tafinlar, trametinib"
-  },
-  "P065": {
+  "P061": {
     "type": "complete_drug_set",
     "drugs": [
       "bevacizumab",
@@ -814,16 +779,44 @@
     "patient_count": 2,
     "description": "3 drugs: bevacizumab, nivolumab, temozolomide"
   },
-  "P066": {
+  "P062": {
     "type": "complete_drug_set",
     "drugs": [
-      "sirolimus",
-      "triamcinolone"
+      "azd6244",
+      "bevacizumab",
+      "carboplatin",
+      "cisplatin",
+      "cyclophosphamide",
+      "dasatinib",
+      "etoposide",
+      "everolimus",
+      "fenretinide",
+      "filgrastim",
+      "fimepinostat",
+      "g-csf",
+      "glutamine",
+      "gm-csf",
+      "indoximod",
+      "investigational chemotherapy (unspecified)",
+      "ipilimumab",
+      "isotretinoin",
+      "mesna",
+      "nivolumab",
+      "palbociclib",
+      "pegfilgrastim",
+      "selinexor",
+      "surufatinib",
+      "tazemetostat",
+      "thiotepa",
+      "trametinib",
+      "tretinoin",
+      "vincristine",
+      "vorinostat"
     ],
     "patient_count": 2,
-    "description": "2 drugs: sirolimus, triamcinolone"
+    "description": "30 drugs: azd6244, bevacizumab, carboplatin, cisplatin, cyclophosphamide"
   },
-  "P067": {
+  "P063": {
     "type": "complete_drug_set",
     "drugs": [
       "cisplatin",
@@ -837,43 +830,7 @@
     "patient_count": 2,
     "description": "7 drugs: cisplatin, cyclophosphamide, filgrastim, mesna, pegfilgrastim"
   },
-  "P068": {
-    "type": "complete_drug_set",
-    "drugs": [
-      "carboplatin",
-      "cisplatin",
-      "cyclophosphamide",
-      "etoposide",
-      "filgrastim",
-      "gm-csf",
-      "mesna",
-      "pegfilgrastim",
-      "thiotepa",
-      "triamcinolone",
-      "vincristine"
-    ],
-    "patient_count": 2,
-    "description": "11 drugs: carboplatin, cisplatin, cyclophosphamide, etoposide, filgrastim"
-  },
-  "C069": {
-    "type": "drug_combination",
-    "drugs": [
-      "irinotecan",
-      "vincristine"
-    ],
-    "patient_count": 32,
-    "description": "irinotecan + vincristine"
-  },
-  "C070": {
-    "type": "drug_combination",
-    "drugs": [
-      "etoposide",
-      "plerixafor"
-    ],
-    "patient_count": 31,
-    "description": "etoposide + plerixafor"
-  },
-  "C071": {
+  "C064": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -882,7 +839,7 @@
     "patient_count": 31,
     "description": "cyclophosphamide + topotecan"
   },
-  "C072": {
+  "C065": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -891,7 +848,7 @@
     "patient_count": 29,
     "description": "filgrastim + topotecan"
   },
-  "C073": {
+  "C066": {
     "type": "drug_combination",
     "drugs": [
       "pegfilgrastim",
@@ -900,7 +857,16 @@
     "patient_count": 27,
     "description": "pegfilgrastim + topotecan"
   },
-  "C074": {
+  "C067": {
+    "type": "drug_combination",
+    "drugs": [
+      "cyclophosphamide",
+      "neulasta"
+    ],
+    "patient_count": 24,
+    "description": "cyclophosphamide + neulasta"
+  },
+  "C068": {
     "type": "drug_combination",
     "drugs": [
       "etoposide",
@@ -909,7 +875,16 @@
     "patient_count": 24,
     "description": "etoposide + topotecan"
   },
-  "C075": {
+  "C069": {
+    "type": "drug_combination",
+    "drugs": [
+      "neulasta",
+      "vincristine"
+    ],
+    "patient_count": 21,
+    "description": "neulasta + vincristine"
+  },
+  "C070": {
     "type": "drug_combination",
     "drugs": [
       "doxorubicin",
@@ -918,7 +893,16 @@
     "patient_count": 19,
     "description": "doxorubicin + leucovorin"
   },
-  "C076": {
+  "C071": {
+    "type": "drug_combination",
+    "drugs": [
+      "cisplatin",
+      "neulasta"
+    ],
+    "patient_count": 19,
+    "description": "cisplatin + neulasta"
+  },
+  "C072": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -927,7 +911,7 @@
     "patient_count": 19,
     "description": "filgrastim + irinotecan"
   },
-  "C077": {
+  "C073": {
     "type": "drug_combination",
     "drugs": [
       "irinotecan",
@@ -936,7 +920,7 @@
     "patient_count": 18,
     "description": "irinotecan + pegfilgrastim"
   },
-  "C078": {
+  "C074": {
     "type": "drug_combination",
     "drugs": [
       "dexrazoxane",
@@ -945,43 +929,25 @@
     "patient_count": 17,
     "description": "dexrazoxane + leucovorin"
   },
-  "C079": {
+  "C075": {
     "type": "drug_combination",
     "drugs": [
-      "bevacizumab",
-      "cyclophosphamide"
+      "g-csf",
+      "topotecan"
     ],
     "patient_count": 17,
-    "description": "bevacizumab + cyclophosphamide"
+    "description": "g-csf + topotecan"
   },
-  "C080": {
+  "C076": {
     "type": "drug_combination",
     "drugs": [
-      "bevacizumab",
-      "filgrastim"
+      "etoposide",
+      "ziextenzo"
     ],
     "patient_count": 16,
-    "description": "bevacizumab + filgrastim"
+    "description": "etoposide + ziextenzo"
   },
-  "C081": {
-    "type": "drug_combination",
-    "drugs": [
-      "fulphila",
-      "pegfilgrastim"
-    ],
-    "patient_count": 15,
-    "description": "fulphila + pegfilgrastim"
-  },
-  "C082": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "fulphila"
-    ],
-    "patient_count": 15,
-    "description": "filgrastim + fulphila"
-  },
-  "C083": {
+  "C077": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -990,7 +956,7 @@
     "patient_count": 14,
     "description": "filgrastim + gemcitabine"
   },
-  "C084": {
+  "C078": {
     "type": "drug_combination",
     "drugs": [
       "gemcitabine",
@@ -999,16 +965,16 @@
     "patient_count": 14,
     "description": "gemcitabine + pegfilgrastim"
   },
-  "C085": {
+  "C079": {
     "type": "drug_combination",
     "drugs": [
-      "carboplatin",
-      "plerixafor"
+      "g-csf",
+      "ifosfamide"
     ],
     "patient_count": 14,
-    "description": "carboplatin + plerixafor"
+    "description": "g-csf + ifosfamide"
   },
-  "C086": {
+  "C080": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -1017,25 +983,7 @@
     "patient_count": 14,
     "description": "cyclophosphamide + thalidomide"
   },
-  "C087": {
-    "type": "drug_combination",
-    "drugs": [
-      "bevacizumab",
-      "pegfilgrastim"
-    ],
-    "patient_count": 13,
-    "description": "bevacizumab + pegfilgrastim"
-  },
-  "C088": {
-    "type": "drug_combination",
-    "drugs": [
-      "gm-csf",
-      "plerixafor"
-    ],
-    "patient_count": 13,
-    "description": "gm-csf + plerixafor"
-  },
-  "C089": {
+  "C081": {
     "type": "drug_combination",
     "drugs": [
       "bevacizumab",
@@ -1044,7 +992,7 @@
     "patient_count": 13,
     "description": "bevacizumab + topotecan"
   },
-  "C090": {
+  "C082": {
     "type": "drug_combination",
     "drugs": [
       "etoposide",
@@ -1053,34 +1001,7 @@
     "patient_count": 13,
     "description": "etoposide + thalidomide"
   },
-  "C091": {
-    "type": "drug_combination",
-    "drugs": [
-      "doxorubicin",
-      "triamcinolone"
-    ],
-    "patient_count": 12,
-    "description": "doxorubicin + triamcinolone"
-  },
-  "C092": {
-    "type": "drug_combination",
-    "drugs": [
-      "leucovorin",
-      "triamcinolone"
-    ],
-    "patient_count": 11,
-    "description": "leucovorin + triamcinolone"
-  },
-  "C093": {
-    "type": "drug_combination",
-    "drugs": [
-      "dexrazoxane",
-      "triamcinolone"
-    ],
-    "patient_count": 11,
-    "description": "dexrazoxane + triamcinolone"
-  },
-  "C094": {
+  "C083": {
     "type": "drug_combination",
     "drugs": [
       "cytarabine",
@@ -1089,52 +1010,25 @@
     "patient_count": 11,
     "description": "cytarabine + leucovorin"
   },
-  "C095": {
+  "C084": {
     "type": "drug_combination",
     "drugs": [
-      "gm-csf",
-      "tretinoin"
+      "doxorubicin",
+      "neulasta"
     ],
     "patient_count": 11,
-    "description": "gm-csf + tretinoin"
+    "description": "doxorubicin + neulasta"
   },
-  "C096": {
+  "C085": {
     "type": "drug_combination",
     "drugs": [
-      "gm-csf",
-      "isotretinoin"
+      "filgrastim",
+      "progesterone"
     ],
     "patient_count": 11,
-    "description": "gm-csf + isotretinoin"
+    "description": "filgrastim + progesterone"
   },
-  "C097": {
-    "type": "drug_combination",
-    "drugs": [
-      "carboplatin",
-      "etopophos"
-    ],
-    "patient_count": 11,
-    "description": "carboplatin + etopophos"
-  },
-  "C098": {
-    "type": "drug_combination",
-    "drugs": [
-      "etopophos",
-      "etoposide"
-    ],
-    "patient_count": 11,
-    "description": "etopophos + etoposide"
-  },
-  "C099": {
-    "type": "drug_combination",
-    "drugs": [
-      "etopophos",
-      "filgrastim"
-    ],
-    "patient_count": 11,
-    "description": "etopophos + filgrastim"
-  },
-  "C100": {
+  "C086": {
     "type": "drug_combination",
     "drugs": [
       "bevacizumab",
@@ -1143,25 +1037,7 @@
     "patient_count": 10,
     "description": "bevacizumab + progesterone"
   },
-  "C101": {
-    "type": "drug_combination",
-    "drugs": [
-      "fulphila",
-      "vincristine"
-    ],
-    "patient_count": 10,
-    "description": "fulphila + vincristine"
-  },
-  "C102": {
-    "type": "drug_combination",
-    "drugs": [
-      "gemcitabine",
-      "vincristine"
-    ],
-    "patient_count": 10,
-    "description": "gemcitabine + vincristine"
-  },
-  "C103": {
+  "C087": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -1170,16 +1046,34 @@
     "patient_count": 10,
     "description": "cyclophosphamide + gemcitabine"
   },
-  "C104": {
+  "C088": {
     "type": "drug_combination",
     "drugs": [
-      "etoposide",
-      "tretinoin"
+      "gemcitabine",
+      "vincristine"
     ],
     "patient_count": 10,
-    "description": "etoposide + tretinoin"
+    "description": "gemcitabine + vincristine"
   },
-  "C105": {
+  "C089": {
+    "type": "drug_combination",
+    "drugs": [
+      "dexrazoxane",
+      "neulasta"
+    ],
+    "patient_count": 10,
+    "description": "dexrazoxane + neulasta"
+  },
+  "C090": {
+    "type": "drug_combination",
+    "drugs": [
+      "pegfilgrastim",
+      "progesterone"
+    ],
+    "patient_count": 10,
+    "description": "pegfilgrastim + progesterone"
+  },
+  "C091": {
     "type": "drug_combination",
     "drugs": [
       "cisplatin",
@@ -1188,7 +1082,7 @@
     "patient_count": 10,
     "description": "cisplatin + topotecan"
   },
-  "C106": {
+  "C092": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -1197,61 +1091,7 @@
     "patient_count": 10,
     "description": "cyclophosphamide + irinotecan"
   },
-  "C107": {
-    "type": "drug_combination",
-    "drugs": [
-      "etoposide",
-      "fulphila"
-    ],
-    "patient_count": 9,
-    "description": "etoposide + fulphila"
-  },
-  "C108": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "pegfilgrastim + pemetrexed"
-  },
-  "C109": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "cyclophosphamide + pemetrexed"
-  },
-  "C110": {
-    "type": "drug_combination",
-    "drugs": [
-      "gemcitabine",
-      "mesna"
-    ],
-    "patient_count": 9,
-    "description": "gemcitabine + mesna"
-  },
-  "C111": {
-    "type": "drug_combination",
-    "drugs": [
-      "cisplatin",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "cisplatin + pemetrexed"
-  },
-  "C112": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "filgrastim + pemetrexed"
-  },
-  "C113": {
+  "C093": {
     "type": "drug_combination",
     "drugs": [
       "pemetrexed",
@@ -1260,25 +1100,7 @@
     "patient_count": 9,
     "description": "pemetrexed + vincristine"
   },
-  "C114": {
-    "type": "drug_combination",
-    "drugs": [
-      "gemcitabine",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "gemcitabine + pemetrexed"
-  },
-  "C115": {
-    "type": "drug_combination",
-    "drugs": [
-      "mesna",
-      "pemetrexed"
-    ],
-    "patient_count": 9,
-    "description": "mesna + pemetrexed"
-  },
-  "C116": {
+  "C094": {
     "type": "drug_combination",
     "drugs": [
       "cisplatin",
@@ -1287,52 +1109,70 @@
     "patient_count": 9,
     "description": "cisplatin + gemcitabine"
   },
-  "C117": {
+  "C095": {
     "type": "drug_combination",
     "drugs": [
-      "atra",
-      "cyclophosphamide"
+      "gemcitabine",
+      "mesna"
     ],
     "patient_count": 9,
-    "description": "atra + cyclophosphamide"
+    "description": "gemcitabine + mesna"
   },
-  "C118": {
+  "C096": {
+    "type": "drug_combination",
+    "drugs": [
+      "pegfilgrastim",
+      "pemetrexed"
+    ],
+    "patient_count": 9,
+    "description": "pegfilgrastim + pemetrexed"
+  },
+  "C097": {
+    "type": "drug_combination",
+    "drugs": [
+      "filgrastim",
+      "pemetrexed"
+    ],
+    "patient_count": 9,
+    "description": "filgrastim + pemetrexed"
+  },
+  "C098": {
+    "type": "drug_combination",
+    "drugs": [
+      "mesna",
+      "pemetrexed"
+    ],
+    "patient_count": 9,
+    "description": "mesna + pemetrexed"
+  },
+  "C099": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
-      "fulphila"
+      "pemetrexed"
     ],
     "patient_count": 9,
-    "description": "cyclophosphamide + fulphila"
+    "description": "cyclophosphamide + pemetrexed"
   },
-  "C119": {
+  "C100": {
+    "type": "drug_combination",
+    "drugs": [
+      "gemcitabine",
+      "pemetrexed"
+    ],
+    "patient_count": 9,
+    "description": "gemcitabine + pemetrexed"
+  },
+  "C101": {
     "type": "drug_combination",
     "drugs": [
       "cisplatin",
-      "fulphila"
+      "pemetrexed"
     ],
     "patient_count": 9,
-    "description": "cisplatin + fulphila"
+    "description": "cisplatin + pemetrexed"
   },
-  "C120": {
-    "type": "drug_combination",
-    "drugs": [
-      "cytarabine",
-      "triamcinolone"
-    ],
-    "patient_count": 9,
-    "description": "cytarabine + triamcinolone"
-  },
-  "C121": {
-    "type": "drug_combination",
-    "drugs": [
-      "cytarabine",
-      "daunorubicin"
-    ],
-    "patient_count": 9,
-    "description": "cytarabine + daunorubicin"
-  },
-  "C122": {
+  "C102": {
     "type": "drug_combination",
     "drugs": [
       "mercaptopurine",
@@ -1341,7 +1181,25 @@
     "patient_count": 9,
     "description": "mercaptopurine + methotrexate"
   },
-  "C123": {
+  "C103": {
+    "type": "drug_combination",
+    "drugs": [
+      "cytarabine",
+      "daunorubicin"
+    ],
+    "patient_count": 9,
+    "description": "cytarabine + daunorubicin"
+  },
+  "C104": {
+    "type": "drug_combination",
+    "drugs": [
+      "doxorubicin",
+      "g-csf"
+    ],
+    "patient_count": 9,
+    "description": "doxorubicin + g-csf"
+  },
+  "C105": {
     "type": "drug_combination",
     "drugs": [
       "dinutuximab",
@@ -1350,7 +1208,7 @@
     "patient_count": 9,
     "description": "dinutuximab + gm-csf"
   },
-  "C124": {
+  "C106": {
     "type": "drug_combination",
     "drugs": [
       "gm-csf",
@@ -1359,7 +1217,7 @@
     "patient_count": 9,
     "description": "gm-csf + irinotecan"
   },
-  "C125": {
+  "C107": {
     "type": "drug_combination",
     "drugs": [
       "gm-csf",
@@ -1368,133 +1226,25 @@
     "patient_count": 9,
     "description": "gm-csf + topotecan"
   },
-  "C126": {
+  "C108": {
     "type": "drug_combination",
     "drugs": [
-      "cyclophosphamide",
-      "isotretinoin"
+      "cytarabine",
+      "g-csf"
     ],
-    "patient_count": 8,
-    "description": "cyclophosphamide + isotretinoin"
+    "patient_count": 9,
+    "description": "cytarabine + g-csf"
   },
-  "C127": {
+  "C109": {
     "type": "drug_combination",
     "drugs": [
-      "cyclophosphamide",
-      "tretinoin"
+      "carboplatin",
+      "ziextenzo"
     ],
     "patient_count": 8,
-    "description": "cyclophosphamide + tretinoin"
+    "description": "carboplatin + ziextenzo"
   },
-  "C128": {
-    "type": "drug_combination",
-    "drugs": [
-      "atra",
-      "filgrastim"
-    ],
-    "patient_count": 8,
-    "description": "atra + filgrastim"
-  },
-  "C129": {
-    "type": "drug_combination",
-    "drugs": [
-      "irinotecan",
-      "triamcinolone"
-    ],
-    "patient_count": 8,
-    "description": "irinotecan + triamcinolone"
-  },
-  "C130": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "nivolumab"
-    ],
-    "patient_count": 8,
-    "description": "filgrastim + nivolumab"
-  },
-  "C131": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "ipilimumab"
-    ],
-    "patient_count": 8,
-    "description": "filgrastim + ipilimumab"
-  },
-  "C132": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "tretinoin"
-    ],
-    "patient_count": 8,
-    "description": "filgrastim + tretinoin"
-  },
-  "C133": {
-    "type": "drug_combination",
-    "drugs": [
-      "bevacizumab",
-      "tretinoin"
-    ],
-    "patient_count": 8,
-    "description": "bevacizumab + tretinoin"
-  },
-  "C134": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "tazemetostat"
-    ],
-    "patient_count": 8,
-    "description": "cyclophosphamide + tazemetostat"
-  },
-  "C135": {
-    "type": "drug_combination",
-    "drugs": [
-      "bevacizumab",
-      "cisplatin"
-    ],
-    "patient_count": 8,
-    "description": "bevacizumab + cisplatin"
-  },
-  "C136": {
-    "type": "drug_combination",
-    "drugs": [
-      "nivolumab",
-      "pegfilgrastim"
-    ],
-    "patient_count": 8,
-    "description": "nivolumab + pegfilgrastim"
-  },
-  "C137": {
-    "type": "drug_combination",
-    "drugs": [
-      "ipilimumab",
-      "pegfilgrastim"
-    ],
-    "patient_count": 8,
-    "description": "ipilimumab + pegfilgrastim"
-  },
-  "C138": {
-    "type": "drug_combination",
-    "drugs": [
-      "methotrexate",
-      "plerixafor"
-    ],
-    "patient_count": 8,
-    "description": "methotrexate + plerixafor"
-  },
-  "C139": {
-    "type": "drug_combination",
-    "drugs": [
-      "nivestym",
-      "plerixafor"
-    ],
-    "patient_count": 8,
-    "description": "nivestym + plerixafor"
-  },
-  "C140": {
+  "C110": {
     "type": "drug_combination",
     "drugs": [
       "ifosfamide",
@@ -1503,16 +1253,16 @@
     "patient_count": 8,
     "description": "ifosfamide + plerixafor"
   },
-  "C141": {
+  "C111": {
     "type": "drug_combination",
     "drugs": [
-      "plerixafor",
-      "thiotepa"
+      "dexrazoxane",
+      "g-csf"
     ],
     "patient_count": 8,
-    "description": "plerixafor + thiotepa"
+    "description": "dexrazoxane + g-csf"
   },
-  "C142": {
+  "C112": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -1521,7 +1271,34 @@
     "patient_count": 8,
     "description": "filgrastim + melphalan"
   },
-  "C143": {
+  "C113": {
+    "type": "drug_combination",
+    "drugs": [
+      "glutamine",
+      "melphalan"
+    ],
+    "patient_count": 8,
+    "description": "glutamine + melphalan"
+  },
+  "C114": {
+    "type": "drug_combination",
+    "drugs": [
+      "g-csf",
+      "melphalan"
+    ],
+    "patient_count": 8,
+    "description": "g-csf + melphalan"
+  },
+  "C115": {
+    "type": "drug_combination",
+    "drugs": [
+      "g-csf",
+      "irinotecan"
+    ],
+    "patient_count": 8,
+    "description": "g-csf + irinotecan"
+  },
+  "C116": {
     "type": "drug_combination",
     "drugs": [
       "carboplatin",
@@ -1530,7 +1307,7 @@
     "patient_count": 7,
     "description": "carboplatin + dexrazoxane"
   },
-  "C144": {
+  "C117": {
     "type": "drug_combination",
     "drugs": [
       "carboplatin",
@@ -1539,7 +1316,7 @@
     "patient_count": 7,
     "description": "carboplatin + doxorubicin"
   },
-  "C145": {
+  "C118": {
     "type": "drug_combination",
     "drugs": [
       "temozolomide",
@@ -1548,16 +1325,7 @@
     "patient_count": 7,
     "description": "temozolomide + topotecan"
   },
-  "C146": {
-    "type": "drug_combination",
-    "drugs": [
-      "dactinomycin",
-      "triamcinolone"
-    ],
-    "patient_count": 7,
-    "description": "dactinomycin + triamcinolone"
-  },
-  "C147": {
+  "C119": {
     "type": "drug_combination",
     "drugs": [
       "cytarabine",
@@ -1566,232 +1334,16 @@
     "patient_count": 7,
     "description": "cytarabine + mesna"
   },
-  "C148": {
+  "C120": {
     "type": "drug_combination",
     "drugs": [
-      "everolimus",
-      "pegfilgrastim"
+      "methotrexate",
+      "neulasta"
     ],
     "patient_count": 7,
-    "description": "everolimus + pegfilgrastim"
+    "description": "methotrexate + neulasta"
   },
-  "C149": {
-    "type": "drug_combination",
-    "drugs": [
-      "etoposide",
-      "isotretinoin"
-    ],
-    "patient_count": 7,
-    "description": "etoposide + isotretinoin"
-  },
-  "C150": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "trametinib"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + trametinib"
-  },
-  "C151": {
-    "type": "drug_combination",
-    "drugs": [
-      "dasatinib",
-      "filgrastim"
-    ],
-    "patient_count": 7,
-    "description": "dasatinib + filgrastim"
-  },
-  "C152": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "tazemetostat"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + tazemetostat"
-  },
-  "C153": {
-    "type": "drug_combination",
-    "drugs": [
-      "nivolumab",
-      "tretinoin"
-    ],
-    "patient_count": 7,
-    "description": "nivolumab + tretinoin"
-  },
-  "C154": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "isotretinoin"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + isotretinoin"
-  },
-  "C155": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "surufatinib"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + surufatinib"
-  },
-  "C156": {
-    "type": "drug_combination",
-    "drugs": [
-      "fenretinide",
-      "filgrastim"
-    ],
-    "patient_count": 7,
-    "description": "fenretinide + filgrastim"
-  },
-  "C157": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "selinexor"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + selinexor"
-  },
-  "C158": {
-    "type": "drug_combination",
-    "drugs": [
-      "dasatinib",
-      "pegfilgrastim"
-    ],
-    "patient_count": 7,
-    "description": "dasatinib + pegfilgrastim"
-  },
-  "C159": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "dasatinib"
-    ],
-    "patient_count": 7,
-    "description": "cyclophosphamide + dasatinib"
-  },
-  "C160": {
-    "type": "drug_combination",
-    "drugs": [
-      "fenretinide",
-      "pegfilgrastim"
-    ],
-    "patient_count": 7,
-    "description": "fenretinide + pegfilgrastim"
-  },
-  "C161": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "tazemetostat"
-    ],
-    "patient_count": 7,
-    "description": "pegfilgrastim + tazemetostat"
-  },
-  "C162": {
-    "type": "drug_combination",
-    "drugs": [
-      "trametinib",
-      "tretinoin"
-    ],
-    "patient_count": 7,
-    "description": "trametinib + tretinoin"
-  },
-  "C163": {
-    "type": "drug_combination",
-    "drugs": [
-      "everolimus",
-      "filgrastim"
-    ],
-    "patient_count": 7,
-    "description": "everolimus + filgrastim"
-  },
-  "C164": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "surufatinib"
-    ],
-    "patient_count": 7,
-    "description": "pegfilgrastim + surufatinib"
-  },
-  "C165": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "trametinib"
-    ],
-    "patient_count": 7,
-    "description": "pegfilgrastim + trametinib"
-  },
-  "C166": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "selinexor"
-    ],
-    "patient_count": 7,
-    "description": "pegfilgrastim + selinexor"
-  },
-  "C167": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "palbociclib"
-    ],
-    "patient_count": 7,
-    "description": "filgrastim + palbociclib"
-  },
-  "C168": {
-    "type": "drug_combination",
-    "drugs": [
-      "palbociclib",
-      "pegfilgrastim"
-    ],
-    "patient_count": 7,
-    "description": "palbociclib + pegfilgrastim"
-  },
-  "C169": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "nivolumab"
-    ],
-    "patient_count": 7,
-    "description": "cyclophosphamide + nivolumab"
-  },
-  "C170": {
-    "type": "drug_combination",
-    "drugs": [
-      "bevacizumab",
-      "mesna"
-    ],
-    "patient_count": 7,
-    "description": "bevacizumab + mesna"
-  },
-  "C171": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "ipilimumab"
-    ],
-    "patient_count": 7,
-    "description": "cyclophosphamide + ipilimumab"
-  },
-  "C172": {
-    "type": "drug_combination",
-    "drugs": [
-      "leucovorin",
-      "plerixafor"
-    ],
-    "patient_count": 7,
-    "description": "leucovorin + plerixafor"
-  },
-  "C173": {
+  "C121": {
     "type": "drug_combination",
     "drugs": [
       "topotecan",
@@ -1800,7 +1352,7 @@
     "patient_count": 7,
     "description": "topotecan + vincristine"
   },
-  "C174": {
+  "C122": {
     "type": "drug_combination",
     "drugs": [
       "daunorubicin",
@@ -1809,7 +1361,7 @@
     "patient_count": 7,
     "description": "daunorubicin + dexrazoxane"
   },
-  "C175": {
+  "C123": {
     "type": "drug_combination",
     "drugs": [
       "asparaginase",
@@ -1818,16 +1370,7 @@
     "patient_count": 7,
     "description": "asparaginase + cytarabine"
   },
-  "C176": {
-    "type": "drug_combination",
-    "drugs": [
-      "dinutuximab",
-      "irinotecan"
-    ],
-    "patient_count": 7,
-    "description": "dinutuximab + irinotecan"
-  },
-  "C177": {
+  "C124": {
     "type": "drug_combination",
     "drugs": [
       "dinutuximab",
@@ -1836,7 +1379,16 @@
     "patient_count": 7,
     "description": "dinutuximab + temozolomide"
   },
-  "C178": {
+  "C125": {
+    "type": "drug_combination",
+    "drugs": [
+      "dinutuximab",
+      "irinotecan"
+    ],
+    "patient_count": 7,
+    "description": "dinutuximab + irinotecan"
+  },
+  "C126": {
     "type": "drug_combination",
     "drugs": [
       "carboplatin",
@@ -1845,7 +1397,7 @@
     "patient_count": 7,
     "description": "carboplatin + temozolomide"
   },
-  "C179": {
+  "C127": {
     "type": "drug_combination",
     "drugs": [
       "irinotecan",
@@ -1854,7 +1406,16 @@
     "patient_count": 7,
     "description": "irinotecan + mesna"
   },
-  "C180": {
+  "C128": {
+    "type": "drug_combination",
+    "drugs": [
+      "cyclophosphamide",
+      "progesterone"
+    ],
+    "patient_count": 7,
+    "description": "cyclophosphamide + progesterone"
+  },
+  "C129": {
     "type": "drug_combination",
     "drugs": [
       "bevacizumab",
@@ -1863,7 +1424,7 @@
     "patient_count": 7,
     "description": "bevacizumab + thalidomide"
   },
-  "C181": {
+  "C130": {
     "type": "drug_combination",
     "drugs": [
       "nivolumab",
@@ -1872,7 +1433,7 @@
     "patient_count": 6,
     "description": "nivolumab + progesterone"
   },
-  "C182": {
+  "C131": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -1881,16 +1442,7 @@
     "patient_count": 6,
     "description": "cyclophosphamide + rituximab"
   },
-  "C183": {
-    "type": "drug_combination",
-    "drugs": [
-      "carboplatin",
-      "fulphila"
-    ],
-    "patient_count": 6,
-    "description": "carboplatin + fulphila"
-  },
-  "C184": {
+  "C132": {
     "type": "drug_combination",
     "drugs": [
       "progesterone",
@@ -1899,187 +1451,25 @@
     "patient_count": 6,
     "description": "progesterone + temozolomide"
   },
-  "C185": {
-    "type": "drug_combination",
-    "drugs": [
-      "atra",
-      "mesna"
-    ],
-    "patient_count": 6,
-    "description": "atra + mesna"
-  },
-  "C186": {
-    "type": "drug_combination",
-    "drugs": [
-      "atra",
-      "pegfilgrastim"
-    ],
-    "patient_count": 6,
-    "description": "atra + pegfilgrastim"
-  },
-  "C187": {
-    "type": "drug_combination",
-    "drugs": [
-      "fulphila",
-      "mesna"
-    ],
-    "patient_count": 6,
-    "description": "fulphila + mesna"
-  },
-  "C188": {
-    "type": "drug_combination",
-    "drugs": [
-      "dasatinib",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "dasatinib + tretinoin"
-  },
-  "C189": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "everolimus"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + everolimus"
-  },
-  "C190": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "surufatinib"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + surufatinib"
-  },
-  "C191": {
-    "type": "drug_combination",
-    "drugs": [
-      "fenretinide",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "fenretinide + tretinoin"
-  },
-  "C192": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "trametinib"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + trametinib"
-  },
-  "C193": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "selinexor"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + selinexor"
-  },
-  "C194": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "fenretinide"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + fenretinide"
-  },
-  "C195": {
+  "C133": {
     "type": "drug_combination",
     "drugs": [
       "pegfilgrastim",
-      "tretinoin"
+      "sirolimus"
     ],
     "patient_count": 6,
-    "description": "pegfilgrastim + tretinoin"
+    "description": "pegfilgrastim + sirolimus"
   },
-  "C196": {
+  "C134": {
     "type": "drug_combination",
     "drugs": [
-      "palbociclib",
-      "tretinoin"
+      "dactinomycin",
+      "neulasta"
     ],
     "patient_count": 6,
-    "description": "palbociclib + tretinoin"
+    "description": "dactinomycin + neulasta"
   },
-  "C197": {
-    "type": "drug_combination",
-    "drugs": [
-      "tazemetostat",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "tazemetostat + tretinoin"
-  },
-  "C198": {
-    "type": "drug_combination",
-    "drugs": [
-      "ipilimumab",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "ipilimumab + tretinoin"
-  },
-  "C199": {
-    "type": "drug_combination",
-    "drugs": [
-      "surufatinib",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "surufatinib + tretinoin"
-  },
-  "C200": {
-    "type": "drug_combination",
-    "drugs": [
-      "everolimus",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "everolimus + tretinoin"
-  },
-  "C201": {
-    "type": "drug_combination",
-    "drugs": [
-      "tretinoin",
-      "vincristine"
-    ],
-    "patient_count": 6,
-    "description": "tretinoin + vincristine"
-  },
-  "C202": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "palbociclib"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + palbociclib"
-  },
-  "C203": {
-    "type": "drug_combination",
-    "drugs": [
-      "selinexor",
-      "tretinoin"
-    ],
-    "patient_count": 6,
-    "description": "selinexor + tretinoin"
-  },
-  "C204": {
-    "type": "drug_combination",
-    "drugs": [
-      "etopophos",
-      "thiotepa"
-    ],
-    "patient_count": 6,
-    "description": "etopophos + thiotepa"
-  },
-  "C205": {
+  "C135": {
     "type": "drug_combination",
     "drugs": [
       "cytarabine",
@@ -2088,7 +1478,7 @@
     "patient_count": 6,
     "description": "cytarabine + pegaspargase"
   },
-  "C206": {
+  "C136": {
     "type": "drug_combination",
     "drugs": [
       "daunorubicin",
@@ -2097,7 +1487,7 @@
     "patient_count": 6,
     "description": "daunorubicin + methotrexate"
   },
-  "C207": {
+  "C137": {
     "type": "drug_combination",
     "drugs": [
       "lomustine",
@@ -2106,7 +1496,7 @@
     "patient_count": 6,
     "description": "lomustine + tabloid"
   },
-  "C208": {
+  "C138": {
     "type": "drug_combination",
     "drugs": [
       "tabloid",
@@ -2115,34 +1505,7 @@
     "patient_count": 6,
     "description": "tabloid + vincristine"
   },
-  "C209": {
-    "type": "drug_combination",
-    "drugs": [
-      "cyclophosphamide",
-      "zarxio"
-    ],
-    "patient_count": 6,
-    "description": "cyclophosphamide + zarxio"
-  },
-  "C210": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "zarxio"
-    ],
-    "patient_count": 6,
-    "description": "pegfilgrastim + zarxio"
-  },
-  "C211": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "zarxio"
-    ],
-    "patient_count": 6,
-    "description": "filgrastim + zarxio"
-  },
-  "C212": {
+  "C139": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -2151,7 +1514,16 @@
     "patient_count": 6,
     "description": "filgrastim + propranolol"
   },
-  "C213": {
+  "C140": {
+    "type": "drug_combination",
+    "drugs": [
+      "g-csf",
+      "propranolol"
+    ],
+    "patient_count": 6,
+    "description": "g-csf + propranolol"
+  },
+  "C141": {
     "type": "drug_combination",
     "drugs": [
       "etoposide",
@@ -2160,25 +1532,16 @@
     "patient_count": 6,
     "description": "etoposide + progesterone"
   },
-  "C214": {
+  "C142": {
     "type": "drug_combination",
     "drugs": [
-      "bevacizumab",
-      "emend"
+      "mesna",
+      "progesterone"
     ],
     "patient_count": 6,
-    "description": "bevacizumab + emend"
+    "description": "mesna + progesterone"
   },
-  "C215": {
-    "type": "drug_combination",
-    "drugs": [
-      "carboplatin",
-      "melphalan"
-    ],
-    "patient_count": 6,
-    "description": "carboplatin + melphalan"
-  },
-  "C216": {
+  "C143": {
     "type": "drug_combination",
     "drugs": [
       "etoposide",
@@ -2187,25 +1550,16 @@
     "patient_count": 6,
     "description": "etoposide + melphalan"
   },
-  "C217": {
+  "C144": {
     "type": "drug_combination",
     "drugs": [
-      "atra",
-      "etoposide"
+      "carboplatin",
+      "melphalan"
     ],
     "patient_count": 6,
-    "description": "atra + etoposide"
+    "description": "carboplatin + melphalan"
   },
-  "C218": {
-    "type": "drug_combination",
-    "drugs": [
-      "mekinist",
-      "triamcinolone"
-    ],
-    "patient_count": 6,
-    "description": "mekinist + triamcinolone"
-  },
-  "C219": {
+  "C145": {
     "type": "drug_combination",
     "drugs": [
       "bevacizumab",
@@ -2214,16 +1568,25 @@
     "patient_count": 6,
     "description": "bevacizumab + leuprolide"
   },
-  "C220": {
+  "C146": {
     "type": "drug_combination",
     "drugs": [
-      "bevacizumab",
-      "lupron depot"
+      "neupogen",
+      "pegfilgrastim"
     ],
     "patient_count": 6,
-    "description": "bevacizumab + lupron depot"
+    "description": "neupogen + pegfilgrastim"
   },
-  "C221": {
+  "C147": {
+    "type": "drug_combination",
+    "drugs": [
+      "filgrastim",
+      "neupogen"
+    ],
+    "patient_count": 6,
+    "description": "filgrastim + neupogen"
+  },
+  "C148": {
     "type": "drug_combination",
     "drugs": [
       "mercaptopurine",
@@ -2232,7 +1595,7 @@
     "patient_count": 6,
     "description": "mercaptopurine + vincristine"
   },
-  "C222": {
+  "C149": {
     "type": "drug_combination",
     "drugs": [
       "thalidomide",
@@ -2241,16 +1604,16 @@
     "patient_count": 6,
     "description": "thalidomide + topotecan"
   },
-  "C223": {
+  "C150": {
     "type": "drug_combination",
     "drugs": [
-      "carboplatin",
-      "irinotecan"
+      "g-csf",
+      "neulasta"
     ],
     "patient_count": 6,
-    "description": "carboplatin + irinotecan"
+    "description": "g-csf + neulasta"
   },
-  "C224": {
+  "C151": {
     "type": "drug_combination",
     "drugs": [
       "ipilimumab",
@@ -2259,25 +1622,16 @@
     "patient_count": 5,
     "description": "ipilimumab + progesterone"
   },
-  "C225": {
+  "C152": {
     "type": "drug_combination",
     "drugs": [
-      "cyclophosphamide",
-      "emend"
+      "topotecan",
+      "valproic acid"
     ],
     "patient_count": 5,
-    "description": "cyclophosphamide + emend"
+    "description": "topotecan + valproic acid"
   },
-  "C226": {
-    "type": "drug_combination",
-    "drugs": [
-      "emend",
-      "vincristine"
-    ],
-    "patient_count": 5,
-    "description": "emend + vincristine"
-  },
-  "C227": {
+  "C153": {
     "type": "drug_combination",
     "drugs": [
       "filgrastim",
@@ -2286,43 +1640,7 @@
     "patient_count": 5,
     "description": "filgrastim + sirolimus"
   },
-  "C228": {
-    "type": "drug_combination",
-    "drugs": [
-      "emend",
-      "temozolomide"
-    ],
-    "patient_count": 5,
-    "description": "emend + temozolomide"
-  },
-  "C229": {
-    "type": "drug_combination",
-    "drugs": [
-      "pegfilgrastim",
-      "sirolimus"
-    ],
-    "patient_count": 5,
-    "description": "pegfilgrastim + sirolimus"
-  },
-  "C230": {
-    "type": "drug_combination",
-    "drugs": [
-      "busulfan",
-      "mesna"
-    ],
-    "patient_count": 5,
-    "description": "busulfan + mesna"
-  },
-  "C231": {
-    "type": "drug_combination",
-    "drugs": [
-      "cytarabine",
-      "thiotepa"
-    ],
-    "patient_count": 5,
-    "description": "cytarabine + thiotepa"
-  },
-  "C232": {
+  "C154": {
     "type": "drug_combination",
     "drugs": [
       "cyclophosphamide",
@@ -2331,7 +1649,16 @@
     "patient_count": 5,
     "description": "cyclophosphamide + defibrotide"
   },
-  "C233": {
+  "C155": {
+    "type": "drug_combination",
+    "drugs": [
+      "cytarabine",
+      "thiotepa"
+    ],
+    "patient_count": 5,
+    "description": "cytarabine + thiotepa"
+  },
+  "C156": {
     "type": "drug_combination",
     "drugs": [
       "busulfan",
@@ -2340,61 +1667,16 @@
     "patient_count": 5,
     "description": "busulfan + cyclophosphamide"
   },
-  "C234": {
+  "C157": {
     "type": "drug_combination",
     "drugs": [
-      "etoposide",
-      "tazemetostat"
+      "busulfan",
+      "mesna"
     ],
     "patient_count": 5,
-    "description": "etoposide + tazemetostat"
+    "description": "busulfan + mesna"
   },
-  "C235": {
-    "type": "drug_combination",
-    "drugs": [
-      "isotretinoin",
-      "pegfilgrastim"
-    ],
-    "patient_count": 5,
-    "description": "isotretinoin + pegfilgrastim"
-  },
-  "C236": {
-    "type": "drug_combination",
-    "drugs": [
-      "cisplatin",
-      "tretinoin"
-    ],
-    "patient_count": 5,
-    "description": "cisplatin + tretinoin"
-  },
-  "C237": {
-    "type": "drug_combination",
-    "drugs": [
-      "mesna",
-      "tretinoin"
-    ],
-    "patient_count": 5,
-    "description": "mesna + tretinoin"
-  },
-  "C238": {
-    "type": "drug_combination",
-    "drugs": [
-      "isotretinoin",
-      "vincristine"
-    ],
-    "patient_count": 5,
-    "description": "isotretinoin + vincristine"
-  },
-  "C239": {
-    "type": "drug_combination",
-    "drugs": [
-      "etoposide",
-      "nivolumab"
-    ],
-    "patient_count": 5,
-    "description": "etoposide + nivolumab"
-  },
-  "C240": {
+  "C158": {
     "type": "drug_combination",
     "drugs": [
       "doxorubicin",
@@ -2403,7 +1685,7 @@
     "patient_count": 5,
     "description": "doxorubicin + ziextenzo"
   },
-  "C241": {
+  "C159": {
     "type": "drug_combination",
     "drugs": [
       "dexrazoxane",
@@ -2412,16 +1694,16 @@
     "patient_count": 5,
     "description": "dexrazoxane + ziextenzo"
   },
-  "C242": {
+  "C160": {
     "type": "drug_combination",
     "drugs": [
-      "dexrazoxane",
-      "progesterone"
+      "cytarabine",
+      "neulasta"
     ],
     "patient_count": 5,
-    "description": "dexrazoxane + progesterone"
+    "description": "cytarabine + neulasta"
   },
-  "C243": {
+  "C161": {
     "type": "drug_combination",
     "drugs": [
       "methotrexate",
@@ -2430,7 +1712,16 @@
     "patient_count": 5,
     "description": "methotrexate + progesterone"
   },
-  "C244": {
+  "C162": {
+    "type": "drug_combination",
+    "drugs": [
+      "dexrazoxane",
+      "progesterone"
+    ],
+    "patient_count": 5,
+    "description": "dexrazoxane + progesterone"
+  },
+  "C163": {
     "type": "drug_combination",
     "drugs": [
       "ifosfamide",
@@ -2439,7 +1730,7 @@
     "patient_count": 5,
     "description": "ifosfamide + ziextenzo"
   },
-  "C245": {
+  "C164": {
     "type": "drug_combination",
     "drugs": [
       "irinotecan",
@@ -2448,34 +1739,7 @@
     "patient_count": 5,
     "description": "irinotecan + topotecan"
   },
-  "C246": {
-    "type": "drug_combination",
-    "drugs": [
-      "cytarabine",
-      "mercaptopurine"
-    ],
-    "patient_count": 5,
-    "description": "cytarabine + mercaptopurine"
-  },
-  "C247": {
-    "type": "drug_combination",
-    "drugs": [
-      "methotrexate",
-      "pegaspargase"
-    ],
-    "patient_count": 5,
-    "description": "methotrexate + pegaspargase"
-  },
-  "C248": {
-    "type": "drug_combination",
-    "drugs": [
-      "cytarabine",
-      "gemtuzumab ozogamicin"
-    ],
-    "patient_count": 5,
-    "description": "cytarabine + gemtuzumab ozogamicin"
-  },
-  "C249": {
+  "C165": {
     "type": "drug_combination",
     "drugs": [
       "pegaspargase",
@@ -2484,7 +1748,25 @@
     "patient_count": 5,
     "description": "pegaspargase + vincristine"
   },
-  "C250": {
+  "C166": {
+    "type": "drug_combination",
+    "drugs": [
+      "cytarabine",
+      "mercaptopurine"
+    ],
+    "patient_count": 5,
+    "description": "cytarabine + mercaptopurine"
+  },
+  "C167": {
+    "type": "drug_combination",
+    "drugs": [
+      "filgrastim",
+      "impact"
+    ],
+    "patient_count": 5,
+    "description": "filgrastim + impact"
+  },
+  "C168": {
     "type": "drug_combination",
     "drugs": [
       "dexrazoxane",
@@ -2493,43 +1775,34 @@
     "patient_count": 5,
     "description": "dexrazoxane + gm-csf"
   },
-  "C251": {
+  "C169": {
     "type": "drug_combination",
     "drugs": [
-      "mesna",
-      "zarxio"
+      "methotrexate",
+      "pegaspargase"
     ],
     "patient_count": 5,
-    "description": "mesna + zarxio"
+    "description": "methotrexate + pegaspargase"
   },
-  "C252": {
+  "C170": {
     "type": "drug_combination",
     "drugs": [
-      "plerixafor",
-      "zarxio"
+      "impact",
+      "pegfilgrastim"
     ],
     "patient_count": 5,
-    "description": "plerixafor + zarxio"
+    "description": "impact + pegfilgrastim"
   },
-  "C253": {
+  "C171": {
     "type": "drug_combination",
     "drugs": [
-      "vincristine",
-      "zarxio"
+      "cytarabine",
+      "gemtuzumab ozogamicin"
     ],
     "patient_count": 5,
-    "description": "vincristine + zarxio"
+    "description": "cytarabine + gemtuzumab ozogamicin"
   },
-  "C254": {
-    "type": "drug_combination",
-    "drugs": [
-      "cisplatin",
-      "zarxio"
-    ],
-    "patient_count": 5,
-    "description": "cisplatin + zarxio"
-  },
-  "C255": {
+  "C172": {
     "type": "drug_combination",
     "drugs": [
       "thiotepa",
@@ -2538,7 +1811,16 @@
     "patient_count": 5,
     "description": "thiotepa + topotecan"
   },
-  "C256": {
+  "C173": {
+    "type": "drug_combination",
+    "drugs": [
+      "sirolimus",
+      "vorinostat"
+    ],
+    "patient_count": 5,
+    "description": "sirolimus + vorinostat"
+  },
+  "C174": {
     "type": "drug_combination",
     "drugs": [
       "doxorubicin",
@@ -2547,7 +1829,16 @@
     "patient_count": 5,
     "description": "doxorubicin + gm-csf"
   },
-  "C257": {
+  "C175": {
+    "type": "drug_combination",
+    "drugs": [
+      "investigational chemotherapy (unspecified)",
+      "irinotecan"
+    ],
+    "patient_count": 5,
+    "description": "investigational chemotherapy (unspecified) + irinotecan"
+  },
+  "C176": {
     "type": "drug_combination",
     "drugs": [
       "dasatinib",
@@ -2556,7 +1847,7 @@
     "patient_count": 5,
     "description": "dasatinib + irinotecan"
   },
-  "C258": {
+  "C177": {
     "type": "drug_combination",
     "drugs": [
       "temozolomide",
@@ -2565,34 +1856,16 @@
     "patient_count": 5,
     "description": "temozolomide + thiotepa"
   },
-  "C259": {
+  "C178": {
     "type": "drug_combination",
     "drugs": [
-      "etopophos",
-      "melphalan"
+      "glutamine",
+      "temozolomide"
     ],
     "patient_count": 5,
-    "description": "etopophos + melphalan"
+    "description": "glutamine + temozolomide"
   },
-  "C260": {
-    "type": "drug_combination",
-    "drugs": [
-      "dasatinib",
-      "gm-csf"
-    ],
-    "patient_count": 5,
-    "description": "dasatinib + gm-csf"
-  },
-  "C261": {
-    "type": "drug_combination",
-    "drugs": [
-      "filgrastim",
-      "lomustine"
-    ],
-    "patient_count": 5,
-    "description": "filgrastim + lomustine"
-  },
-  "C262": {
+  "C179": {
     "type": "drug_combination",
     "drugs": [
       "lomustine",
@@ -2601,7 +1874,16 @@
     "patient_count": 5,
     "description": "lomustine + pegfilgrastim"
   },
-  "C263": {
+  "C180": {
+    "type": "drug_combination",
+    "drugs": [
+      "filgrastim",
+      "lomustine"
+    ],
+    "patient_count": 5,
+    "description": "filgrastim + lomustine"
+  },
+  "C181": {
     "type": "drug_combination",
     "drugs": [
       "atra",
@@ -2610,97 +1892,25 @@
     "patient_count": 5,
     "description": "atra + trametinib"
   },
-  "C264": {
+  "C182": {
     "type": "drug_combination",
     "drugs": [
-      "mekinist",
-      "surufatinib"
+      "mesna",
+      "neupogen"
     ],
     "patient_count": 5,
-    "description": "mekinist + surufatinib"
+    "description": "mesna + neupogen"
   },
-  "C265": {
+  "C183": {
     "type": "drug_combination",
     "drugs": [
-      "mekinist",
-      "selinexor"
+      "g-csf",
+      "neupogen"
     ],
     "patient_count": 5,
-    "description": "mekinist + selinexor"
+    "description": "g-csf + neupogen"
   },
-  "C266": {
-    "type": "drug_combination",
-    "drugs": [
-      "bevacizumab",
-      "mekinist"
-    ],
-    "patient_count": 5,
-    "description": "bevacizumab + mekinist"
-  },
-  "C267": {
-    "type": "drug_combination",
-    "drugs": [
-      "dasatinib",
-      "mekinist"
-    ],
-    "patient_count": 5,
-    "description": "dasatinib + mekinist"
-  },
-  "C268": {
-    "type": "drug_combination",
-    "drugs": [
-      "fenretinide",
-      "mekinist"
-    ],
-    "patient_count": 5,
-    "description": "fenretinide + mekinist"
-  },
-  "C269": {
-    "type": "drug_combination",
-    "drugs": [
-      "mekinist",
-      "palbociclib"
-    ],
-    "patient_count": 5,
-    "description": "mekinist + palbociclib"
-  },
-  "C270": {
-    "type": "drug_combination",
-    "drugs": [
-      "mekinist",
-      "nivolumab"
-    ],
-    "patient_count": 5,
-    "description": "mekinist + nivolumab"
-  },
-  "C271": {
-    "type": "drug_combination",
-    "drugs": [
-      "ipilimumab",
-      "mekinist"
-    ],
-    "patient_count": 5,
-    "description": "ipilimumab + mekinist"
-  },
-  "C272": {
-    "type": "drug_combination",
-    "drugs": [
-      "everolimus",
-      "mekinist"
-    ],
-    "patient_count": 5,
-    "description": "everolimus + mekinist"
-  },
-  "C273": {
-    "type": "drug_combination",
-    "drugs": [
-      "mekinist",
-      "tazemetostat"
-    ],
-    "patient_count": 5,
-    "description": "mekinist + tazemetostat"
-  },
-  "C274": {
+  "C184": {
     "type": "drug_combination",
     "drugs": [
       "methotrexate",
@@ -2709,7 +1919,7 @@
     "patient_count": 5,
     "description": "methotrexate + ziextenzo"
   },
-  "C275": {
+  "C185": {
     "type": "drug_combination",
     "drugs": [
       "leucovorin",
@@ -2718,7 +1928,7 @@
     "patient_count": 5,
     "description": "leucovorin + ziextenzo"
   },
-  "C276": {
+  "C186": {
     "type": "drug_combination",
     "drugs": [
       "cabozantinib",
@@ -2727,7 +1937,7 @@
     "patient_count": 5,
     "description": "cabozantinib + cabozantinib s-malate"
   },
-  "C277": {
+  "C187": {
     "type": "drug_combination",
     "drugs": [
       "tazemetostat",
@@ -2736,16 +1946,7 @@
     "patient_count": 5,
     "description": "tazemetostat + topotecan"
   },
-  "C278": {
-    "type": "drug_combination",
-    "drugs": [
-      "dinutuximab",
-      "tretinoin"
-    ],
-    "patient_count": 5,
-    "description": "dinutuximab + tretinoin"
-  },
-  "C279": {
+  "C188": {
     "type": "drug_combination",
     "drugs": [
       "dinutuximab",
@@ -2754,7 +1955,16 @@
     "patient_count": 5,
     "description": "dinutuximab + isotretinoin"
   },
-  "C280": {
+  "C189": {
+    "type": "drug_combination",
+    "drugs": [
+      "dinutuximab",
+      "tretinoin"
+    ],
+    "patient_count": 5,
+    "description": "dinutuximab + tretinoin"
+  },
+  "C190": {
     "type": "drug_combination",
     "drugs": [
       "cytarabine",
