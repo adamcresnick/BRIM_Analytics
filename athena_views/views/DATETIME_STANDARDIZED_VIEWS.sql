@@ -3070,23 +3070,56 @@ mobilization_agents AS (
         AND mcc.code_coding_system = 'http://www.nlm.nih.gov/research/umls/rxnorm'
 
     WHERE (
-        -- RxNorm codes for mobilization agents
+        -- RxNorm codes for mobilization agents (ingredients + major formulations)
         mcc.code_coding_code IN (
-            '105585',  -- Filgrastim
-            '139825',  -- Filgrastim biosimilar
-            '358810',  -- Pegfilgrastim
-            '847232'   -- Plerixafor
+            -- Filgrastim (G-CSF)
+            '68442',    -- Filgrastim (ingredient)
+            '1649944',  -- filgrastim 0.3 MG/ML 1 ML injection (high volume formulation)
+            '1649963',  -- filgrastim 0.3 MG/ML 1.6 ML injection (high volume formulation)
+
+            -- Pegfilgrastim (long-acting G-CSF)
+            '338036',   -- Pegfilgrastim (ingredient)
+            '727539',   -- pegfilgrastim 10 MG/ML 0.6 ML prefilled syringe (highest volume formulation)
+
+            -- Plerixafor (CXCR4 antagonist)
+            '733003',   -- Plerixafor (ingredient)
+            '828700'    -- plerixafor 20 MG/ML 1.2 ML injection (standard formulation)
         )
 
-        -- Text matching for G-CSF and mobilization agents
+        -- Text matching for G-CSF and mobilization agents (brands + generics)
         OR LOWER(m.code_text) LIKE '%filgrastim%'
-        OR LOWER(m.code_text) LIKE '%neupogen%'
-        OR LOWER(m.code_text) LIKE '%neulasta%'
+        OR LOWER(m.code_text) LIKE '%pegfilgrastim%'
         OR LOWER(m.code_text) LIKE '%plerixafor%'
+        OR LOWER(m.code_text) LIKE '%g-csf%'
+
+        -- Filgrastim brands
+        OR LOWER(m.code_text) LIKE '%neupogen%'
+        OR LOWER(m.code_text) LIKE '%granix%'
+        OR LOWER(m.code_text) LIKE '%zarxio%'  -- biosimilar
+        OR LOWER(m.code_text) LIKE '%nivestim%'
+
+        -- Pegfilgrastim brands
+        OR LOWER(m.code_text) LIKE '%neulasta%'
+        OR LOWER(m.code_text) LIKE '%fulphila%'
+        OR LOWER(m.code_text) LIKE '%udenyca%'
+        OR LOWER(m.code_text) LIKE '%ziextenzo%'
+        OR LOWER(m.code_text) LIKE '%nyvepria%'
+        OR LOWER(m.code_text) LIKE '%stimufend%'
+
+        -- Plerixafor brands
         OR LOWER(m.code_text) LIKE '%mozobil%'
+
+        -- Also check medication_reference_display
         OR LOWER(mr.medication_reference_display) LIKE '%filgrastim%'
-        OR LOWER(mr.medication_reference_display) LIKE '%neupogen%'
+        OR LOWER(mr.medication_reference_display) LIKE '%pegfilgrastim%'
         OR LOWER(mr.medication_reference_display) LIKE '%plerixafor%'
+        OR LOWER(mr.medication_reference_display) LIKE '%neupogen%'
+        OR LOWER(mr.medication_reference_display) LIKE '%neulasta%'
+        OR LOWER(mr.medication_reference_display) LIKE '%zarxio%'
+        OR LOWER(mr.medication_reference_display) LIKE '%fulphila%'
+        OR LOWER(mr.medication_reference_display) LIKE '%ziextenzo%'
+        OR LOWER(mr.medication_reference_display) LIKE '%mozobil%'
+        OR LOWER(mr.medication_reference_display) LIKE '%g-csf%'
     )
     AND mr.status IN ('active', 'completed', 'stopped')
 ),
