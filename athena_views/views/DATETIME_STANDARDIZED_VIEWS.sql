@@ -1356,7 +1356,10 @@ medication_based_on AS (
         medication_request_id,
         LISTAGG(DISTINCT based_on_reference, ' | ') WITHIN GROUP (ORDER BY based_on_reference) AS based_on_references,
         LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays,
-        MIN(based_on_reference) AS primary_care_plan_id  -- pick one for downstream joins
+        -- Use MAX to get CarePlan ID that matches care_plan.id (IDs starting with 'f' vs 'e')
+        -- Testing showed MIN() selects IDs starting with 'e' which don't exist in care_plan table,
+        -- while MAX() selects IDs starting with 'f' which DO exist (4,517 matches)
+        MAX(based_on_reference) AS primary_care_plan_id
     FROM fhir_prd_db.medication_request_based_on
     GROUP BY medication_request_id
 ),
@@ -1880,7 +1883,10 @@ medication_based_on AS (
         medication_request_id,
         LISTAGG(DISTINCT based_on_reference, ' | ') WITHIN GROUP (ORDER BY based_on_reference) AS based_on_references,
         LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays,
-        MIN(based_on_reference) AS primary_care_plan_id  -- For direct JOIN to care_plan table
+        -- Use MAX to get CarePlan ID that matches care_plan.id (IDs starting with 'f' vs 'e')
+        -- Testing showed MIN() selects IDs starting with 'e' which don't exist in care_plan table,
+        -- while MAX() selects IDs starting with 'f' which DO exist (4,517 matches)
+        MAX(based_on_reference) AS primary_care_plan_id
     FROM fhir_prd_db.medication_request_based_on
     GROUP BY medication_request_id
 ),
