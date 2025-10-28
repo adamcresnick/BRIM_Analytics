@@ -1879,7 +1879,8 @@ medication_based_on AS (
     SELECT
         medication_request_id,
         LISTAGG(DISTINCT based_on_reference, ' | ') WITHIN GROUP (ORDER BY based_on_reference) AS based_on_references,
-        LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays
+        LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays,
+        MIN(based_on_reference) AS primary_care_plan_id  -- For direct JOIN to care_plan table
     FROM fhir_prd_db.medication_request_based_on
     GROUP BY medication_request_id
 ),
@@ -1889,6 +1890,35 @@ medication_reason_references AS (
         LISTAGG(DISTINCT reason_reference_display, ' | ') WITHIN GROUP (ORDER BY reason_reference_display) AS reason_reference_displays
     FROM fhir_prd_db.medication_request_reason_reference
     GROUP BY medication_request_id
+),
+
+-- ================================================================================
+-- ADDED 2025-10-28: CarePlan metadata CTEs for episode construction
+-- These provide treatment protocol information for grouping medications into episodes
+-- ================================================================================
+care_plan_categories AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT category_text, ' | ') WITHIN GROUP (ORDER BY category_text) as categories_aggregated
+    FROM fhir_prd_db.care_plan_category
+    GROUP BY care_plan_id
+),
+care_plan_conditions AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT addresses_display, ' | ') WITHIN GROUP (ORDER BY addresses_display) as addresses_aggregated
+    FROM fhir_prd_db.care_plan_addresses
+    GROUP BY care_plan_id
+),
+care_plan_activity_agg AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT activity_detail_status, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_status) AS activity_detail_statuses,
+        LISTAGG(DISTINCT activity_detail_description, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_description) AS activity_detail_descriptions
+    FROM fhir_prd_db.care_plan_activity
+    GROUP BY care_plan_id
 )
 
 -- ================================================================================
@@ -1967,7 +1997,46 @@ SELECT
 
     -- Recorder and entered by
     mr.recorder_reference as recorder_fhir_id,
-    mr.recorder_display as recorder_name
+    mr.recorder_display as recorder_name,
+
+    -- ============================================================================
+    -- ADDED 2025-10-28: Additional MedicationRequest metadata for completeness
+    -- ============================================================================
+    TRY(CAST(mr.dispense_request_validity_period_start AS TIMESTAMP(3))) as mr_validity_period_start,
+    mr.status_reason_text as mr_status_reason_text,
+    mr.do_not_perform as mr_do_not_perform,
+    mr.course_of_therapy_type_text as mr_course_of_therapy_type_text,
+    mr.dispense_request_initial_fill_duration_value as mr_dispense_initial_fill_duration_value,
+    mr.dispense_request_initial_fill_duration_unit as mr_dispense_initial_fill_duration_unit,
+    mr.dispense_request_expected_supply_duration_value as mr_dispense_expected_supply_duration_value,
+    mr.dispense_request_expected_supply_duration_unit as mr_dispense_expected_supply_duration_unit,
+    mr.dispense_request_number_of_repeats_allowed as mr_dispense_number_of_repeats_allowed,
+    mr.substitution_allowed_boolean as mr_substitution_allowed_boolean,
+    mr.substitution_reason_text as mr_substitution_reason_text,
+    mr.prior_prescription_display as mr_prior_prescription_display,
+
+    -- ============================================================================
+    -- ADDED 2025-10-28: CarePlan metadata for treatment episode construction
+    -- CRITICAL: cp_period_start and cp_period_end define episode boundaries
+    -- ============================================================================
+    cp.id as cp_id,
+    cp.title as cp_title,
+    cp.status as cp_status,
+    cp.intent as cp_intent,
+    TRY(CAST(cp.created AS TIMESTAMP(3))) as cp_created,
+    TRY(CAST(cp.period_start AS TIMESTAMP(3))) as cp_period_start,
+    TRY(CAST(cp.period_end AS TIMESTAMP(3))) as cp_period_end,
+    cp.author_display as cp_author_display,
+
+    -- Care plan categories (treatment type classification)
+    cpc.categories_aggregated as cpc_categories_aggregated,
+
+    -- Care plan conditions (what conditions the plan addresses)
+    cpcon.addresses_aggregated as cpcon_addresses_aggregated,
+
+    -- Care plan activity (treatment activities and their status)
+    cpa.activity_detail_statuses as cpa_activity_detail_statuses,
+    cpa.activity_detail_descriptions as cpa_activity_detail_descriptions
 
 FROM fhir_prd_db.medication_request mr
 
@@ -1999,6 +2068,18 @@ LEFT JOIN medication_based_on mbo
     ON mbo.medication_request_id = mr.id
 LEFT JOIN medication_reason_references mrrefs
     ON mrrefs.medication_request_id = mr.id
+
+-- ================================================================================
+-- ADDED 2025-10-28: CarePlan JOINs for episode construction
+-- ================================================================================
+LEFT JOIN fhir_prd_db.care_plan cp
+    ON mbo.primary_care_plan_id = cp.id
+LEFT JOIN care_plan_categories cpc
+    ON cp.id = cpc.care_plan_id
+LEFT JOIN care_plan_conditions cpcon
+    ON cp.id = cpcon.care_plan_id
+LEFT JOIN care_plan_activity_agg cpa
+    ON cp.id = cpa.care_plan_id
 
 -- ================================================================================
 -- FILTERS: Status + Exclude Supportive Care
@@ -5114,25 +5195,31 @@ ORDER BY
 -- UNIFIED PATIENT TIMELINE VIEW - COMPLETE VERSION
 -- ================================================================================
 -- Purpose: Normalize ALL temporal events across FHIR domains into single queryable view
--- Version: 2.2 (Updated to use v_visits_unified instead of v_encounters)
--- Date: 2025-10-19
+-- Version: 2.3 (Streamlined to core clinical events)
+-- Date: 2025-10-28
 --
 -- IMPORTANT: This view now works with datetime-standardized source views where:
 --   - All VARCHAR datetime columns have been converted to TIMESTAMP(3)
 --   - Date columns use DATE type
 --   - Consistent typing enables simpler DATE() extraction instead of complex CAST logic
 --
--- Coverage:
---   - Diagnoses (v_diagnoses, v_problem_list_diagnoses, v_hydrocephalus_diagnosis)
---   - Procedures (v_procedures, v_procedures_tumor, v_hydrocephalus_procedures)
+-- Coverage (8 core event sources):
+--   - Diagnoses (v_diagnoses)
+--   - Procedures (v_procedures_tumor)
 --   - Imaging (v_imaging)
---   - Medications (v_medications, v_concomitant_medications, v_imaging_corticosteroid_use)
---   - Visits (v_visits_unified) - unified encounters + appointments, no duplication
+--   - Medications (v_chemo_medications)
+--   - Visits (v_visits_unified) - unified encounters + appointments
 --   - Measurements (v_measurements) - height, weight, vitals, labs
 --   - Molecular Tests (v_molecular_tests)
---   - Radiation (v_radiation_treatment_courses, v_radiation_treatment_appointments)
---   - Assessments (v_ophthalmology_assessments, v_audiology_assessments)
---   - Transplant (v_autologous_stem_cell_transplant, v_autologous_stem_cell_collection)
+--   - Radiation (v_radiation_treatment_appointments) - individual fractions
+--
+-- REMOVED (specialized/summary views moved out of core timeline):
+--   - v_radiation_summary (patient-level summary, not event-level)
+--   - v_ophthalmology_assessments (specialized assessments)
+--   - v_audiology_assessments (specialized assessments)
+--   - v_autologous_stem_cell_transplant (patient-level summary)
+--   - v_autologous_stem_cell_collection (specialized procedure)
+--   - v_imaging_corticosteroid_use (derived relationship, not primary event)
 --
 -- PROVENANCE TRACKING:
 --   Every event includes:
@@ -5560,58 +5647,6 @@ UNION ALL
 -- 7A. RADIATION TREATMENT COURSES AS EVENTS
 -- Source: v_radiation_summary (aggregated course data)
 -- Provenance: CarePlan FHIR resource
--- ============================================================================
-SELECT
-    vrs.patient_fhir_id as patient_fhir_id,
-    'rad_course_1_' || vrs.patient_fhir_id as event_id,
-    CAST(vrs.course_1_start_date AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vrs.course_1_start_date AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vrs.course_1_start_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Radiation Course' as event_type,
-    'Radiation Therapy' as event_category,
-    CASE WHEN vrs.re_irradiation = 'Yes' THEN 'Re-irradiation Course 1' ELSE 'Initial Radiation Course 1' END as event_subtype,
-    'Radiation therapy course 1' as event_description,
-    'completed' as event_status,
-
-    'v_radiation_summary' as source_view,
-    'CarePlan' as source_domain,
-    vrs.patient_fhir_id as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['course_number', 'start_date', 'end_date', 'duration_weeks', 're_irradiation', 'treatment_techniques', 'num_appointments'],
-        ARRAY[
-            '1',
-            CAST(vrs.course_1_start_date AS VARCHAR),
-            CAST(vrs.course_1_end_date AS VARCHAR),
-            CAST(vrs.course_1_duration_weeks AS VARCHAR),
-            CAST(vrs.re_irradiation AS VARCHAR),
-            CAST(vrs.treatment_techniques AS VARCHAR),
-            CAST(vrs.num_radiation_appointments AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction'],
-        ARRAY[
-            'v_radiation_summary',
-            'care_plan + radiation tables',
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            'false',
-            'false'
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_radiation_summary vrs
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vrs.patient_fhir_id = vpd.patient_fhir_id
-WHERE vrs.course_1_start_date IS NOT NULL
-
-UNION ALL
 
 -- ============================================================================
 -- 7B. RADIATION TREATMENT APPOINTMENTS AS EVENTS (Individual Fractions)
@@ -5759,332 +5794,30 @@ UNION ALL
 -- Source: v_ophthalmology_assessments
 -- Provenance: Observation + Procedure + DocumentReference FHIR resources
 -- CRITICAL PRIORITY - Visual acuity, visual fields, OCT, fundus exams
--- ============================================================================
-SELECT
-    voa.patient_fhir_id,
-    'ophtho_' || voa.record_fhir_id as event_id,
-    CAST(voa.assessment_date AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(voa.assessment_date AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(voa.assessment_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Assessment' as event_type,
-    'Ophthalmology' as event_category,
-    voa.assessment_category as event_subtype,  -- 'visual_acuity', 'visual_field', 'oct_optic_nerve', etc.
-    voa.assessment_description as event_description,
-    voa.record_status as event_status,
-
-    'v_ophthalmology_assessments' as source_view,
-    voa.source_table as source_domain,  -- 'observation', 'procedure', or 'document_reference'
-    voa.record_fhir_id as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    ARRAY[voa.cpt_code] as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['assessment_category', 'numeric_value', 'value_unit', 'text_value', 'component_name', 'component_numeric_value', 'component_unit', 'cpt_code', 'cpt_description', 'laterality', 'file_url', 'file_type'],
-        ARRAY[
-            CAST(voa.assessment_category AS VARCHAR),
-            CAST(voa.numeric_value AS VARCHAR),
-            CAST(voa.value_unit AS VARCHAR),
-            CAST(voa.text_value AS VARCHAR),
-            CAST(voa.component_name AS VARCHAR),
-            CAST(voa.component_numeric_value AS VARCHAR),
-            CAST(voa.component_unit AS VARCHAR),
-            CAST(voa.cpt_code AS VARCHAR),
-            CAST(voa.cpt_description AS VARCHAR),
-            CASE
-                WHEN LOWER(voa.assessment_description) LIKE '%left%' THEN 'left'
-                WHEN LOWER(voa.assessment_description) LIKE '%right%' THEN 'right'
-                WHEN LOWER(voa.assessment_description) LIKE '%both%' OR LOWER(voa.assessment_description) LIKE '%bilateral%' THEN 'both'
-                ELSE 'unspecified'
-            END,
-            CAST(voa.file_url AS VARCHAR),
-            CAST(voa.file_type AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction', 'has_binary_document', 'document_url', 'document_type'],
-        ARRAY[
-            'v_ophthalmology_assessments',
-            CAST(voa.source_table AS VARCHAR),
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            CAST(CASE WHEN voa.cpt_code IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(CASE WHEN voa.file_url IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(CASE WHEN voa.file_url IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(voa.file_url AS VARCHAR),
-            CAST(voa.file_type AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_ophthalmology_assessments voa
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON voa.patient_fhir_id = vpd.patient_fhir_id
-
-UNION ALL
 
 -- ============================================================================
 -- 10. AUDIOLOGY ASSESSMENTS AS EVENTS
 -- Source: v_audiology_assessments
 -- Provenance: Observation + Procedure + Condition FHIR resources
 -- CRITICAL PRIORITY - Audiograms, ototoxicity monitoring
--- ============================================================================
-SELECT
-    vaa.patient_fhir_id,
-    'audio_' || vaa.record_fhir_id as event_id,
-    CAST(vaa.assessment_date AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vaa.assessment_date AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vaa.assessment_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Assessment' as event_type,
-    'Audiology' as event_category,
-    vaa.assessment_category as event_subtype,  -- 'audiogram_threshold', 'ototoxicity_monitoring', etc.
-    vaa.assessment_description as event_description,
-    vaa.record_status as event_status,
-
-    'v_audiology_assessments' as source_view,
-    vaa.source_table as source_domain,  -- 'observation', 'procedure', 'condition', or 'document_reference'
-    vaa.record_fhir_id as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    ARRAY[vaa.cpt_code] as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['assessment_category', 'frequency_hz', 'threshold_db', 'threshold_unit', 'laterality', 'ear_side', 'hearing_loss_type', 'is_ototoxic', 'cpt_code', 'cpt_description', 'file_url', 'file_type'],
-        ARRAY[
-            CAST(vaa.assessment_category AS VARCHAR),
-            CAST(vaa.frequency_hz AS VARCHAR),
-            CAST(vaa.threshold_db AS VARCHAR),
-            CAST(vaa.threshold_unit AS VARCHAR),
-            CAST(vaa.laterality AS VARCHAR),
-            CAST(vaa.ear_side AS VARCHAR),
-            CAST(vaa.hearing_loss_type AS VARCHAR),
-            CAST(vaa.is_ototoxic AS VARCHAR),
-            CAST(vaa.cpt_code AS VARCHAR),
-            CAST(vaa.cpt_description AS VARCHAR),
-            CAST(vaa.file_url AS VARCHAR),
-            CAST(vaa.file_type AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction', 'has_binary_document', 'document_url', 'document_type', 'ototoxicity_surveillance'],
-        ARRAY[
-            'v_audiology_assessments',
-            CAST(vaa.source_table AS VARCHAR),
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            CAST(CASE WHEN vaa.cpt_code IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(CASE WHEN vaa.file_url IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(CASE WHEN vaa.file_url IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            CAST(vaa.file_url AS VARCHAR),
-            CAST(vaa.file_type AS VARCHAR),
-            CAST(CASE WHEN vaa.assessment_category = 'ototoxicity_monitoring' THEN true ELSE false END AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_audiology_assessments vaa
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vaa.patient_fhir_id = vpd.patient_fhir_id
-
-UNION ALL
 
 -- ============================================================================
 -- 11. AUTOLOGOUS STEM CELL TRANSPLANT AS EVENTS
 -- Source: v_autologous_stem_cell_transplant
 -- Provenance: Condition + Procedure FHIR resources
 -- HIGH PRIORITY - Major treatment modality
--- ============================================================================
-SELECT
-    vasct.patient_fhir_id,
-    'transplant_' || COALESCE(vasct.proc_id, vasct.cond_id) as event_id,
-    CAST(vasct.transplant_datetime AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vasct.transplant_datetime AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vasct.transplant_datetime AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Procedure' as event_type,
-    'Stem Cell Transplant' as event_category,
-    'Autologous Transplant' as event_subtype,
-    COALESCE(vasct.proc_description, 'Autologous stem cell transplant') as event_description,
-    COALESCE(vasct.cond_transplant_status, 'completed') as event_status,
-
-    'v_autologous_stem_cell_transplant' as source_view,
-    CASE
-        WHEN vasct.has_procedure_data THEN 'procedure'
-        WHEN vasct.has_condition_data THEN 'condition'
-        ELSE 'observation'
-    END as source_domain,
-    COALESCE(vasct.proc_id, vasct.cond_id) as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    CASE WHEN vasct.proc_cpt_code IS NOT NULL THEN ARRAY[vasct.proc_cpt_code] ELSE CAST(NULL AS ARRAY(VARCHAR)) END as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['transplant_datetime', 'transplant_status', 'cpt_code', 'icd10_code', 'cd34_collection_datetime', 'cd34_count', 'cd34_unit', 'confirmed_autologous', 'confidence', 'data_completeness_score'],
-        ARRAY[
-            CAST(vasct.transplant_datetime AS VARCHAR),
-            CAST(vasct.cond_transplant_status AS VARCHAR),
-            CAST(vasct.proc_cpt_code AS VARCHAR),
-            CAST(vasct.cond_icd10_code AS VARCHAR),
-            CAST(vasct.cd34_collection_datetime AS VARCHAR),
-            CAST(vasct.cd34_count_value AS VARCHAR),
-            CAST(vasct.cd34_unit AS VARCHAR),
-            CAST(vasct.confirmed_autologous AS VARCHAR),
-            CAST(vasct.overall_confidence AS VARCHAR),
-            CAST(vasct.data_completeness_score AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'has_condition_data', 'has_procedure_data', 'has_transplant_date_obs', 'has_cd34_data', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction', 'free_text_fields'],
-        ARRAY[
-            'v_autologous_stem_cell_transplant',
-            CAST(vasct.has_condition_data AS VARCHAR),
-            CAST(vasct.has_procedure_data AS VARCHAR),
-            CAST(vasct.has_transplant_date_obs AS VARCHAR),
-            CAST(vasct.has_cd34_data AS VARCHAR),
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            'true',
-            'false',
-            ''
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_autologous_stem_cell_transplant vasct
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vasct.patient_fhir_id = vpd.patient_fhir_id
-WHERE vasct.transplant_datetime IS NOT NULL
-
-UNION ALL
 
 -- ============================================================================
 -- 12. AUTOLOGOUS STEM CELL COLLECTION AS EVENTS
 -- Source: v_autologous_stem_cell_collection
 -- Provenance: Procedure FHIR resource
 -- HIGH PRIORITY - Preparatory procedure for transplant
--- ============================================================================
-SELECT
-    vascc.patient_fhir_id,
-    'stemcell_coll_' || vascc.collection_procedure_fhir_id as event_id,
-    CAST(vascc.collection_datetime AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vascc.collection_datetime AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vascc.collection_datetime AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Procedure' as event_type,
-    'Stem Cell Collection' as event_category,
-    COALESCE(vascc.collection_method, 'Apheresis') as event_subtype,
-    'Autologous stem cell collection (apheresis)' as event_description,
-    vascc.collection_status as event_status,
-
-    'v_autologous_stem_cell_collection' as source_view,
-    'Procedure' as source_domain,
-    vascc.collection_procedure_fhir_id as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    CASE WHEN vascc.collection_cpt_code IS NOT NULL THEN ARRAY[vascc.collection_cpt_code] ELSE CAST(NULL AS ARRAY(VARCHAR)) END as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['collection_datetime', 'collection_method', 'collection_cpt_code', 'collection_outcome', 'cd34_measurement_datetime', 'cd34_count', 'cd34_unit', 'cd34_adequacy', 'mobilization_agent_name', 'mobilization_start_datetime', 'days_from_mobilization_to_collection', 'data_completeness'],
-        ARRAY[
-            CAST(vascc.collection_datetime AS VARCHAR),
-            CAST(vascc.collection_method AS VARCHAR),
-            CAST(vascc.collection_cpt_code AS VARCHAR),
-            CAST(vascc.collection_outcome AS VARCHAR),
-            CAST(vascc.cd34_measurement_datetime AS VARCHAR),
-            CAST(vascc.cd34_count AS VARCHAR),
-            CAST(vascc.cd34_unit AS VARCHAR),
-            CAST(vascc.cd34_adequacy AS VARCHAR),
-            CAST(vascc.mobilization_agent_name AS VARCHAR),
-            CAST(vascc.mobilization_start_datetime AS VARCHAR),
-            CAST(vascc.days_from_mobilization_to_collection AS VARCHAR),
-            CAST(vascc.data_completeness AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction'],
-        ARRAY[
-            'v_autologous_stem_cell_collection',
-            'procedure',
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            CAST(CASE WHEN vascc.collection_cpt_code IS NOT NULL THEN true ELSE false END AS VARCHAR),
-            'false'
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_autologous_stem_cell_collection vascc
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vascc.patient_fhir_id = vpd.patient_fhir_id
-WHERE vascc.collection_datetime IS NOT NULL
-
-UNION ALL
 
 -- ============================================================================
 -- 13. IMAGING-RELATED CORTICOSTEROID USE AS EVENTS
 -- Source: v_imaging_corticosteroid_use
 -- Provenance: MedicationRequest FHIR resource (linked to imaging)
 -- HIGH PRIORITY - Steroid timing signals tumor edema and affects imaging interpretation
--- ============================================================================
-SELECT
-    vicu.patient_fhir_id,
-    'cortico_img_' || vicu.corticosteroid_medication_fhir_id as event_id,
-    CAST(vicu.imaging_date AS DATE) as event_date,
-    DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vicu.imaging_date AS DATE)) as age_at_event_days,
-    CAST(DATE_DIFF('day', CAST(vpd.pd_birth_date AS DATE), CAST(vicu.imaging_date AS DATE)) AS DOUBLE) / 365.25 as age_at_event_years,
-
-    'Medication' as event_type,
-    'Corticosteroid (Imaging)' as event_category,
-    vicu.corticosteroid_name as event_subtype,
-    vicu.corticosteroid_name || ' around ' || vicu.imaging_modality || ' imaging' as event_description,
-    vicu.medication_status as event_status,
-
-    'v_imaging_corticosteroid_use' as source_view,
-    'MedicationRequest' as source_domain,
-    vicu.corticosteroid_medication_fhir_id as source_id,
-
-    CAST(NULL AS ARRAY(VARCHAR)) as icd10_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as snomed_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as cpt_codes,
-    CAST(NULL AS ARRAY(VARCHAR)) as loinc_codes,
-
-    CAST(CAST(MAP(
-        ARRAY['corticosteroid_name', 'corticosteroid_generic_name', 'rxnorm_cui', 'imaging_date', 'imaging_modality', 'imaging_procedure_id', 'medication_start_datetime', 'medication_stop_datetime', 'days_from_med_start_to_imaging', 'days_from_imaging_to_med_stop', 'temporal_relationship', 'detection_method'],
-        ARRAY[
-            CAST(vicu.corticosteroid_name AS VARCHAR),
-            CAST(vicu.corticosteroid_generic_name AS VARCHAR),
-            CAST(vicu.corticosteroid_rxnorm_cui AS VARCHAR),
-            CAST(vicu.imaging_date AS VARCHAR),
-            CAST(vicu.imaging_modality AS VARCHAR),
-            CAST(vicu.imaging_procedure_id AS VARCHAR),
-            CAST(vicu.medication_start_datetime AS VARCHAR),
-            CAST(vicu.medication_stop_datetime AS VARCHAR),
-            CAST(vicu.days_from_med_start_to_imaging AS VARCHAR),
-            CAST(vicu.days_from_imaging_to_med_stop AS VARCHAR),
-            CAST(vicu.temporal_relationship AS VARCHAR),
-            CAST(vicu.detection_method AS VARCHAR)
-        ]
-    ) AS JSON) AS VARCHAR) as event_metadata,
-
-    CAST(CAST(MAP(
-        ARRAY['source_view', 'source_table', 'extraction_timestamp', 'has_structured_code', 'requires_free_text_extraction', 'linked_to_imaging', 'affects_imaging_interpretation'],
-        ARRAY[
-            'v_imaging_corticosteroid_use',
-            'medication_request (linked to diagnostic_report)',
-            CAST(CURRENT_TIMESTAMP AS VARCHAR),
-            'false',
-            'false',
-            'true',
-            'true'
-        ]
-    ) AS JSON) AS VARCHAR) as extraction_context
-
-FROM fhir_prd_db.v_imaging_corticosteroid_use vicu
-LEFT JOIN fhir_prd_db.v_patient_demographics vpd ON vicu.patient_fhir_id = vpd.patient_fhir_id
-WHERE vicu.on_corticosteroid = true  -- Only include imaging events with actual corticosteroid use
-
 ORDER BY patient_fhir_id, event_date, event_type;
 
 
