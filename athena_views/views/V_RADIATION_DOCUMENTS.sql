@@ -60,11 +60,12 @@ SELECT
     -- Document metadata (doc_ prefix)
     dr.type_text as doc_type_text,
     dr.description as doc_description,
-    TRY(CAST(dr.date AS TIMESTAMP(3))) as doc_date,
+    -- FIX: Use FROM_ISO8601_TIMESTAMP and cast to TIMESTAMP(3) for ISO8601 date strings
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.date)) AS TIMESTAMP(3)) as doc_date,
     dr.status as doc_status,
     dr.doc_status as doc_doc_status,
-    TRY(CAST(dr.context_period_start AS TIMESTAMP(3))) as doc_context_period_start,
-    TRY(CAST(dr.context_period_end AS TIMESTAMP(3))) as doc_context_period_end,
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.context_period_start)) AS TIMESTAMP(3)) as doc_context_period_start,
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.context_period_end)) AS TIMESTAMP(3)) as doc_context_period_end,
     dr.context_facility_type_text as doc_facility_type,
     dr.context_practice_setting_text as doc_practice_setting,
 

@@ -4826,11 +4826,15 @@ SELECT
     -- Document metadata (doc_ prefix)
     dr.type_text as doc_type_text,
     dr.description as doc_description,
-    TRY(CAST(dr.date AS TIMESTAMP(3))) as doc_date,
+    -- FIX 2025-10-29: Use FROM_ISO8601_TIMESTAMP and cast to TIMESTAMP(3) for ISO8601 date strings
+    -- Root cause: document_reference.date stores dates as '2021-11-05T20:14:59Z' (ISO8601)
+    -- TRY(CAST()) returns NULL for ISO8601 strings, FROM_ISO8601_TIMESTAMP() works correctly
+    -- Must wrap in CAST to TIMESTAMP(3) because FROM_ISO8601_TIMESTAMP returns 'timestamp with time zone' which Athena views don't support
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.date)) AS TIMESTAMP(3)) as doc_date,
     dr.status as doc_status,
     dr.doc_status as doc_doc_status,
-    TRY(CAST(dr.context_period_start AS TIMESTAMP(3))) as doc_context_period_start,
-    TRY(CAST(dr.context_period_end AS TIMESTAMP(3))) as doc_context_period_end,
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.context_period_start)) AS TIMESTAMP(3)) as doc_context_period_start,
+    CAST(TRY(FROM_ISO8601_TIMESTAMP(dr.context_period_end)) AS TIMESTAMP(3)) as doc_context_period_end,
     dr.context_facility_type_text as doc_facility_type,
     dr.context_practice_setting_text as doc_practice_setting,
 
