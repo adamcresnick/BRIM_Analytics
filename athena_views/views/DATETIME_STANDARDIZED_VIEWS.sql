@@ -83,7 +83,7 @@ observation_start_date AS (
         o.id as observation_id,
         o.subject_reference as patient_fhir_id,
         oc.component_code_text as course_line,
-        o.effective_date_time as start_date_value,
+        oc.component_value_date_time as start_date_value,
         o.issued as observation_issued_date
     FROM fhir_prd_db.observation o
     LEFT JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
@@ -94,7 +94,446 @@ observation_stop_date AS (
         o.id as observation_id,
         o.subject_reference as patient_fhir_id,
         oc.component_code_text as course_line,
-        o.effective_date_time as stop_date_value,
+        oc.component_value_date_time as stop_date_value,
+        o.issued as observation_issued_date
+    FROM fhir_prd_db.observation o
+    LEFT JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
+    WHERE o.code_text = 'ELECT - INTAKE FORM - RADIATION TABLE - STOP DATE'
+),
+observation_comments AS (
+    SELECT
+        o.id as observation_id,
+        o.subject_reference as patient_fhir_id,
+        LISTAGG(obn.note_text, ' | ') WITHIN GROUP (ORDER BY obn.note_time) as comments_aggregated,
+        LISTAGG(obn.note_author_string, ' | ') WITHIN GROUP (ORDER BY obn.note_time) as comment_authors
+    FROM fhir_prd_db.observation o
+    LEFT JOIN fhir_prd_db.observation_note obn ON o.id = obn.observation_id
+    WHERE o.code_text LIKE 'ELECT - INTAKE FORM - RADIATION TABLE%'
+    GROUP BY o.id, o.subject_reference
+),
+-- Combine all observation components into single record per course
+observation_consolidated AS (
+    SELECT
+        COALESCE(od.patient_fhir_id, of.patient_fhir_id, osd.patient_fhir_id, ost.patient_fhir_id) as patient_fhir_id,
+        COALESCE(od.observation_id, of.observation_id, osd.observation_id, ost.observation_id) as observation_id,
+        COALESCE(od.course_line, of.course_line, osd.course_line, ost.course_line) as course_line,
+
+        -- Dose fields (obs_ prefix)
+        od.dose_value as obs_dose_value,
+        od.dose_unit as obs_dose_unit,
+
+        -- Field/site fields (obs_ prefix)
+        of.field_value as obs_radiation_field,
+
+        -- Map field to CBTN radiation_site codes (obs_ prefix)
+        CASE
+            WHEN LOWER(of.field_value) LIKE '%cranial%'
+                 AND LOWER(of.field_value) NOT LIKE '%craniospinal%' THEN 1
+            WHEN LOWER(of.field_value) LIKE '%craniospinal%' THEN 8
+            WHEN LOWER(of.field_value) LIKE '%whole%ventricular%' THEN 9
+            WHEN of.field_value IS NOT NULL THEN 6
+            ELSE NULL
+        END as obs_radiation_site_code,
+
+        -- Dates (obs_ prefix)
+        TRY(CAST(osd.start_date_value AS TIMESTAMP(3))) as obs_start_date,
+        TRY(CAST(ost.stop_date_value AS TIMESTAMP(3))) as obs_stop_date,
+
+        -- Metadata (obs_ prefix)
+        od.observation_status as obs_status,
+        TRY(CAST(od.observation_effective_date AS TIMESTAMP(3))) as obs_effective_date,
+        TRY(CAST(od.observation_issued_date AS TIMESTAMP(3))) as obs_issued_date,
+        od.observation_code_text as obs_code_text,
+
+        -- Comments (obsc_ prefix for component-level data)
+        oc.comments_aggregated as obsc_comments,
+        oc.comment_authors as obsc_comment_authors,
+
+        -- Data source flag
+        'observation' as data_source_primary
+
+    FROM observation_dose od
+    FULL OUTER JOIN observation_field of
+        ON od.patient_fhir_id = of.patient_fhir_id
+        AND od.course_line = of.course_line
+    FULL OUTER JOIN observation_start_date osd
+        ON COALESCE(od.patient_fhir_id, of.patient_fhir_id) = osd.patient_fhir_id
+        AND COALESCE(od.course_line, of.course_line) = osd.course_line
+    FULL OUTER JOIN observation_stop_date ost
+        ON COALESCE(od.patient_fhir_id, of.patient_fhir_id, osd.patient_fhir_id) = ost.patient_fhir_id
+        AND COALESCE(od.course_line, of.course_line, osd.course_line) = ost.course_line
+    LEFT JOIN observation_comments oc
+        ON COALESCE(od.observation_id, of.observation_id, osd.observation_id, ost.observation_id) = oc.observation_id
+),
+
+-- ================================================================================
+-- CTE 2: Service Request radiation courses
+-- Source: service_request table
+-- Coverage: 3 records, 1 patient (very limited)
+-- ================================================================================
+service_request_courses AS (
+    SELECT
+        sr.subject_reference as patient_fhir_id,
+        sr.id as service_request_id,
+
+        -- Service request fields (sr_ prefix - PRESERVE ALL ORIGINAL FIELDS)
+        sr.status as sr_status,
+        sr.intent as sr_intent,
+        sr.code_text as sr_code_text,
+        sr.quantity_quantity_value as sr_quantity_value,
+        sr.quantity_quantity_unit as sr_quantity_unit,
+        sr.quantity_ratio_numerator_value as sr_quantity_ratio_numerator_value,
+        sr.quantity_ratio_numerator_unit as sr_quantity_ratio_numerator_unit,
+        sr.quantity_ratio_denominator_value as sr_quantity_ratio_denominator_value,
+        sr.quantity_ratio_denominator_unit as sr_quantity_ratio_denominator_unit,
+        TRY(CAST(sr.occurrence_date_time AS TIMESTAMP(3))) as sr_occurrence_date_time,
+        TRY(CAST(sr.occurrence_period_start AS TIMESTAMP(3))) as sr_occurrence_period_start,
+        TRY(CAST(sr.occurrence_period_end AS TIMESTAMP(3))) as sr_occurrence_period_end,
+        TRY(CAST(sr.authored_on AS TIMESTAMP(3))) as sr_authored_on,
+        sr.requester_reference as sr_requester_reference,
+        sr.requester_display as sr_requester_display,
+        sr.performer_type_text as sr_performer_type_text,
+        sr.patient_instruction as sr_patient_instruction,
+        sr.priority as sr_priority,
+        sr.do_not_perform as sr_do_not_perform,
+
+        -- Data source flag
+        'service_request' as data_source_primary
+
+    FROM fhir_prd_db.service_request sr
+    WHERE sr.subject_reference IS NOT NULL
+      AND (LOWER(sr.code_text) LIKE '%radiation%'
+           OR LOWER(sr.code_text) LIKE '%radiotherapy%'
+           OR LOWER(sr.code_text) LIKE '%imrt%'
+           OR LOWER(sr.code_text) LIKE '%proton%'
+           OR LOWER(sr.code_text) LIKE '%cyberknife%'
+           OR LOWER(sr.code_text) LIKE '%cyber knife%'
+           OR LOWER(sr.code_text) LIKE '%gamma knife%'
+           OR LOWER(sr.code_text) LIKE '%gammaknife%'
+           OR LOWER(sr.code_text) LIKE '%xrt%'
+           OR LOWER(sr.code_text) LIKE '%x-rt%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiotherapy%'
+           OR LOWER(sr.patient_instruction) LIKE '%imrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%proton%'
+           OR LOWER(sr.patient_instruction) LIKE '%cyberknife%'
+           OR LOWER(sr.patient_instruction) LIKE '%gamma knife%')
+),
+
+-- ================================================================================
+-- CTE 3: Service Request sub-schemas (notes, reason codes, body sites)
+-- Source: service_request_* tables
+-- ================================================================================
+service_request_notes AS (
+    SELECT
+        srn.service_request_id,
+        LISTAGG(srn.note_text, ' | ') WITHIN GROUP (ORDER BY srn.note_time) as note_text_aggregated,
+        LISTAGG(srn.note_author_reference_display, ' | ') WITHIN GROUP (ORDER BY srn.note_time) as note_authors
+    FROM fhir_prd_db.service_request_note srn
+    WHERE srn.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%'
+           OR LOWER(sr.code_text) LIKE '%radiotherapy%'
+           OR LOWER(sr.code_text) LIKE '%imrt%'
+           OR LOWER(sr.code_text) LIKE '%proton%'
+           OR LOWER(sr.code_text) LIKE '%cyberknife%'
+           OR LOWER(sr.code_text) LIKE '%gamma knife%'
+           OR LOWER(sr.code_text) LIKE '%xrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiotherapy%'
+           OR LOWER(sr.patient_instruction) LIKE '%imrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%proton%'
+           OR LOWER(sr.patient_instruction) LIKE '%cyberknife%'
+           OR LOWER(sr.patient_instruction) LIKE '%gamma knife%'
+    )
+    GROUP BY srn.service_request_id
+),
+service_request_reason_codes AS (
+    SELECT
+        srrc.service_request_id,
+        LISTAGG(srrc.reason_code_text, ' | ') WITHIN GROUP (ORDER BY srrc.reason_code_text) as reason_code_text_aggregated,
+        LISTAGG(srrc.reason_code_coding, ' | ') WITHIN GROUP (ORDER BY srrc.reason_code_text) as reason_code_coding_aggregated
+    FROM fhir_prd_db.service_request_reason_code srrc
+    WHERE srrc.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%'
+           OR LOWER(sr.code_text) LIKE '%radiotherapy%'
+           OR LOWER(sr.code_text) LIKE '%imrt%'
+           OR LOWER(sr.code_text) LIKE '%proton%'
+           OR LOWER(sr.code_text) LIKE '%cyberknife%'
+           OR LOWER(sr.code_text) LIKE '%gamma knife%'
+           OR LOWER(sr.code_text) LIKE '%xrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiotherapy%'
+           OR LOWER(sr.patient_instruction) LIKE '%imrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%proton%'
+           OR LOWER(sr.patient_instruction) LIKE '%cyberknife%'
+           OR LOWER(sr.patient_instruction) LIKE '%gamma knife%'
+    )
+    GROUP BY srrc.service_request_id
+),
+service_request_body_sites AS (
+    SELECT
+        srbs.service_request_id,
+        LISTAGG(srbs.body_site_text, ' | ') WITHIN GROUP (ORDER BY srbs.body_site_text) as body_site_text_aggregated,
+        LISTAGG(srbs.body_site_coding, ' | ') WITHIN GROUP (ORDER BY srbs.body_site_text) as body_site_coding_aggregated
+    FROM fhir_prd_db.service_request_body_site srbs
+    WHERE srbs.service_request_id IN (
+        SELECT id FROM fhir_prd_db.service_request sr
+        WHERE LOWER(sr.code_text) LIKE '%radiation%'
+           OR LOWER(sr.code_text) LIKE '%radiotherapy%'
+           OR LOWER(sr.code_text) LIKE '%imrt%'
+           OR LOWER(sr.code_text) LIKE '%proton%'
+           OR LOWER(sr.code_text) LIKE '%cyberknife%'
+           OR LOWER(sr.code_text) LIKE '%gamma knife%'
+           OR LOWER(sr.code_text) LIKE '%xrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiation%'
+           OR LOWER(sr.patient_instruction) LIKE '%radiotherapy%'
+           OR LOWER(sr.patient_instruction) LIKE '%imrt%'
+           OR LOWER(sr.patient_instruction) LIKE '%proton%'
+           OR LOWER(sr.patient_instruction) LIKE '%cyberknife%'
+           OR LOWER(sr.patient_instruction) LIKE '%gamma knife%'
+    )
+    GROUP BY srbs.service_request_id
+),
+
+-- ================================================================================
+-- CTE 4: Radiation patients list (for appointment filtering)
+-- Source: service_request + observation tables
+-- Purpose: Pre-materialize patient list for performance
+-- ================================================================================
+radiation_patients_list AS (
+    SELECT DISTINCT subject_reference as patient_id FROM fhir_prd_db.service_request
+    WHERE LOWER(code_text) LIKE '%radiation%'
+       OR LOWER(code_text) LIKE '%radiotherapy%'
+       OR LOWER(code_text) LIKE '%imrt%'
+       OR LOWER(code_text) LIKE '%proton%'
+       OR LOWER(code_text) LIKE '%cyberknife%'
+       OR LOWER(code_text) LIKE '%gamma knife%'
+       OR LOWER(code_text) LIKE '%xrt%'
+    UNION
+    SELECT DISTINCT subject_reference as patient_id FROM fhir_prd_db.observation
+    WHERE code_text LIKE 'ELECT - INTAKE FORM - RADIATION%'
+),
+
+-- ================================================================================
+-- CTE 5: Appointment data (scheduling context)
+-- Source: appointment + appointment_participant tables
+-- Coverage: 331,796 appointments, 1,855 patients
+-- ================================================================================
+appointment_summary AS (
+    SELECT
+        REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') as patient_fhir_id,
+        COUNT(DISTINCT a.id) as total_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'fulfilled' THEN a.id END) as fulfilled_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'cancelled' THEN a.id END) as cancelled_appointments,
+        COUNT(DISTINCT CASE WHEN a.status = 'noshow' THEN a.id END) as noshow_appointments,
+        TRY(CAST(MIN(a.start) AS TIMESTAMP(3))) as first_appointment_date,
+        TRY(CAST(MAX(a.start) AS TIMESTAMP(3))) as last_appointment_date,
+        TRY(CAST(MIN(CASE WHEN a.status = 'fulfilled' THEN a.start END) AS TIMESTAMP(3))) as first_fulfilled_appointment,
+        TRY(CAST(MAX(CASE WHEN a.status = 'fulfilled' THEN a.start END) AS TIMESTAMP(3))) as last_fulfilled_appointment
+    FROM fhir_prd_db.appointment a
+    JOIN fhir_prd_db.appointment_participant ap ON a.id = ap.appointment_id
+    WHERE ap.participant_actor_reference LIKE 'Patient/%'
+      AND REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') IN (SELECT patient_id FROM radiation_patients_list)
+    GROUP BY REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '')
+),
+
+-- ================================================================================
+-- CTE 6: Care Plan data (treatment plan context)
+-- Source: care_plan + care_plan_part_of tables
+-- Coverage: 18,189 records, 568 patients
+-- ================================================================================
+care_plan_summary AS (
+    SELECT
+        cp.subject_reference as patient_fhir_id,
+        COUNT(DISTINCT cp.id) as total_care_plans,
+        LISTAGG(DISTINCT cp.title, ' | ') WITHIN GROUP (ORDER BY cp.title) as care_plan_titles,
+        LISTAGG(DISTINCT cp.status, ' | ') WITHIN GROUP (ORDER BY cp.status) as care_plan_statuses,
+        TRY(CAST(MIN(cp.period_start) AS TIMESTAMP(3))) as first_care_plan_start,
+        TRY(CAST(MAX(cp.period_end) AS TIMESTAMP(3))) as last_care_plan_end
+    FROM fhir_prd_db.care_plan cp
+    WHERE cp.subject_reference IS NOT NULL
+      AND (LOWER(cp.title) LIKE '%radiation%')
+    GROUP BY cp.subject_reference
+)
+
+-- ================================================================================
+-- MAIN SELECT: Combine all sources with field provenance
+-- ================================================================================
+SELECT
+    -- Patient identifier
+    COALESCE(oc.patient_fhir_id, src.patient_fhir_id, apt.patient_fhir_id, cps.patient_fhir_id) as patient_fhir_id,
+
+    -- Primary data source indicator
+    COALESCE(oc.data_source_primary, src.data_source_primary) as data_source_primary,
+
+    -- Course identifier (composite key)
+    COALESCE(oc.observation_id, src.service_request_id) as course_id,
+    oc.course_line as obs_course_line_number,
+
+    -- ============================================================================
+    -- OBSERVATION FIELDS (obs_ prefix) - STRUCTURED DOSE/SITE DATA
+    -- Source: observation + observation_component tables (ELECT intake forms)
+    -- ============================================================================
+    oc.obs_dose_value,
+    oc.obs_dose_unit,
+    oc.obs_radiation_field,
+    oc.obs_radiation_site_code,
+    oc.obs_start_date,
+    oc.obs_stop_date,
+    oc.obs_status,
+    oc.obs_effective_date,
+    oc.obs_issued_date,
+    oc.obs_code_text,
+
+    -- Observation component comments (obsc_ prefix)
+    oc.obsc_comments,
+    oc.obsc_comment_authors,
+
+    -- ============================================================================
+    -- SERVICE REQUEST FIELDS (sr_ prefix) - TREATMENT COURSE METADATA
+    -- Source: service_request table
+    -- ============================================================================
+    src.sr_status,
+    src.sr_intent,
+    src.sr_code_text,
+    src.sr_quantity_value,
+    src.sr_quantity_unit,
+    src.sr_quantity_ratio_numerator_value,
+    src.sr_quantity_ratio_numerator_unit,
+    src.sr_quantity_ratio_denominator_value,
+    src.sr_quantity_ratio_denominator_unit,
+    src.sr_occurrence_date_time,
+    src.sr_occurrence_period_start,
+    src.sr_occurrence_period_end,
+    src.sr_authored_on,
+    src.sr_requester_reference,
+    src.sr_requester_display,
+    src.sr_performer_type_text,
+    src.sr_patient_instruction,
+    src.sr_priority,
+    src.sr_do_not_perform,
+
+    -- Service request sub-schema fields (srn_, srrc_, srbs_ prefixes)
+    srn.note_text_aggregated as srn_note_text,
+    srn.note_authors as srn_note_authors,
+    srrc.reason_code_text_aggregated as srrc_reason_code_text,
+    srrc.reason_code_coding_aggregated as srrc_reason_code_coding,
+    srbs.body_site_text_aggregated as srbs_body_site_text,
+    srbs.body_site_coding_aggregated as srbs_body_site_coding,
+
+    -- ============================================================================
+    -- APPOINTMENT FIELDS (apt_ prefix) - SCHEDULING CONTEXT
+    -- Source: appointment + appointment_participant tables
+    -- ============================================================================
+    apt.total_appointments as apt_total_appointments,
+    apt.fulfilled_appointments as apt_fulfilled_appointments,
+    apt.cancelled_appointments as apt_cancelled_appointments,
+    apt.noshow_appointments as apt_noshow_appointments,
+    apt.first_appointment_date as apt_first_appointment_date,
+    apt.last_appointment_date as apt_last_appointment_date,
+    apt.first_fulfilled_appointment as apt_first_fulfilled_appointment,
+    apt.last_fulfilled_appointment as apt_last_fulfilled_appointment,
+
+    -- ============================================================================
+    -- CARE PLAN FIELDS (cp_ prefix) - TREATMENT PLAN CONTEXT
+    -- Source: care_plan + care_plan_part_of tables
+    -- ============================================================================
+    cps.total_care_plans as cp_total_care_plans,
+    cps.care_plan_titles as cp_titles,
+    cps.care_plan_statuses as cp_statuses,
+    cps.first_care_plan_start as cp_first_start_date,
+    cps.last_care_plan_end as cp_last_end_date,
+
+    -- ============================================================================
+    -- DERIVED/COMPUTED FIELDS
+    -- ============================================================================
+
+    -- Best available treatment dates (prioritize observation over service_request)
+    COALESCE(oc.obs_start_date, src.sr_occurrence_period_start, apt.first_fulfilled_appointment) as best_treatment_start_date,
+    COALESCE(oc.obs_stop_date, src.sr_occurrence_period_end, apt.last_fulfilled_appointment) as best_treatment_stop_date,
+
+    -- Data completeness indicators
+    CASE WHEN oc.obs_dose_value IS NOT NULL THEN true ELSE false END as has_structured_dose,
+    CASE WHEN oc.obs_radiation_field IS NOT NULL THEN true ELSE false END as has_structured_site,
+    CASE WHEN oc.obs_start_date IS NOT NULL OR src.sr_occurrence_period_start IS NOT NULL THEN true ELSE false END as has_treatment_dates,
+    CASE WHEN apt.total_appointments > 0 THEN true ELSE false END as has_appointments,
+    CASE WHEN cps.total_care_plans > 0 THEN true ELSE false END as has_care_plan,
+
+    -- Data quality score (0-1)
+    (
+        CAST(CASE WHEN oc.obs_dose_value IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.3 +
+        CAST(CASE WHEN oc.obs_radiation_field IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.3 +
+        CAST(CASE WHEN oc.obs_start_date IS NOT NULL OR src.sr_occurrence_period_start IS NOT NULL THEN 1 ELSE 0 END AS DOUBLE) * 0.2 +
+        CAST(CASE WHEN apt.total_appointments > 0 THEN 1 ELSE 0 END AS DOUBLE) * 0.1 +
+        CAST(CASE WHEN cps.total_care_plans > 0 THEN 1 ELSE 0 END AS DOUBLE) * 0.1
+    ) as data_quality_score
+
+FROM observation_consolidated oc
+FULL OUTER JOIN service_request_courses src
+    ON oc.patient_fhir_id = src.patient_fhir_id
+LEFT JOIN service_request_notes srn ON src.service_request_id = srn.service_request_id
+LEFT JOIN service_request_reason_codes srrc ON src.service_request_id = srrc.service_request_id
+LEFT JOIN service_request_body_sites srbs ON src.service_request_id = srbs.service_request_id
+LEFT JOIN appointment_summary apt
+    ON COALESCE(oc.patient_fhir_id, src.patient_fhir_id) = apt.patient_fhir_id
+LEFT JOIN care_plan_summary cps
+    ON COALESCE(oc.patient_fhir_id, src.patient_fhir_id) = cps.patient_fhir_id
+WHERE COALESCE(oc.patient_fhir_id, src.patient_fhir_id, apt.patient_fhir_id, cps.patient_fhir_id) IS NOT NULL
+
+ORDER BY patient_fhir_id, obs_course_line_number, best_treatment_start_date;
+
+-- ================================================================================
+-- CTE 1: Observation-based radiation data (ELECT intake forms)
+-- Source: observation + observation_component tables
+-- Coverage: ~90 patients with structured dose, site, dates
+-- ================================================================================
+observation_dose AS (
+    SELECT
+        o.id as observation_id,
+        o.subject_reference as patient_fhir_id,
+        oc.component_code_text as course_line,
+        CAST(oc.component_value_quantity_value AS DOUBLE) as dose_value,
+        COALESCE(oc.component_value_quantity_unit, 'cGy') as dose_unit,
+        o.status as observation_status,
+        o.effective_date_time as observation_effective_date,
+        o.issued as observation_issued_date,
+        o.code_text as observation_code_text
+    FROM fhir_prd_db.observation o
+    JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
+    WHERE o.code_text = 'ELECT - INTAKE FORM - RADIATION TABLE - DOSE'
+      AND oc.component_value_quantity_value IS NOT NULL
+),
+observation_field AS (
+    SELECT
+        o.id as observation_id,
+        o.subject_reference as patient_fhir_id,
+        oc.component_code_text as course_line,
+        oc.component_value_string as field_value,
+        o.effective_date_time as observation_effective_date
+    FROM fhir_prd_db.observation o
+    JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
+    WHERE o.code_text = 'ELECT - INTAKE FORM - RADIATION TABLE - FIELD'
+      AND oc.component_value_string IS NOT NULL
+),
+observation_start_date AS (
+    SELECT
+        o.id as observation_id,
+        o.subject_reference as patient_fhir_id,
+        oc.component_code_text as course_line,
+        oc.component_value_date_time as start_date_value,
+        o.issued as observation_issued_date
+    FROM fhir_prd_db.observation o
+    LEFT JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
+    WHERE o.code_text = 'ELECT - INTAKE FORM - RADIATION TABLE - START DATE'
+),
+observation_stop_date AS (
+    SELECT
+        o.id as observation_id,
+        o.subject_reference as patient_fhir_id,
+        oc.component_code_text as course_line,
+        oc.component_value_date_time as stop_date_value,
         o.issued as observation_issued_date
     FROM fhir_prd_db.observation o
     LEFT JOIN fhir_prd_db.observation_component oc ON o.id = oc.observation_id
@@ -248,13 +687,26 @@ service_request_body_sites AS (
 ),
 
 -- ================================================================================
--- CTE 4: Appointment data (scheduling context)
+-- CTE 4: Radiation patients list (for appointment filtering)
+-- Source: service_request + observation tables
+-- Purpose: Pre-materialize patient list for performance
+-- ================================================================================
+radiation_patients_list AS (
+    SELECT DISTINCT subject_reference as patient_id FROM fhir_prd_db.service_request
+    WHERE LOWER(code_text) LIKE '%radiation%'
+    UNION
+    SELECT DISTINCT subject_reference as patient_id FROM fhir_prd_db.observation
+    WHERE code_text LIKE 'ELECT - INTAKE FORM - RADIATION%'
+),
+
+-- ================================================================================
+-- CTE 5: Appointment data (scheduling context)
 -- Source: appointment + appointment_participant tables
 -- Coverage: 331,796 appointments, 1,855 patients
 -- ================================================================================
 appointment_summary AS (
     SELECT
-        ap.participant_actor_reference as patient_fhir_id,
+        REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') as patient_fhir_id,
         COUNT(DISTINCT a.id) as total_appointments,
         COUNT(DISTINCT CASE WHEN a.status = 'fulfilled' THEN a.id END) as fulfilled_appointments,
         COUNT(DISTINCT CASE WHEN a.status = 'cancelled' THEN a.id END) as cancelled_appointments,
@@ -266,19 +718,12 @@ appointment_summary AS (
     FROM fhir_prd_db.appointment a
     JOIN fhir_prd_db.appointment_participant ap ON a.id = ap.appointment_id
     WHERE ap.participant_actor_reference LIKE 'Patient/%'
-      AND ap.participant_actor_reference IN (
-          -- Only include appointments for patients with radiation courses or observations
-          SELECT DISTINCT subject_reference FROM fhir_prd_db.service_request
-          WHERE LOWER(code_text) LIKE '%radiation%'
-          UNION
-          SELECT DISTINCT subject_reference FROM fhir_prd_db.observation
-          WHERE code_text LIKE 'ELECT - INTAKE FORM - RADIATION%'
-      )
-    GROUP BY ap.participant_actor_reference
+      AND REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') IN (SELECT patient_id FROM radiation_patients_list)
+    GROUP BY REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '')
 ),
 
 -- ================================================================================
--- CTE 5: Care Plan data (treatment plan context)
+-- CTE 6: Care Plan data (treatment plan context)
 -- Source: care_plan + care_plan_part_of tables
 -- Coverage: 18,189 records, 568 patients
 -- ================================================================================
@@ -4347,17 +4792,31 @@ document_authors AS (
     GROUP BY document_reference_id
 ),
 
--- Get document content (take first if multiple)
+-- Get document content (take most recent if multiple)
 document_content AS (
     SELECT
         document_reference_id,
-        MAX(content_attachment_content_type) as content_type,
-        MAX(content_attachment_url) as attachment_url,
-        MAX(content_attachment_title) as attachment_title,
-        MAX(content_attachment_creation) as attachment_creation,
-        MAX(content_attachment_size) as attachment_size
-    FROM fhir_prd_db.document_reference_content
-    GROUP BY document_reference_id
+        content_type,
+        attachment_url,
+        attachment_title,
+        attachment_creation,
+        attachment_size
+    FROM (
+        SELECT
+            document_reference_id,
+            content_attachment_content_type as content_type,
+            content_attachment_url as attachment_url,
+            content_attachment_title as attachment_title,
+            content_attachment_creation as attachment_creation,
+            content_attachment_size as attachment_size,
+            ROW_NUMBER() OVER (
+                PARTITION BY document_reference_id
+                ORDER BY content_attachment_creation DESC NULLS LAST,
+                         content_attachment_url
+            ) as rn
+        FROM fhir_prd_db.document_reference_content
+    )
+    WHERE rn = 1
 )
 
 SELECT
@@ -4429,10 +4888,44 @@ LEFT JOIN document_categories drcat ON dr.id = drcat.document_reference_id
 LEFT JOIN document_authors dra ON dr.id = dra.document_reference_id
 
 WHERE dr.subject_reference IS NOT NULL
-  AND (LOWER(dr.type_text) LIKE '%radiation%'
-       OR LOWER(dr.type_text) LIKE '%rad%onc%'
-       OR LOWER(dr.description) LIKE '%radiation%'
-       OR LOWER(dr.description) LIKE '%rad%onc%')
+  AND (
+    -- Specific radiation oncology terms (high confidence)
+    LOWER(dr.type_text) LIKE '%rad%onc%'
+    OR LOWER(dr.type_text) LIKE '%radonc%'
+    OR LOWER(dr.type_text) LIKE '%radiation%therapy%'
+    OR LOWER(dr.type_text) LIKE '%radiation%treatment%'
+    OR LOWER(dr.type_text) LIKE '%radiotherapy%'
+    -- Specific modalities
+    OR LOWER(dr.type_text) LIKE '%imrt%'
+    OR LOWER(dr.type_text) LIKE '%proton%'
+    OR LOWER(dr.type_text) LIKE '%cyberknife%'
+    OR LOWER(dr.type_text) LIKE '%cyber knife%'
+    OR LOWER(dr.type_text) LIKE '%gamma knife%'
+    OR LOWER(dr.type_text) LIKE '%gammaknife%'
+    OR LOWER(dr.type_text) LIKE '%xrt%'
+    OR LOWER(dr.type_text) LIKE '%x-rt%'
+    -- Generic radiation (but exclude radiology)
+    OR (LOWER(dr.type_text) LIKE '%radiation%'
+        AND LOWER(dr.type_text) NOT LIKE '%radiology%'
+        AND LOWER(dr.type_text) NOT LIKE '%diagnostic%')
+    -- Same patterns for description field
+    OR LOWER(dr.description) LIKE '%rad%onc%'
+    OR LOWER(dr.description) LIKE '%radonc%'
+    OR LOWER(dr.description) LIKE '%radiation%therapy%'
+    OR LOWER(dr.description) LIKE '%radiation%treatment%'
+    OR LOWER(dr.description) LIKE '%radiotherapy%'
+    OR LOWER(dr.description) LIKE '%imrt%'
+    OR LOWER(dr.description) LIKE '%proton%'
+    OR LOWER(dr.description) LIKE '%cyberknife%'
+    OR LOWER(dr.description) LIKE '%cyber knife%'
+    OR LOWER(dr.description) LIKE '%gamma knife%'
+    OR LOWER(dr.description) LIKE '%gammaknife%'
+    OR LOWER(dr.description) LIKE '%xrt%'
+    OR LOWER(dr.description) LIKE '%x-rt%'
+    OR (LOWER(dr.description) LIKE '%radiation%'
+        AND LOWER(dr.description) NOT LIKE '%radiology%'
+        AND LOWER(dr.description) NOT LIKE '%diagnostic%')
+  )
 
 ORDER BY dr.subject_reference, extraction_priority, dr.date DESC;
 
@@ -4487,15 +4980,24 @@ radiation_patients AS (
 radiation_service_types AS (
     SELECT DISTINCT
         appointment_id,
-        service_type_coding_display
+        service_type_text,
+        service_type_coding
     FROM fhir_prd_db.appointment_service_type
-    WHERE LOWER(service_type_coding_display) LIKE '%radiation%'
-       OR LOWER(service_type_coding_display) LIKE '%rad%onc%'
-       OR LOWER(service_type_coding_display) LIKE '%radiotherapy%'
+    WHERE LOWER(service_type_text) LIKE '%radiation%'
+       OR LOWER(service_type_text) LIKE '%rad%onc%'
+       OR LOWER(service_type_text) LIKE '%radiotherapy%'
+       -- CRITICAL FIX: service_type_coding is JSON stored as VARCHAR
+       -- Must search the JSON string for radiation keywords
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%rad onc%'
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%radiation%'
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%radiotherapy%'
 ),
 
 -- ============================================================================
 -- Appointment types that indicate radiation treatment
+-- NOTE: Currently returns 0 - this table only contains HL7 v3-ActCode
+--       encounter types (AMB/IMP/EMER), not specialty-specific types.
+--       Kept as defensive check in case future EHR updates add specialty codes.
 -- ============================================================================
 radiation_appointment_types AS (
     SELECT DISTINCT
@@ -4511,7 +5013,7 @@ radiation_appointment_types AS (
 -- Main query: Return appointments that are ACTUALLY radiation-related
 -- ============================================================================
 SELECT DISTINCT
-    ap.participant_actor_reference as patient_fhir_id,
+    REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') as patient_fhir_id,
     a.id as appointment_id,
     a.status as appointment_status,
     a.appointment_type_text,
@@ -4536,7 +5038,7 @@ SELECT DISTINCT
     END as radiation_identification_method,
 
     -- Service type details
-    rst.service_type_coding_display as radiation_service_type,
+    rst.service_type_text as radiation_service_type,
     rat.appointment_type_coding_display as radiation_appointment_type
 
 FROM fhir_prd_db.appointment a
@@ -4545,7 +5047,151 @@ JOIN fhir_prd_db.appointment_participant ap ON a.id = ap.appointment_id
 -- Join to radiation-specific filters (at least one must match)
 LEFT JOIN radiation_service_types rst ON a.id = rst.appointment_id
 LEFT JOIN radiation_appointment_types rat ON a.id = rat.appointment_id
-LEFT JOIN radiation_patients rp ON ap.participant_actor_reference = rp.patient_fhir_id
+LEFT JOIN radiation_patients rp ON REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') = rp.patient_fhir_id
+
+WHERE ap.participant_actor_reference LIKE 'Patient/%'
+  AND (
+      -- Explicit radiation service type
+      rst.appointment_id IS NOT NULL
+
+      -- Explicit radiation appointment type
+      OR rat.appointment_id IS NOT NULL
+
+      -- Patient has radiation data AND appointment mentions radiation
+      OR (rp.patient_fhir_id IS NOT NULL
+          AND (LOWER(a.comment) LIKE '%radiation%'
+               OR LOWER(a.comment) LIKE '%rad%onc%'
+               OR LOWER(a.comment) LIKE '%radiotherapy%'
+               OR LOWER(a.comment) LIKE '%imrt%'
+               OR LOWER(a.comment) LIKE '%proton%'
+               OR LOWER(a.comment) LIKE '%cyberknife%'
+               OR LOWER(a.comment) LIKE '%gamma knife%'
+               OR LOWER(a.comment) LIKE '%xrt%'
+               OR LOWER(a.description) LIKE '%radiation%'
+               OR LOWER(a.description) LIKE '%rad%onc%'
+               OR LOWER(a.description) LIKE '%radiotherapy%'
+               OR LOWER(a.description) LIKE '%imrt%'
+               OR LOWER(a.description) LIKE '%proton%'
+               OR LOWER(a.description) LIKE '%cyberknife%'
+               OR LOWER(a.description) LIKE '%gamma knife%'
+               OR LOWER(a.description) LIKE '%xrt%'
+               OR LOWER(a.patient_instruction) LIKE '%radiation%'
+               OR LOWER(a.patient_instruction) LIKE '%radiotherapy%'
+               OR LOWER(a.patient_instruction) LIKE '%proton%'
+               OR LOWER(a.patient_instruction) LIKE '%imrt%'))
+
+      -- Conservative temporal match: Patient has radiation data + appointment during treatment window
+      OR (rp.patient_fhir_id IS NOT NULL
+          AND a.start IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM fhir_prd_db.v_radiation_treatments vrt
+              WHERE vrt.patient_fhir_id = REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '')
+              AND (
+                  -- Within structured treatment dates
+                  (vrt.obs_start_date IS NOT NULL
+                   AND vrt.obs_stop_date IS NOT NULL
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) >= vrt.obs_start_date
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) <= DATE_ADD('day', 30, vrt.obs_stop_date)) -- 30 day buffer
+                  OR
+                  -- Within service request treatment dates
+                  (vrt.sr_occurrence_period_start IS NOT NULL
+                   AND vrt.sr_occurrence_period_end IS NOT NULL
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) >= vrt.sr_occurrence_period_start
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) <= DATE_ADD('day', 30, vrt.sr_occurrence_period_end))
+              )
+          ))
+  )
+
+ORDER BY patient_fhir_id, appointment_start;
+
+-- ============================================================================
+-- Patients who actually have radiation data (from any source)
+-- ============================================================================
+radiation_patients AS (
+    -- Patients with structured ELECT data
+    SELECT DISTINCT patient_fhir_id FROM fhir_prd_db.v_radiation_treatments
+    UNION
+    -- Patients with radiation documents
+    SELECT DISTINCT patient_fhir_id FROM fhir_prd_db.v_radiation_documents
+    UNION
+    -- Patients with radiation care plans
+    SELECT DISTINCT patient_fhir_id FROM fhir_prd_db.v_radiation_care_plan_hierarchy
+),
+
+-- ============================================================================
+-- Appointment service types that indicate radiation oncology
+-- ============================================================================
+radiation_service_types AS (
+    SELECT DISTINCT
+        appointment_id,
+        service_type_text,
+        service_type_coding
+    FROM fhir_prd_db.appointment_service_type
+    WHERE LOWER(service_type_text) LIKE '%radiation%'
+       OR LOWER(service_type_text) LIKE '%rad%onc%'
+       OR LOWER(service_type_text) LIKE '%radiotherapy%'
+       -- CRITICAL FIX: service_type_coding is JSON stored as VARCHAR
+       -- Must search the JSON string for radiation keywords
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%rad onc%'
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%radiation%'
+       OR LOWER(CAST(service_type_coding AS VARCHAR)) LIKE '%radiotherapy%'
+),
+
+-- ============================================================================
+-- Appointment types that indicate radiation treatment
+-- NOTE: Currently returns 0 - this table only contains HL7 v3-ActCode
+--       encounter types (AMB/IMP/EMER), not specialty-specific types.
+--       Kept as defensive check in case future EHR updates add specialty codes.
+-- ============================================================================
+radiation_appointment_types AS (
+    SELECT DISTINCT
+        appointment_id,
+        appointment_type_coding_display
+    FROM fhir_prd_db.appointment_appointment_type_coding
+    WHERE LOWER(appointment_type_coding_display) LIKE '%radiation%'
+       OR LOWER(appointment_type_coding_display) LIKE '%rad%onc%'
+       OR LOWER(appointment_type_coding_display) LIKE '%radiotherapy%'
+)
+
+-- ============================================================================
+-- Main query: Return appointments that are ACTUALLY radiation-related
+-- ============================================================================
+SELECT DISTINCT
+    REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') as patient_fhir_id,
+    a.id as appointment_id,
+    a.status as appointment_status,
+    a.appointment_type_text,
+    a.priority,
+    a.description,
+    TRY(CAST(a.start AS TIMESTAMP(3))) as appointment_start,
+    TRY(CAST(a."end" AS TIMESTAMP(3))) as appointment_end,
+    a.minutes_duration,
+    TRY(CAST(a.created AS TIMESTAMP(3))) as created,
+    a.comment as appointment_comment,
+    a.patient_instruction,
+
+    -- Add provenance: How was this identified as radiation-related?
+    CASE
+        WHEN rst.appointment_id IS NOT NULL THEN 'service_type_radiation'
+        WHEN rat.appointment_id IS NOT NULL THEN 'appointment_type_radiation'
+        WHEN rp.patient_fhir_id IS NOT NULL
+             AND (LOWER(a.comment) LIKE '%radiation%' OR LOWER(a.description) LIKE '%radiation%')
+             THEN 'patient_with_radiation_data_and_radiation_keyword'
+        WHEN rp.patient_fhir_id IS NOT NULL THEN 'patient_with_radiation_data_temporal_match'
+        ELSE 'unknown'
+    END as radiation_identification_method,
+
+    -- Service type details
+    rst.service_type_text as radiation_service_type,
+    rat.appointment_type_coding_display as radiation_appointment_type
+
+FROM fhir_prd_db.appointment a
+JOIN fhir_prd_db.appointment_participant ap ON a.id = ap.appointment_id
+
+-- Join to radiation-specific filters (at least one must match)
+LEFT JOIN radiation_service_types rst ON a.id = rst.appointment_id
+LEFT JOIN radiation_appointment_types rat ON a.id = rat.appointment_id
+LEFT JOIN radiation_patients rp ON REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '') = rp.patient_fhir_id
 
 WHERE ap.participant_actor_reference LIKE 'Patient/%'
   AND (
@@ -4568,24 +5214,24 @@ WHERE ap.participant_actor_reference LIKE 'Patient/%'
           AND a.start IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM fhir_prd_db.v_radiation_treatments vrt
-              WHERE vrt.patient_fhir_id = rp.patient_fhir_id
+              WHERE vrt.patient_fhir_id = REGEXP_REPLACE(ap.participant_actor_reference, '^Patient/', '')
               AND (
                   -- Within structured treatment dates
                   (vrt.obs_start_date IS NOT NULL
                    AND vrt.obs_stop_date IS NOT NULL
-                   AND a.start >= vrt.obs_start_date
-                   AND a.start <= DATE_ADD('day', 30, vrt.obs_stop_date)) -- 30 day buffer
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) >= vrt.obs_start_date
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) <= DATE_ADD('day', 30, vrt.obs_stop_date)) -- 30 day buffer
                   OR
                   -- Within service request treatment dates
                   (vrt.sr_occurrence_period_start IS NOT NULL
                    AND vrt.sr_occurrence_period_end IS NOT NULL
-                   AND a.start >= vrt.sr_occurrence_period_start
-                   AND a.start <= DATE_ADD('day', 30, vrt.sr_occurrence_period_end))
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) >= vrt.sr_occurrence_period_start
+                   AND TRY(CAST(a.start AS TIMESTAMP(3))) <= DATE_ADD('day', 30, vrt.sr_occurrence_period_end))
               )
           ))
   )
 
-ORDER BY ap.participant_actor_reference, a.start;
+ORDER BY patient_fhir_id, appointment_start;
 
 /*
 -- ================================================================================
@@ -4833,7 +5479,16 @@ FROM fhir_prd_db.care_plan_part_of cppo
 INNER JOIN fhir_prd_db.care_plan cp ON cppo.care_plan_id = cp.id
 WHERE cp.subject_reference IS NOT NULL
   AND (LOWER(cp.title) LIKE '%radiation%'
-       OR LOWER(cppo.part_of_reference) LIKE '%radiation%')
+       OR LOWER(cp.title) LIKE '%rad%onc%'
+       OR LOWER(cp.title) LIKE '%radiotherapy%'
+       OR LOWER(cp.title) LIKE '%imrt%'
+       OR LOWER(cp.title) LIKE '%proton%'
+       OR LOWER(cp.title) LIKE '%cyberknife%'
+       OR LOWER(cp.title) LIKE '%gamma knife%'
+       OR LOWER(cp.title) LIKE '%xrt%'
+       OR LOWER(cppo.part_of_reference) LIKE '%radiation%'
+       OR LOWER(cppo.part_of_reference) LIKE '%rad%onc%'
+       OR LOWER(cppo.part_of_reference) LIKE '%radiotherapy%')
 ORDER BY cp.period_start;
 
 -- ================================================================================
@@ -5039,7 +5694,7 @@ patients_with_service_requests AS (
 -- CTE 6: Patients with ELECT radiation history flag (even without detailed data)
 -- ============================================================================
 patients_with_radiation_flag AS (
-    SELECT DISTINCT SUBSTRING(subject_reference, 9) as patient_fhir_id
+    SELECT DISTINCT subject_reference as patient_fhir_id
     FROM fhir_prd_db.observation
     WHERE code_text = 'ELECT - INTAKE FORM - TREATMENT HISTORY - RADIATION'
 ),
@@ -5956,4 +6611,310 @@ GROUP BY event_type, event_category,
 ORDER BY event_type, event_category;
 */
 
+;
+
+-- ============================================================================
+-- ============================================================================
+-- EPISODE VIEW: Chemotherapy Treatment Episodes
+-- ============================================================================
+-- ============================================================================
+-- Added: 2025-10-28
+-- Purpose: Construct treatment episodes from medication data for:
+--   1. Episode-level analysis and reporting
+--   2. Note retrieval prioritization for document abstraction
+--   3. Integration with patient timeline views
+-- 
+-- CRITICAL NOTE RETRIEVAL PRIORITIZATION GUIDANCE:
+-- ==================================================
+-- This view includes fields to guide optimization of clinical note retrieval
+-- for document abstraction. The following prioritization logic is applied:
+--
+-- HIGH PRIORITY (retrieve notes immediately):
+--   - Episodes with missing stop dates (may need completion documentation)
+--   - Episodes with >3 unique drugs (complex regimens need verification)
+--
+-- MEDIUM PRIORITY (retrieve during systematic review):
+--   - Episodes with medication_notes populated (additional context available)
+--
+-- LOW PRIORITY (routine abstraction):
+--   - Standard episodes with complete structured data
+--
+-- How to use this view for note retrieval:
+-- -----------------------------------------
+-- 1. Use episode_encounter_reference to link to Encounter resources
+-- 2. From Encounter, retrieve associated DocumentReference resources
+-- 3. Prioritize note retrieval by note_retrieval_priority field
+-- 4. Use note_retrieval_rationale to understand WHY notes are needed
+-- 5. Focus abstraction efforts on HIGH priority episodes first
+--
+-- Example query for note retrieval prioritization:
+-- /*
+-- SELECT 
+--     patient_fhir_id,
+--     episode_id,
+--     episode_encounter_reference,
+--     note_retrieval_priority,
+--     note_retrieval_rationale,
+--     episode_drug_names,
+--     episode_start_datetime,
+--     episode_end_datetime
+-- FROM fhir_prd_db.v_chemo_treatment_episodes
+-- WHERE note_retrieval_priority = 'HIGH'
+-- ORDER BY patient_fhir_id, episode_start_datetime;
+-- */
+--
+-- Integration with Patient Timeline:
+-- -----------------------------------
+-- This episode view is designed to work alongside v_unified_patient_timeline
+-- to provide comprehensive context for note abstraction:
+--   - Episode view: Groups medications into treatment episodes
+--   - Timeline view: Shows all clinical events around each episode
+--   - Together: Enable targeted note retrieval at key clinical timepoints
+--
+-- Example integration query:
+-- /*
+-- SELECT 
+--     e.patient_fhir_id,
+--     e.episode_id,
+--     e.episode_start_datetime,
+--     e.note_retrieval_priority,
+--     t.event_date,
+--     t.event_type,
+--     t.event_description
+-- FROM fhir_prd_db.v_chemo_treatment_episodes e
+-- INNER JOIN fhir_prd_db.v_unified_patient_timeline t
+--     ON e.patient_fhir_id = t.patient_fhir_id
+--     AND t.event_date BETWEEN e.episode_start_datetime AND COALESCE(e.episode_end_datetime, CURRENT_TIMESTAMP)
+-- WHERE e.note_retrieval_priority = 'HIGH'
+-- ORDER BY e.patient_fhir_id, e.episode_start_datetime, t.event_date;
+-- */
+-- ============================================================================
+
+CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_treatment_episodes AS
+
+WITH
+
+-- ============================================================================
+-- Step 1: Standardize dates and add episode grouping keys
+-- ============================================================================
+medications_with_episode_dates AS (
+    SELECT
+        -- Episode grouping keys (PRIMARY: encounter-based)
+        patient_fhir_id,
+        mr_encounter_reference,  -- 99.9% coverage - PRIMARY grouping
+        encounter_fhir_id,       -- Additional encounter field
+
+        -- Episode dates (standardized to TIMESTAMP)
+        COALESCE(
+            TRY(CAST(medication_start_date AS TIMESTAMP(3))),      -- 99.3% coverage
+            TRY(CAST(medication_authored_date AS TIMESTAMP(3)))     -- 100% fallback
+        ) AS episode_start_datetime,
+
+        -- Stop date LEFT AS NULL if not available (for uniform querying)
+        TRY(CAST(medication_stop_date AS TIMESTAMP(3))) AS episode_stop_datetime,
+
+        -- Individual medication identifiers
+        medication_request_fhir_id,
+        medication_fhir_id,
+
+        -- Chemotherapy drug details
+        chemo_drug_id,
+        chemo_preferred_name,
+        chemo_approval_status,
+        chemo_rxnorm_ingredient,
+        chemo_ncit_code,
+        chemo_sources,
+        chemo_drug_category,
+        chemo_therapeutic_normalized,
+        rxnorm_match_type,
+        medication_name,
+        medication_rxnorm_code,
+        medication_rxnorm_display,
+
+        -- Medication administration details (CRITICAL for note abstraction)
+        medication_status,
+        medication_intent,
+        medication_priority,
+        medication_route,
+        medication_method,
+        medication_site,
+        medication_dosage_instructions,
+        medication_timing,
+        medication_patient_instructions,
+        medication_form_codes,
+        medication_forms,
+        medication_ingredient_strengths,
+
+        -- Clinical context (for note prioritization)
+        medication_reason,
+        medication_reason_codes,
+        medication_notes,
+
+        -- CarePlan linkage (32.7% coverage - supplemental grouping)
+        cp_id,
+        cp_title,
+        cp_status,
+        cp_intent,
+        cp_period_start,
+        cp_period_end,
+        care_plan_references,
+        care_plan_displays,
+        cpc_categories_aggregated,
+        cpcon_addresses_aggregated,
+
+        -- Provider information
+        requester_fhir_id,
+        requester_name,
+        recorder_fhir_id,
+        recorder_name,
+
+        -- Additional MedicationRequest metadata
+        mr_validity_period_start,
+        mr_status_reason_text,
+        mr_do_not_perform,
+        mr_course_of_therapy_type_text,
+        mr_dispense_initial_fill_duration_value,
+        mr_dispense_initial_fill_duration_unit,
+        mr_dispense_expected_supply_duration_value,
+        mr_dispense_expected_supply_duration_unit,
+        mr_dispense_number_of_repeats_allowed,
+        mr_substitution_allowed_boolean,
+        mr_substitution_reason_text,
+        mr_prior_prescription_display,
+
+        -- Episode linkage fields (for future group identifier support)
+        mr_group_identifier_value,
+        mr_group_identifier_system,
+
+        -- Raw date fields (for validation/debugging)
+        medication_start_date AS raw_medication_start_date,
+        medication_stop_date AS raw_medication_stop_date,
+        medication_authored_date AS raw_medication_authored_date
+
+    FROM fhir_prd_db.v_chemo_medications
+),
+
+-- ============================================================================
+-- Step 2: Create episode-level aggregations
+-- ============================================================================
+episode_summary AS (
+    SELECT
+        -- Episode grouping keys
+        patient_fhir_id,
+        mr_encounter_reference AS episode_encounter_reference,
+
+        -- Episode boundaries
+        MIN(episode_start_datetime) AS episode_start_datetime,
+        MAX(COALESCE(episode_stop_datetime, episode_start_datetime)) AS episode_end_datetime_preliminary,
+
+        -- Episode metadata
+        COUNT(DISTINCT medication_request_fhir_id) AS medication_count,
+        COUNT(DISTINCT chemo_drug_id) AS unique_drug_count,
+        COUNT(DISTINCT CASE WHEN episode_stop_datetime IS NOT NULL THEN medication_request_fhir_id END) AS medications_with_stop_date,
+
+        -- Drug categories in episode
+        LISTAGG(DISTINCT chemo_drug_category, ' | ') WITHIN GROUP (ORDER BY chemo_drug_category) AS episode_drug_categories,
+        LISTAGG(DISTINCT chemo_preferred_name, ' | ') WITHIN GROUP (ORDER BY chemo_preferred_name) AS episode_drug_names,
+
+        -- Episode clinical context (for note prioritization)
+        LISTAGG(DISTINCT medication_route, ' | ') WITHIN GROUP (ORDER BY medication_route) AS episode_routes,
+        LISTAGG(DISTINCT medication_status, ' | ') WITHIN GROUP (ORDER BY medication_status) AS episode_medication_statuses,
+
+        -- CarePlan linkage (if available)
+        MAX(cp_id) AS episode_care_plan_id,
+        MAX(cp_title) AS episode_care_plan_title,
+        MAX(cp_status) AS episode_care_plan_status,
+
+        -- Data quality flags (useful for note retrieval prioritization - see comments above)
+        CASE WHEN COUNT(CASE WHEN episode_stop_datetime IS NULL THEN 1 END) > 0 THEN true ELSE false END AS has_medications_without_stop_date,
+        CASE WHEN COUNT(CASE WHEN medication_notes IS NOT NULL THEN 1 END) > 0 THEN true ELSE false END AS has_medication_notes
+
+        -- NOTE: note_retrieval_priority and note_retrieval_rationale fields REMOVED
+        -- See comments at top of view for prioritization logic to implement when needed
+
+    FROM medications_with_episode_dates
+    WHERE mr_encounter_reference IS NOT NULL  -- Only include medications with encounter reference
+    GROUP BY patient_fhir_id, mr_encounter_reference
+),
+
+-- ============================================================================
+-- Step 3: Finalize episode end dates (NULL if truly open-ended)
+-- ============================================================================
+episode_with_final_dates AS (
+    SELECT
+        *,
+        -- Leave as NULL if no medications have stop dates (ongoing/open-ended episodes)
+        CASE
+            WHEN has_medications_without_stop_date = true
+                AND medications_with_stop_date = 0
+            THEN NULL
+            ELSE episode_end_datetime_preliminary
+        END AS episode_end_datetime
+    FROM episode_summary
+)
+
+-- ============================================================================
+-- Step 4: Final SELECT - Episode-level view with medication details
+-- ============================================================================
+SELECT
+    -- Episode identifiers
+    CAST(ROW_NUMBER() OVER (ORDER BY es.patient_fhir_id, es.episode_start_datetime) AS VARCHAR) AS episode_id,
+    es.patient_fhir_id,
+    es.episode_encounter_reference,
+
+    -- Episode temporal boundaries
+    es.episode_start_datetime,
+    es.episode_end_datetime,  -- NULL if open-ended/ongoing
+    DATE_DIFF('day', es.episode_start_datetime, COALESCE(es.episode_end_datetime, CURRENT_TIMESTAMP)) AS episode_duration_days,
+
+    -- Episode composition
+    es.medication_count,
+    es.unique_drug_count,
+    es.medications_with_stop_date,
+    es.episode_drug_categories,
+    es.episode_drug_names,
+    es.episode_routes,
+    es.episode_medication_statuses,
+
+    -- CarePlan linkage
+    es.episode_care_plan_id,
+    es.episode_care_plan_title,
+    es.episode_care_plan_status,
+
+    -- Data quality indicators (useful for note retrieval prioritization - see comments above)
+    es.has_medications_without_stop_date,
+    es.has_medication_notes,
+
+    -- NOTE: note_retrieval_priority and note_retrieval_rationale fields REMOVED
+    -- See comments at top of view for prioritization logic to implement when needed
+    -- You can calculate priority in your queries using the data quality indicators above
+
+    -- Medication details (denormalized for easy access)
+    mwed.medication_request_fhir_id,
+    mwed.medication_fhir_id,
+    mwed.episode_start_datetime AS medication_start_datetime,
+    mwed.episode_stop_datetime AS medication_stop_datetime,
+    mwed.chemo_drug_id,
+    mwed.chemo_preferred_name,
+    mwed.chemo_drug_category,
+    mwed.medication_name,
+    mwed.medication_route,
+    mwed.medication_status,
+    mwed.medication_dosage_instructions,
+    mwed.medication_notes,
+    mwed.medication_reason,
+
+    -- Encounter linkage (CRITICAL for note retrieval)
+    mwed.encounter_fhir_id,
+    mwed.mr_encounter_reference AS medication_encounter_reference,
+
+    -- Raw dates for debugging
+    mwed.raw_medication_start_date,
+    mwed.raw_medication_stop_date,
+    mwed.raw_medication_authored_date
+
+FROM episode_with_final_dates es
+INNER JOIN medications_with_episode_dates mwed
+    ON es.patient_fhir_id = mwed.patient_fhir_id
+    AND es.episode_encounter_reference = mwed.mr_encounter_reference
 ;
