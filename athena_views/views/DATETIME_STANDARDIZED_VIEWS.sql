@@ -1392,6 +1392,16 @@ SELECT
     pm.status as medication_status,
     pm.encounter_display,
 
+    -- ============================================================================
+    -- ADDED 2025-10-28: Episode linkage fields for treatment episode construction
+    -- ============================================================================
+    -- Encounter reference (90.4% coverage - CRITICAL for episodes)
+    mr.encounter_reference as mr_encounter_reference,
+
+    -- Treatment cycle grouping (1.2% coverage - useful when populated)
+    mr.group_identifier_value as mr_group_identifier_value,
+    mr.group_identifier_system as mr_group_identifier_system,
+
     -- Medication_request fields (mr_ prefix) - matched to working Python script
     TRY(CAST(mr.dispense_request_validity_period_start AS TIMESTAMP(3))) as mr_validity_period_start,
     TRY(CAST(mr.dispense_request_validity_period_end AS TIMESTAMP(3))) as mr_validity_period_end,
@@ -1934,6 +1944,16 @@ SELECT
     -- Patient identifiers
     mr.subject_reference as patient_fhir_id,
     mr.encounter_reference as encounter_fhir_id,
+
+    -- ============================================================================
+    -- ADDED 2025-10-28: Episode linkage fields for treatment episode construction
+    -- ============================================================================
+    -- Encounter reference (already available as encounter_fhir_id, adding mr_ prefix version for consistency)
+    mr.encounter_reference as mr_encounter_reference,
+
+    -- Treatment cycle grouping (1.2% coverage - useful when populated)
+    mr.group_identifier_value as mr_group_identifier_value,
+    mr.group_identifier_system as mr_group_identifier_system,
 
     -- Medication request identifiers
     mr.id as medication_request_fhir_id,
