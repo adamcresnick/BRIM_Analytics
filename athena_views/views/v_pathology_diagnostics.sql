@@ -397,8 +397,8 @@ pathology_document_references AS (
 
     WHERE dref.subject_reference IS NOT NULL
       AND (dref.description IS NOT NULL OR drefc.content_attachment_url IS NOT NULL)
-      -- Capture ALL pathology/diagnostic documents (not just keyword-filtered)
-      -- Include send-out analyses which may not have "pathology" in description
+      -- Filter to pathology/diagnostic documents only (keyword-based)
+      -- Includes: surgical pathology, biopsy reports, genomics, molecular diagnostics
       AND (
           LOWER(dref.description) LIKE '%pathology%'
           OR LOWER(dref.description) LIKE '%surgical%'
@@ -410,8 +410,9 @@ pathology_document_references AS (
           OR LOWER(dref.type_text) LIKE '%pathology%'
           OR LOWER(dref.type_text) LIKE '%surgical%'
           OR LOWER(dref.type_text) LIKE '%diagnostic%'
-          OR drefc.content_attachment_url IS NOT NULL  -- Capture ALL documents with URLs
       )
+      -- Removed catch-all: drefc.content_attachment_url IS NOT NULL
+      -- Was adding 3M+ non-pathology documents (radiology, notes, etc.)
 ),
 
 -- ============================================================================
