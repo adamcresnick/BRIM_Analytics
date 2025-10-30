@@ -7049,6 +7049,7 @@ INNER JOIN medications_with_episode_dates mwed
 
 
 -- ============================================================================
+-- ============================================================================
 -- VIEW: v_pathology_diagnostics
 -- ============================================================================
 -- Purpose: Comprehensive surgery-anchored pathology diagnostics for tumor patients
@@ -7060,13 +7061,14 @@ INNER JOIN medications_with_episode_dates mwed
 --   - Uses FHIR resource types and standard codes for generic categorization
 --   - Result values preserved as-is for downstream analysis
 --   - Includes URLs to binary reports for NLP workflows
+--   - Time-based prioritization framework for NLP document processing
 --
 -- Data Sources (4 surgery-linked sources):
 --   1. observation (linked to surgical specimens via specimen_reference)
 --      - Includes Pathology Surgical, Genomics Interpretation, Pathology Gross, etc.
 --      - Contains free text results in value_string field
---   2. diagnostic_report (surgical encounters, ±30 days, includes presented_form URLs)
---   3. document_reference (pathology documents, ±60 days, includes content URLs)
+--   2. diagnostic_report (surgical encounters, includes presented_form URLs)
+--   3. document_reference (pathology documents, includes content URLs)
 --   4. condition (problem_list ICD-10/SNOMED diagnoses, ±180 days, patient-level)
 --
 -- NOTE: molecular_tests data is NOT included to avoid duplication with observations.
@@ -7075,9 +7077,25 @@ INNER JOIN medications_with_episode_dates mwed
 -- Temporal Windows:
 --   - Surgical specimens: ±7 days from surgery date
 --   - Observations: Linked via specimen_reference (no temporal constraint)
---   - Diagnostic reports: ±30 days from surgery date
---   - Documents: ±60 days from surgery date
+--   - Diagnostic reports: Encounter-based linkage (surgical encounters only)
+--   - Documents: Encounter-based linkage (surgical encounters only)
 --   - Problem list diagnoses: ±180 days from surgery date
+--
+-- NLP Prioritization Framework (for document processing workflows):
+--   extraction_priority (1-5 scale, NULL for structured data):
+--     Priority 1: Final surgical pathology reports, definitive diagnoses
+--     Priority 2: Molecular/genomics reports, surgical pathology reports
+--     Priority 3: Outside/send-out pathology summaries
+--     Priority 4: Biopsy/specimen reports, pathology consultations
+--     Priority 5: Other pathology documents
+--
+--   document_category: Human-readable document type for extraction targeting
+--     Categories: Final Pathology Report, Surgical Pathology Report,
+--                 Molecular Pathology Report, Outside Pathology Summary,
+--                 Biopsy Report, Pathology Consultation, Specimen Report, etc.
+--
+--   days_from_surgery: Temporal relevance metric (closer = higher relevance)
+--     Used to prioritize documents when multiple exist at same priority level
 --
 -- Created: 2025-10-30
 -- Last Modified: 2025-10-30
@@ -7200,7 +7218,12 @@ surgical_pathology_observations AS (
         -- Metadata
         o.status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        CAST(NULL AS BIGINT) as component_count,
+
+        -- NLP prioritization (observations are structured data, not documents - no prioritization)
+        CAST(NULL AS INTEGER) as extraction_priority,
+        CAST(NULL AS VARCHAR) as document_category,
+        CAST(NULL AS BIGINT) as days_from_surgery
 
     FROM fhir_prd_db.observation o
 
@@ -7306,7 +7329,57 @@ surgical_pathology_narratives AS (
         -- Metadata
         dr.status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        CAST(NULL AS BIGINT) as component_count,
+
+        -- ====================================================================
+        -- NLP PRIORITIZATION FRAMEWORK (for document processing workflows)
+        -- ====================================================================
+
+        -- Extraction priority (1=highest, 5=lowest) - content and temporal based
+        CASE
+            -- Priority 1: Final surgical pathology reports (definitive diagnosis)
+            WHEN LOWER(dr.code_text) LIKE '%surgical%pathology%final%' THEN 1
+            WHEN LOWER(dr.code_text) LIKE '%pathology%final%diagnosis%' THEN 1
+            WHEN LOWER(dr.code_text) LIKE '%final%pathology%report%' THEN 1
+            WHEN drcc.code_coding_code = '34574-4' THEN 1  -- LOINC: Pathology report final diagnosis
+
+            -- Priority 2: Surgical pathology reports (gross observations, preliminary)
+            WHEN LOWER(dr.code_text) LIKE '%surgical%pathology%' THEN 2
+            WHEN LOWER(dr.code_text) LIKE '%pathology%gross%' THEN 2
+            WHEN drcc.code_coding_code = '24419-4' THEN 2  -- LOINC: Surgical pathology gross
+            WHEN drcc.code_coding_code = '11526-1' THEN 2  -- LOINC: Pathology study
+
+            -- Priority 3: Biopsy and specimen reports
+            WHEN LOWER(dr.code_text) LIKE '%biopsy%' THEN 3
+            WHEN LOWER(dr.code_text) LIKE '%specimen%' THEN 3
+
+            -- Priority 4: Consultation notes
+            WHEN LOWER(dr.code_text) LIKE '%pathology%consult%' THEN 4
+            WHEN LOWER(dr.code_text) LIKE '%consult%pathology%' THEN 4
+
+            -- Priority 5: Other diagnostic reports
+            ELSE 5
+        END as extraction_priority,
+
+        -- Document category for NLP extraction type
+        CASE
+            WHEN LOWER(dr.code_text) LIKE '%final%' AND LOWER(dr.code_text) LIKE '%pathology%'
+                THEN 'Final Pathology Report'
+            WHEN LOWER(dr.code_text) LIKE '%surgical%pathology%'
+                THEN 'Surgical Pathology Report'
+            WHEN LOWER(dr.code_text) LIKE '%gross%'
+                THEN 'Gross Pathology Observation'
+            WHEN LOWER(dr.code_text) LIKE '%biopsy%'
+                THEN 'Biopsy Report'
+            WHEN LOWER(dr.code_text) LIKE '%consult%'
+                THEN 'Pathology Consultation'
+            WHEN LOWER(dr.code_text) LIKE '%specimen%'
+                THEN 'Specimen Report'
+            ELSE 'Other Pathology Report'
+        END as document_category,
+
+        -- Temporal relevance to surgery (days from surgery)
+        ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) as days_from_surgery
 
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.diagnostic_report dr
@@ -7406,7 +7479,67 @@ pathology_document_references AS (
         -- Metadata
         dref.doc_status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        CAST(NULL AS BIGINT) as component_count,
+
+        -- ====================================================================
+        -- NLP PRIORITIZATION FRAMEWORK (for document processing workflows)
+        -- ====================================================================
+
+        -- Extraction priority (1=highest, 5=lowest) - content and temporal based
+        CASE
+            -- Priority 1: Final surgical pathology reports and definitive diagnoses
+            WHEN LOWER(dref.description) LIKE '%surgical%pathology%final%' THEN 1
+            WHEN LOWER(dref.description) LIKE '%pathology%final%diagnosis%' THEN 1
+            WHEN LOWER(dref.description) LIKE '%final%pathology%report%' THEN 1
+            WHEN LOWER(dref.type_text) LIKE '%surgical pathology%' THEN 1
+
+            -- Priority 2: Molecular pathology and genomics reports (send-outs, CLIA labs)
+            WHEN LOWER(dref.description) LIKE '%molecular%pathology%' THEN 2
+            WHEN LOWER(dref.description) LIKE '%genomic%' THEN 2
+            WHEN LOWER(dref.description) LIKE '%genomics%' THEN 2
+            WHEN LOWER(dref.description) LIKE '%ngs%' THEN 2  -- Next-generation sequencing
+            WHEN LOWER(dref.description) LIKE '%clia%' THEN 2  -- CLIA certified lab reports
+            WHEN LOWER(dref.description) LIKE '%pathology%consult%' THEN 2
+            WHEN LOWER(dref.type_text) LIKE '%pathology%' THEN 2
+
+            -- Priority 3: Outside/send-out pathology summaries
+            WHEN LOWER(dref.description) LIKE '%outside%pathology%' THEN 3
+            WHEN LOWER(dref.description) LIKE '%send%out%' THEN 3
+            WHEN LOWER(dref.description) LIKE '%external%pathology%' THEN 3
+            WHEN dref.type_text = 'ONC Outside Summaries' AND LOWER(dref.description) LIKE '%pathology%' THEN 3
+
+            -- Priority 4: Biopsy and specimen reports
+            WHEN LOWER(dref.description) LIKE '%biopsy%pathology%' THEN 4
+            WHEN LOWER(dref.description) LIKE '%specimen%pathology%' THEN 4
+            WHEN LOWER(dref.description) LIKE '%pathology%gross%' THEN 4
+
+            -- Priority 5: Other pathology documents
+            ELSE 5
+        END as extraction_priority,
+
+        -- Document category for NLP extraction type
+        CASE
+            WHEN LOWER(dref.description) LIKE '%final%' AND LOWER(dref.description) LIKE '%pathology%'
+                THEN 'Final Pathology Report'
+            WHEN LOWER(dref.description) LIKE '%surgical%pathology%'
+                THEN 'Surgical Pathology Report'
+            WHEN LOWER(dref.description) LIKE '%molecular%' OR LOWER(dref.description) LIKE '%genomic%'
+                THEN 'Molecular Pathology Report'
+            WHEN LOWER(dref.description) LIKE '%outside%' OR LOWER(dref.description) LIKE '%send%out%'
+                THEN 'Outside Pathology Summary'
+            WHEN LOWER(dref.description) LIKE '%biopsy%'
+                THEN 'Biopsy Report'
+            WHEN LOWER(dref.description) LIKE '%consult%'
+                THEN 'Pathology Consultation'
+            WHEN LOWER(dref.description) LIKE '%specimen%'
+                THEN 'Specimen Report'
+            WHEN LOWER(dref.description) LIKE '%gross%'
+                THEN 'Gross Pathology Observation'
+            ELSE 'Other Pathology Document'
+        END as document_category,
+
+        -- Temporal relevance to surgery (days from surgery)
+        ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)))) as days_from_surgery
 
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.document_reference_context_encounter drce_filter
@@ -7509,7 +7642,12 @@ problem_list_diagnoses AS (
         -- Metadata
         c.clinical_status_text as test_status,
         c.recorder_display as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        CAST(NULL AS BIGINT) as component_count,
+
+        -- NLP prioritization (problem list diagnoses are structured codes - no prioritization)
+        CAST(NULL AS INTEGER) as extraction_priority,
+        CAST(NULL AS VARCHAR) as document_category,
+        ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(c.onset_date_time AS VARCHAR) AS DATE)))) as days_from_surgery
 
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.condition c
@@ -7610,7 +7748,32 @@ SELECT
     TRY(DATE_DIFF('day', CAST(ud.linked_procedure_datetime AS DATE), ud.diagnostic_date)) as days_from_procedure,
 
     -- Encounter
-    ud.encounter_id
+    ud.encounter_id,
+
+    -- ========================================================================
+    -- NLP PRIORITIZATION FIELDS (for document processing workflows)
+    -- ========================================================================
+    -- extraction_priority: 1-5 scale for NLP targeting (1=highest value)
+    --   Priority 1: Final pathology reports, definitive diagnoses
+    --   Priority 2: Molecular/genomics reports, surgical pathology reports
+    --   Priority 3: Outside summaries, send-out reports
+    --   Priority 4: Biopsy/specimen reports, consultations
+    --   Priority 5: Other pathology documents
+    --   NULL: Structured data (observations, conditions) - no NLP needed
+    --
+    -- document_category: Human-readable document type for extraction workflows
+    --   Categories: Final Pathology Report, Surgical Pathology Report,
+    --              Molecular Pathology Report, Outside Pathology Summary,
+    --              Biopsy Report, Pathology Consultation, etc.
+    --   NULL: Structured data sources
+    --
+    -- days_from_surgery: Temporal relevance metric for prioritization
+    --   Closer to surgery date = higher clinical relevance
+    --   Used to prioritize documents when multiple exist at same priority level
+    -- ========================================================================
+    ud.extraction_priority,
+    ud.document_category,
+    ud.days_from_surgery
 
 FROM unified_diagnostics ud
 
