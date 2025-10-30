@@ -139,11 +139,11 @@ molecular_diagnostics AS (
 ),
 
 -- ============================================================================
--- CTE 4: Surgical Pathology Observations (from surgical specimens ONLY)
+-- CTE 4: Surgical Pathology Observations (linked via specimen_reference)
 -- ============================================================================
 surgical_pathology_observations AS (
     SELECT
-        ss.patient_fhir_id,
+        REPLACE(o.subject_reference, 'Patient/', '') as patient_fhir_id,
         'surgical_pathology_observation' as diagnostic_source,
         o.id as source_id,
         CAST(TRY(from_iso8601_timestamp(o.effective_date_time)) AS TIMESTAMP(3)) as diagnostic_datetime,
@@ -155,24 +155,24 @@ surgical_pathology_observations AS (
         oid_obs.masterfile_code as coding_system_code,
         oid_obs.description as coding_system_name,
 
-        -- Component
-        o.code_text as component_name,
+        -- Component (use code_coding_display for detailed component name)
+        COALESCE(occ.code_coding_display, o.code_text) as component_name,
 
-        -- Result value (preserved as-is)
-        COALESCE(o.value_string, o.value_codeable_concept_text, oi.interpretation_text) as result_value,
+        -- Result value (value_string contains free text pathology results!)
+        o.value_string as result_value,
 
         -- Test metadata
         'Surgical Pathology Lab' as test_lab,
 
-        -- Specimen information
-        ss.specimen_type as specimen_types,
-        ss.specimen_site as specimen_sites,
-        ss.collection_datetime as specimen_collection_datetime,
+        -- Specimen information (from observation.specimen_display and linked specimen resource)
+        COALESCE(s.type_text, o.specimen_display) as specimen_types,
+        s.collection_body_site_text as specimen_sites,
+        CAST(TRY(from_iso8601_timestamp(s.collection_collected_date_time)) AS TIMESTAMP(3)) as specimen_collection_datetime,
 
-        -- Procedure linkage
-        ss.procedure_fhir_id as linked_procedure_id,
-        NULL as linked_procedure_name,
-        ss.surgery_datetime as linked_procedure_datetime,
+        -- Procedure linkage (link via specimen → service_request → encounter → procedure)
+        p.id as linked_procedure_id,
+        p.code_text as linked_procedure_name,
+        CAST(TRY(from_iso8601_timestamp(p.performed_date_time)) AS TIMESTAMP(3)) as linked_procedure_datetime,
 
         -- Encounter linkage
         REPLACE(o.encounter_reference, 'Encounter/', '') as encounter_id,
@@ -183,6 +183,12 @@ surgical_pathology_observations AS (
             WHEN occ.code_coding_code IN ('24419-4') THEN 'Gross_Observation'
             WHEN occ.code_coding_code IN ('34574-4') THEN 'Final_Diagnosis'
             WHEN occ.code_coding_code IN ('11526-1') THEN 'Pathology_Study'
+
+            -- Use observation code_text patterns for categorization
+            WHEN LOWER(o.code_text) LIKE '%gross%' THEN 'Gross_Observation'
+            WHEN LOWER(o.code_text) LIKE '%final%diagnosis%' THEN 'Final_Diagnosis'
+            WHEN LOWER(o.code_text) LIKE '%genomics%interpretation%' THEN 'Genomics_Interpretation'
+            WHEN LOWER(o.code_text) LIKE '%genomics%method%' THEN 'Genomics_Method'
 
             -- Use observation category if available
             WHEN oc.category_text = 'Laboratory' THEN 'Laboratory_Observation'
@@ -197,22 +203,49 @@ surgical_pathology_observations AS (
         NULL as test_orderer,
         NULL as component_count
 
-    FROM surgical_specimens ss
-    INNER JOIN fhir_prd_db.observation o
-        ON REPLACE(o.specimen_reference, 'Specimen/', '') = ss.specimen_id
+    FROM fhir_prd_db.observation o
 
-    -- Join to observation tables for metadata
+    -- Join to specimen resource via specimen_reference
+    LEFT JOIN fhir_prd_db.specimen s
+        ON REPLACE(o.specimen_reference, 'Specimen/', '') = s.id
+
+    -- Link specimen → service_request → procedure (to get surgery context)
+    LEFT JOIN fhir_prd_db.service_request_specimen srs
+        ON s.id = REPLACE(srs.specimen_reference, 'Specimen/', '')
+    LEFT JOIN fhir_prd_db.service_request sr
+        ON srs.service_request_id = sr.id
+    LEFT JOIN fhir_prd_db.procedure p
+        ON REPLACE(sr.encounter_reference, 'Encounter/', '') = REPLACE(p.encounter_reference, 'Encounter/', '')
+        AND p.code_text LIKE '%SURGICAL%'
+
+    -- Join to observation metadata tables
     LEFT JOIN fhir_prd_db.observation_code_coding occ
         ON o.id = occ.observation_id
-    LEFT JOIN fhir_prd_db.observation_interpretation oi
-        ON o.id = oi.observation_id
     LEFT JOIN fhir_prd_db.observation_category oc
         ON o.id = oc.observation_id
     LEFT JOIN oid_reference oid_obs
         ON occ.code_coding_system = oid_obs.oid_uri
 
+    -- FILTER to confirmed tumor surgery patients only
+    INNER JOIN tumor_surgeries ts
+        ON REPLACE(o.subject_reference, 'Patient/', '') = ts.patient_fhir_id
+
     WHERE o.subject_reference IS NOT NULL
       AND o.id IS NOT NULL
+      AND o.specimen_reference IS NOT NULL  -- Require specimen linkage
+      AND o.value_string IS NOT NULL  -- Require free text results
+      -- Filter to pathology-related observations
+      AND (
+          LOWER(o.code_text) LIKE '%pathology%'
+          OR LOWER(o.code_text) LIKE '%surgical%consult%'
+          OR LOWER(o.code_text) LIKE '%genomics%'
+          OR LOWER(o.code_text) LIKE '%autopsy%'
+          OR LOWER(o.code_text) LIKE '%neuropathology%'
+          OR LOWER(o.code_text) LIKE '%brain%gross%'
+          OR LOWER(o.code_text) LIKE '%brain%final%'
+          OR LOWER(occ.code_coding_display) LIKE '%pathology%'
+          OR occ.code_coding_code IN ('24419-4', '34574-4', '11526-1')  -- LOINC pathology codes
+      )
 ),
 
 -- ============================================================================
