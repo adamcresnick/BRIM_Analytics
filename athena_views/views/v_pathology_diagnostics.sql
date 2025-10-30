@@ -202,7 +202,7 @@ surgical_pathology_observations AS (
 -- ============================================================================
 surgical_pathology_narratives AS (
     SELECT
-        ss.patient_fhir_id,
+        ts.patient_fhir_id,
         'surgical_pathology_report' as diagnostic_source,
         dr.id as source_id,
         CAST(TRY(from_iso8601_timestamp(dr.effective_date_time)) AS TIMESTAMP(3)) as diagnostic_datetime,
@@ -232,24 +232,25 @@ surgical_pathology_narratives AS (
         -- Test metadata
         'Pathology Report' as test_lab,
 
-        -- Specimen information
+        -- Specimen information (from surgical_specimens if linked)
         ss.specimen_type as specimen_types,
         ss.specimen_site as specimen_sites,
         ss.collection_datetime as specimen_collection_datetime,
 
-        -- Procedure linkage
-        ss.procedure_fhir_id as linked_procedure_id,
-        NULL as linked_procedure_name,
-        ss.surgery_datetime as linked_procedure_datetime,
+        -- Procedure linkage (from tumor_surgeries)
+        ts.procedure_fhir_id as linked_procedure_id,
+        ts.surgery_name as linked_procedure_name,
+        ts.surgery_datetime as linked_procedure_datetime,
 
         -- Encounter linkage
         REPLACE(dr.encounter_reference, 'Encounter/', '') as encounter_id,
 
         -- Generic categorization (resource type-based, no hardcoded features)
         CASE
-            WHEN dr.resource_type = 'DiagnosticReport' THEN 'Diagnostic_Report'
             WHEN drcc.code_coding_code IN ('24419-4', '34574-4', '11526-1') THEN 'Pathology_Report'
-            ELSE 'Clinical_Report'
+            WHEN LOWER(dr.code_text) LIKE '%pathology%' THEN 'Pathology_Report'
+            WHEN LOWER(dr.code_text) LIKE '%surgical%' THEN 'Surgical_Report'
+            ELSE 'Diagnostic_Report'
         END as diagnostic_category,
 
         -- Metadata
@@ -257,10 +258,11 @@ surgical_pathology_narratives AS (
         NULL as test_orderer,
         CAST(NULL AS BIGINT) as component_count
 
-    FROM surgical_specimens ss
+    FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.diagnostic_report dr
-        ON ss.patient_fhir_id = REPLACE(dr.subject_reference, 'Patient/', '')
-        AND ABS(DATE_DIFF('day', ss.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) <= 30
+        ON ts.patient_fhir_id = REPLACE(dr.subject_reference, 'Patient/', '')
+        -- Temporal window: ±60 days from surgery (wider than specimens)
+        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) <= 60
 
     -- Join for code information
     LEFT JOIN fhir_prd_db.diagnostic_report_code_coding drcc
@@ -270,9 +272,24 @@ surgical_pathology_narratives AS (
     LEFT JOIN fhir_prd_db.diagnostic_report_presented_form drpf
         ON dr.id = drpf.diagnostic_report_id
 
+    -- LEFT JOIN to surgical_specimens (if available for specimen details)
+    LEFT JOIN surgical_specimens ss
+        ON ts.patient_fhir_id = ss.patient_fhir_id
+        AND ABS(DATE_DIFF('day',
+            TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)),
+            ss.surgery_date
+        )) <= 7
+
     WHERE dr.subject_reference IS NOT NULL
       AND (dr.conclusion IS NOT NULL OR drpf.presented_form_url IS NOT NULL)
-
+      -- Filter to pathology-related reports
+      AND (
+          LOWER(dr.code_text) LIKE '%pathology%'
+          OR LOWER(dr.code_text) LIKE '%surgical%'
+          OR LOWER(dr.code_text) LIKE '%biopsy%'
+          OR LOWER(dr.code_text) LIKE '%specimen%'
+          OR drcc.code_coding_code IN ('24419-4', '34574-4', '11526-1')  -- LOINC pathology codes
+      )
       -- Exclude reports already captured in molecular_tests
       AND NOT EXISTS (
           SELECT 1 FROM fhir_prd_db.molecular_tests mt
