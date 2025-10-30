@@ -150,7 +150,7 @@ surgical_pathology_observations AS (
         -- Metadata
         o.status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        NULL as component_count
 
     FROM fhir_prd_db.observation o
 
@@ -255,7 +255,7 @@ surgical_pathology_narratives AS (
         -- Metadata
         dr.status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        NULL as component_count
 
     FROM surgical_specimens ss
     INNER JOIN fhir_prd_db.diagnostic_report dr
@@ -336,7 +336,7 @@ pathology_document_references AS (
         -- Metadata
         dref.doc_status as test_status,
         NULL as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        NULL as component_count
 
     FROM surgical_specimens ss
     INNER JOIN fhir_prd_db.document_reference dref
@@ -418,7 +418,7 @@ problem_list_diagnoses AS (
         -- Metadata
         c.clinical_status_text as test_status,
         c.recorder_display as test_orderer,
-        CAST(NULL AS BIGINT) as component_count
+        NULL as component_count
 
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.condition c
