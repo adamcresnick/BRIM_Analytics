@@ -51,12 +51,17 @@ molecular_diagnostics AS (
 
         -- Test identification
         mt.lab_test_name as diagnostic_name,
-        mt.dgd_id as test_identifier,
-        'DGD' as test_lab,  -- Division of Genomic Diagnostics
+        NULL as code,  -- No coding for molecular tests (Epic-specific)
+        NULL as coding_system_code,
+        NULL as coding_system_name,
 
         -- Test details from molecular_test_results
         mtr.test_component as component_name,
         mtr.test_result_narrative as result_value,
+
+        -- Test metadata
+        mt.dgd_id as test_identifier,
+        'DGD' as test_lab,  -- Division of Genomic Diagnostics
 
         -- Specimen information from v_molecular_tests
         vmt.mt_specimen_types as specimen_types,
@@ -86,27 +91,6 @@ molecular_diagnostics AS (
             ELSE 'Other_Molecular'
         END as diagnostic_category,
 
-        -- Clinical significance flags
-        CASE
-            WHEN LOWER(mtr.test_component) LIKE '%idh%' AND LOWER(mtr.test_result_narrative) LIKE '%mutant%' THEN TRUE
-            WHEN LOWER(mtr.test_component) LIKE '%idh%' AND LOWER(mtr.test_result_narrative) LIKE '%wildtype%' THEN FALSE
-            ELSE NULL
-        END as is_idh_mutant,
-
-        CASE
-            WHEN LOWER(mtr.test_component) LIKE '%mgmt%' AND (LOWER(mtr.test_result_narrative) LIKE '%methylated%' OR LOWER(mtr.test_result_narrative) LIKE '%positive%') THEN TRUE
-            WHEN LOWER(mtr.test_component) LIKE '%mgmt%' AND (LOWER(mtr.test_result_narrative) LIKE '%unmethylated%' OR LOWER(mtr.test_result_narrative) LIKE '%negative%') THEN FALSE
-            ELSE NULL
-        END as is_mgmt_methylated,
-
-        CASE
-            WHEN (LOWER(mtr.test_component) LIKE '%1p%19q%' OR LOWER(mtr.test_component) LIKE '%codeletion%')
-                 AND (LOWER(mtr.test_result_narrative) LIKE '%codeleted%' OR LOWER(mtr.test_result_narrative) LIKE '%positive%') THEN TRUE
-            WHEN (LOWER(mtr.test_component) LIKE '%1p%19q%' OR LOWER(mtr.test_component) LIKE '%codeletion%')
-                 AND (LOWER(mtr.test_result_narrative) LIKE '%intact%' OR LOWER(mtr.test_result_narrative) LIKE '%negative%') THEN FALSE
-            ELSE NULL
-        END as is_1p19q_codeleted,
-
         -- Metadata
         mt.lab_test_status as test_status,
         mt.lab_test_requester as test_orderer,
@@ -134,15 +118,19 @@ pathology_observations AS (
 
         -- Observation identification
         o.code_text as diagnostic_name,
-        o.code_coding_code as loinc_code,
+        occ.code_coding_code as code,
         oid_obs.masterfile_code as coding_system_code,
         oid_obs.description as coding_system_name,
 
-        -- Result values
-        COALESCE(o.value_string, o.value_codeable_concept_text, o.interpretation_text) as result_value,
-
         -- Component name (if part of panel)
         o.code_text as component_name,
+
+        -- Result values
+        COALESCE(o.value_string, o.value_codeable_concept_text, oi.interpretation_text) as result_value,
+
+        -- Test metadata
+        NULL as test_identifier,
+        'Clinical Lab' as test_lab,
 
         -- Specimen information
         s.type_text as specimen_types,
@@ -156,10 +144,6 @@ pathology_observations AS (
 
         -- Encounter linkage
         REPLACE(o.encounter_reference, 'Encounter/', '') as encounter_id,
-
-        -- Lab/test identifier
-        NULL as test_identifier,
-        'Clinical Lab' as test_lab,
 
         -- Classification
         CASE
@@ -180,35 +164,18 @@ pathology_observations AS (
             ELSE 'Other_Pathology'
         END as diagnostic_category,
 
-        -- Clinical significance flags (from observations)
-        CASE
-            WHEN LOWER(o.code_text) LIKE '%idh%' AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%mutant%' THEN TRUE
-            WHEN LOWER(o.code_text) LIKE '%idh%' AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%wildtype%' THEN FALSE
-            ELSE NULL
-        END as is_idh_mutant,
-
-        CASE
-            WHEN LOWER(o.code_text) LIKE '%mgmt%' AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%methylated%' THEN TRUE
-            WHEN LOWER(o.code_text) LIKE '%mgmt%' AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%unmethylated%' THEN FALSE
-            ELSE NULL
-        END as is_mgmt_methylated,
-
-        CASE
-            WHEN (LOWER(o.code_text) LIKE '%1p%19q%' OR LOWER(o.code_text) LIKE '%codeletion%')
-                 AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%codeleted%' THEN TRUE
-            WHEN (LOWER(o.code_text) LIKE '%1p%19q%' OR LOWER(o.code_text) LIKE '%codeletion%')
-                 AND LOWER(COALESCE(o.value_string, o.value_codeable_concept_text)) LIKE '%intact%' THEN FALSE
-            ELSE NULL
-        END as is_1p19q_codeleted,
-
         -- Metadata
         o.status as test_status,
         NULL as test_orderer,
         NULL as component_count
 
     FROM fhir_prd_db.observation o
+    LEFT JOIN fhir_prd_db.observation_code_coding occ
+        ON o.id = occ.observation_id
+    LEFT JOIN fhir_prd_db.observation_interpretation oi
+        ON o.id = oi.observation_id
     LEFT JOIN oid_reference oid_obs
-        ON o.code_coding_system = oid_obs.oid_uri
+        ON occ.code_coding_system = oid_obs.oid_uri
     LEFT JOIN fhir_prd_db.specimen s
         ON REPLACE(o.specimen_reference, 'Specimen/', '') = s.id
     LEFT JOIN fhir_prd_db.procedure p
@@ -264,15 +231,19 @@ pathology_procedures AS (
 
         -- Procedure identification
         p.code_text as diagnostic_name,
-        pcc.code_coding_code as cpt_code,
+        pcc.code_coding_code as code,
         oid_proc.masterfile_code as coding_system_code,
         oid_proc.description as coding_system_name,
+
+        -- Component name
+        p.code_text as component_name,
 
         -- Result/outcome
         p.outcome_text as result_value,
 
-        -- Component name
-        p.code_text as component_name,
+        -- Test metadata
+        NULL as test_identifier,
+        'Pathology Lab' as test_lab,
 
         -- Specimen information (linked through encounter)
         s.type_text as specimen_types,
@@ -287,10 +258,6 @@ pathology_procedures AS (
         -- Encounter linkage
         REPLACE(p.encounter_reference, 'Encounter/', '') as encounter_id,
 
-        -- Lab/test identifier
-        NULL as test_identifier,
-        'Surgical Pathology' as test_lab,
-
         -- Classification
         CASE
             WHEN LOWER(p.code_text) LIKE '%frozen section%' THEN 'Frozen_Section'
@@ -303,11 +270,6 @@ pathology_procedures AS (
             WHEN pcc.code_coding_code IN ('61140', '61750', '61751', '62269') THEN 'CNS_Biopsy'
             ELSE 'Other_Procedure'
         END as diagnostic_category,
-
-        -- No molecular flags for procedures
-        NULL as is_idh_mutant,
-        NULL as is_mgmt_methylated,
-        NULL as is_1p19q_codeleted,
 
         -- Metadata
         p.status as test_status,
@@ -356,15 +318,12 @@ pathology_narratives AS (
 
         -- Report identification
         dr.code_text as diagnostic_name,
-        dr.code_coding_code as code,
+        drcc.code_coding_code as code,
         NULL as coding_system_code,
         NULL as coding_system_name,
 
         -- Narrative content (primary value)
-        COALESCE(
-            dr.conclusion,  -- Summary conclusion
-            dr.presented_form_data  -- Full report text if available
-        ) as result_value,
+        dr.conclusion as result_value,
 
         -- Component name
         dr.code_text as component_name,
@@ -396,38 +355,14 @@ pathology_narratives AS (
             ELSE 'Pathology_Report_Other'
         END as diagnostic_category,
 
-        -- Extract molecular flags from narrative text
-        CASE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%idh%mutant%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%idh1%mutation%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%idh2%mutation%' THEN TRUE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%idh%wildtype%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%idh%wild%type%' THEN FALSE
-            ELSE NULL
-        END as is_idh_mutant,
-
-        CASE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%mgmt%methylated%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%mgmt%positive%' THEN TRUE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%mgmt%unmethylated%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%mgmt%negative%' THEN FALSE
-            ELSE NULL
-        END as is_mgmt_methylated,
-
-        CASE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%1p%19q%codeleted%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%1p/19q%codeleted%' THEN TRUE
-            WHEN LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%1p%19q%intact%'
-                 OR LOWER(COALESCE(dr.conclusion, dr.presented_form_data)) LIKE '%1p/19q%intact%' THEN FALSE
-            ELSE NULL
-        END as is_1p19q_codeleted,
-
         -- Metadata
         dr.status as test_status,
         NULL as test_orderer,
         NULL as component_count
 
     FROM fhir_prd_db.diagnostic_report dr
+    LEFT JOIN fhir_prd_db.diagnostic_report_code_coding drcc
+        ON dr.id = drcc.diagnostic_report_id
     LEFT JOIN fhir_prd_db.diagnostic_report_based_on drbo
         ON dr.id = drbo.diagnostic_report_id
     LEFT JOIN fhir_prd_db.service_request sr
@@ -436,12 +371,7 @@ pathology_narratives AS (
         ON sr.id = sri.service_request_id
     LEFT JOIN fhir_prd_db.specimen s
         ON REPLACE(dr.subject_reference, 'Patient/', '') = REPLACE(s.subject_reference, 'Patient/', '')
-        AND REPLACE(dr.encounter_reference, 'Encounter/', '') IN (
-            -- Try to find specimen via encounter or near the same time
-            SELECT DISTINCT REPLACE(enc.id, 'Encounter/', '')
-            FROM fhir_prd_db.encounter enc
-            WHERE enc.subject_reference = s.subject_reference
-        )
+        AND ABS(DATE_DIFF('day', CAST(dr.effective_date_time AS DATE), CAST(s.collection_collected_date_time AS DATE))) <= 30
     LEFT JOIN fhir_prd_db.procedure p
         ON REPLACE(dr.encounter_reference, 'Encounter/', '') = REPLACE(p.encounter_reference, 'Encounter/', '')
         AND dr.subject_reference = p.subject_reference
@@ -454,7 +384,7 @@ pathology_narratives AS (
         -- Include ALL diagnostic reports with narrative content
         -- (do not filter by keywords - capture everything, let pattern matching extract markers)
         dr.subject_reference IS NOT NULL
-        AND (dr.conclusion IS NOT NULL OR dr.presented_form_data IS NOT NULL)
+        AND dr.conclusion IS NOT NULL
 
         -- Exclude reports already captured in molecular_tests to avoid duplication
         AND NOT EXISTS (
@@ -506,25 +436,6 @@ care_plan_pathology_notes AS (
         -- Classification
         'Care_Plan_Pathology' as diagnostic_category,
 
-        -- Extract molecular flags from care plan description
-        CASE
-            WHEN LOWER(cp.description) LIKE '%idh%mutant%' OR LOWER(cp.description) LIKE '%idh%mutation%' THEN TRUE
-            WHEN LOWER(cp.description) LIKE '%idh%wildtype%' OR LOWER(cp.description) LIKE '%idh%wild%type%' THEN FALSE
-            ELSE NULL
-        END as is_idh_mutant,
-
-        CASE
-            WHEN LOWER(cp.description) LIKE '%mgmt%methylated%' OR LOWER(cp.description) LIKE '%mgmt%positive%' THEN TRUE
-            WHEN LOWER(cp.description) LIKE '%mgmt%unmethylated%' OR LOWER(cp.description) LIKE '%mgmt%negative%' THEN FALSE
-            ELSE NULL
-        END as is_mgmt_methylated,
-
-        CASE
-            WHEN LOWER(cp.description) LIKE '%1p%19q%codeleted%' OR LOWER(cp.description) LIKE '%1p/19q%codeleted%' THEN TRUE
-            WHEN LOWER(cp.description) LIKE '%1p%19q%intact%' OR LOWER(cp.description) LIKE '%1p/19q%intact%' THEN FALSE
-            ELSE NULL
-        END as is_1p19q_codeleted,
-
         -- Metadata
         cp.status as test_status,
         NULL as test_orderer,
@@ -557,7 +468,7 @@ procedure_pathology_notes AS (
         NULL as coding_system_name,
 
         -- Narrative content from procedure notes
-        COALESCE(p.note, p.outcome_text) as result_value,
+        COALESCE(pn.note_text, p.outcome_text) as result_value,
 
         -- Component
         p.code_text as component_name,
@@ -582,37 +493,20 @@ procedure_pathology_notes AS (
         -- Classification
         'Procedure_Pathology_Note' as diagnostic_category,
 
-        -- Extract molecular flags from procedure notes
-        CASE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%idh%mutant%' THEN TRUE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%idh%wildtype%' THEN FALSE
-            ELSE NULL
-        END as is_idh_mutant,
-
-        CASE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%mgmt%methylated%' THEN TRUE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%mgmt%unmethylated%' THEN FALSE
-            ELSE NULL
-        END as is_mgmt_methylated,
-
-        CASE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%1p%19q%codeleted%' THEN TRUE
-            WHEN LOWER(COALESCE(p.note, p.outcome_text)) LIKE '%1p%19q%intact%' THEN FALSE
-            ELSE NULL
-        END as is_1p19q_codeleted,
-
         -- Metadata
         p.status as test_status,
         NULL as test_orderer,
         NULL as component_count
 
     FROM fhir_prd_db.procedure p
+    LEFT JOIN fhir_prd_db.procedure_note pn
+        ON p.id = pn.procedure_id
 
     WHERE
         -- Include ALL procedures with notes/outcome text
         -- (do not filter by keywords - capture everything)
         p.subject_reference IS NOT NULL
-        AND (p.note IS NOT NULL OR p.outcome_text IS NOT NULL)
+        AND (pn.note_text IS NOT NULL OR p.outcome_text IS NOT NULL)
 ),
 
 -- ============================================================================
@@ -659,11 +553,6 @@ SELECT
     -- Coding system information
     ud.coding_system_code,
     ud.coding_system_name,
-
-    -- Clinical significance flags
-    ud.is_idh_mutant,
-    ud.is_mgmt_methylated,
-    ud.is_1p19q_codeleted,
 
     -- Specimen information
     ud.specimen_types,
