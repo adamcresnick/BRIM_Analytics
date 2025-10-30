@@ -260,9 +260,16 @@ surgical_pathology_narratives AS (
 
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.diagnostic_report dr
-        ON ts.patient_fhir_id = REPLACE(dr.subject_reference, 'Patient/', '')
-        -- Temporal window: ±60 days from surgery (wider than specimens)
-        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) <= 60
+        ON (
+            -- Primary linkage: surgical encounter
+            REPLACE(dr.encounter_reference, 'Encounter/', '') = ts.surgery_encounter
+            -- Fallback: patient-level with temporal proximity (±60 days) if no encounter link
+            OR (
+                dr.encounter_reference IS NULL
+                AND ts.patient_fhir_id = REPLACE(dr.subject_reference, 'Patient/', '')
+                AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) <= 60
+            )
+        )
 
     -- Join for code information
     LEFT JOIN fhir_prd_db.diagnostic_report_code_coding drcc
@@ -359,9 +366,18 @@ pathology_document_references AS (
         CAST(NULL AS BIGINT) as component_count
 
     FROM tumor_surgeries ts
+    LEFT JOIN fhir_prd_db.document_reference_context_encounter drce_filter
+        ON REPLACE(drce_filter.context_encounter_reference, 'Encounter/', '') = ts.surgery_encounter
     INNER JOIN fhir_prd_db.document_reference dref
-        ON ts.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
-        -- NO temporal window - send-out analyses can occur months/years after surgery
+        ON (
+            -- Primary linkage: surgical encounter (via junction table)
+            dref.id = drce_filter.document_reference_id
+            -- Fallback: patient-level without temporal filter (for send-out analyses)
+            OR (
+                drce_filter.document_reference_id IS NULL
+                AND ts.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
+            )
+        )
 
     -- Join for document content/URL (REQUIRED for NLP processing)
     LEFT JOIN fhir_prd_db.document_reference_content drefc
