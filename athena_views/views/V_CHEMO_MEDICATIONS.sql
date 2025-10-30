@@ -1,47 +1,3 @@
--- ================================================================================
--- v_chemo_medications: Comprehensive Chemotherapy Medication View
--- ================================================================================
--- Purpose: Identifies ALL chemotherapy medications from FHIR medication_request
---          data using the comprehensive RADIANT unified chemotherapy reference.
---
--- Key Features:
---   1. Four-tier matching strategy:
---      a) RxNorm matching (ingredient + product codes) - ~10% of chemo drugs
---      b) Name-based matching (specific drug patterns) - ~90% of chemo drugs
---      c) Investigational drug extraction (from notes) - clinical trial drugs
---      d) Generic investigational fallback - remaining trial drugs
---   2. Uses improved medication timing bounds for ~89% date coverage
---   3. Includes all medication fields from v_medications
---   4. Adds chemotherapy-specific fields (drug_id, approval_status, etc.)
---
--- Data Sources:
---   - fhir_prd_db.medication_request (FHIR medication orders)
---   - fhir_prd_db.medication (medication details)
---   - fhir_prd_db.medication_code_coding (RxNorm codes)
---   - fhir_prd_db.medication_request_note (investigational drug names)
---   - fhir_prd_db.v_chemotherapy_drugs (839 chemotherapy ingredient codes)
---   - fhir_prd_db.v_chemotherapy_rxnorm_codes (2,804 product→ingredient mappings)
---
--- Usage:
---   SELECT * FROM fhir_prd_db.v_chemo_medications
---   WHERE patient_fhir_id = 'Patient/123'
---     AND medication_start_date >= DATE '2020-01-01'
---   ORDER BY medication_start_date;
---
--- History:
---   2025-01-XX: Initial creation using comprehensive chemotherapy reference
---   2025-10-25: Added name-based fallback matching (fixes 90% data loss issue)
---   2025-10-25: Added investigational drug name extraction from notes
---   2025-10-26: Added LENGTH > 2 filter to prevent spurious 2-letter code matches
---               (e.g., "AC" matching "acetaminophen", "AG" matching "magnesium")
---   2025-10-26: Increased to LENGTH > 3 to prevent 3-letter code spurious matches
---               (e.g., "ADE" matching "ropivacaine", "lidocaine", "adenosine")
---               3-letter regimen codes (VAC, ADE, CVP, etc.) now ONLY match via RxNorm
---   2025-10-26: Added drug_category column and excluded supportive care medications
---               Filters out analgesics, antiemetics, anesthetics, antibiotics, etc.
---               Reduces data from 1.27M to ~250K therapeutic orders (chemotherapy, targeted, immunotherapy)
--- ================================================================================
-
 CREATE OR REPLACE VIEW fhir_prd_db.v_chemo_medications AS
 WITH
 -- ================================================================================
@@ -357,7 +313,11 @@ medication_based_on AS (
     SELECT
         medication_request_id,
         LISTAGG(DISTINCT based_on_reference, ' | ') WITHIN GROUP (ORDER BY based_on_reference) AS based_on_references,
-        LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays
+        LISTAGG(DISTINCT based_on_display, ' | ') WITHIN GROUP (ORDER BY based_on_display) AS based_on_displays,
+        -- Use MAX to get CarePlan ID that matches care_plan.id (IDs starting with 'f' vs 'e')
+        -- Testing showed MIN() selects IDs starting with 'e' which don't exist in care_plan table,
+        -- while MAX() selects IDs starting with 'f' which DO exist (4,517 matches)
+        MAX(based_on_reference) AS primary_care_plan_id
     FROM fhir_prd_db.medication_request_based_on
     GROUP BY medication_request_id
 ),
@@ -367,6 +327,35 @@ medication_reason_references AS (
         LISTAGG(DISTINCT reason_reference_display, ' | ') WITHIN GROUP (ORDER BY reason_reference_display) AS reason_reference_displays
     FROM fhir_prd_db.medication_request_reason_reference
     GROUP BY medication_request_id
+),
+
+-- ================================================================================
+-- ADDED 2025-10-28: CarePlan metadata CTEs for episode construction
+-- These provide treatment protocol information for grouping medications into episodes
+-- ================================================================================
+care_plan_categories AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT category_text, ' | ') WITHIN GROUP (ORDER BY category_text) as categories_aggregated
+    FROM fhir_prd_db.care_plan_category
+    GROUP BY care_plan_id
+),
+care_plan_conditions AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT addresses_display, ' | ') WITHIN GROUP (ORDER BY addresses_display) as addresses_aggregated
+    FROM fhir_prd_db.care_plan_addresses
+    GROUP BY care_plan_id
+),
+care_plan_activity_agg AS (
+    SELECT
+        care_plan_id,
+        LISTAGG(DISTINCT activity_detail_status, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_status) AS activity_detail_statuses,
+        LISTAGG(DISTINCT activity_detail_description, ' | ')
+            WITHIN GROUP (ORDER BY activity_detail_description) AS activity_detail_descriptions
+    FROM fhir_prd_db.care_plan_activity
+    GROUP BY care_plan_id
 )
 
 -- ================================================================================
@@ -445,7 +434,46 @@ SELECT
 
     -- Recorder and entered by
     mr.recorder_reference as recorder_fhir_id,
-    mr.recorder_display as recorder_name
+    mr.recorder_display as recorder_name,
+
+    -- ============================================================================
+    -- ADDED 2025-10-28: Additional MedicationRequest metadata for completeness
+    -- ============================================================================
+    TRY(CAST(mr.dispense_request_validity_period_start AS TIMESTAMP(3))) as mr_validity_period_start,
+    mr.status_reason_text as mr_status_reason_text,
+    mr.do_not_perform as mr_do_not_perform,
+    mr.course_of_therapy_type_text as mr_course_of_therapy_type_text,
+    mr.dispense_request_initial_fill_duration_value as mr_dispense_initial_fill_duration_value,
+    mr.dispense_request_initial_fill_duration_unit as mr_dispense_initial_fill_duration_unit,
+    mr.dispense_request_expected_supply_duration_value as mr_dispense_expected_supply_duration_value,
+    mr.dispense_request_expected_supply_duration_unit as mr_dispense_expected_supply_duration_unit,
+    mr.dispense_request_number_of_repeats_allowed as mr_dispense_number_of_repeats_allowed,
+    mr.substitution_allowed_boolean as mr_substitution_allowed_boolean,
+    mr.substitution_reason_text as mr_substitution_reason_text,
+    mr.prior_prescription_display as mr_prior_prescription_display,
+
+    -- ============================================================================
+    -- ADDED 2025-10-28: CarePlan metadata for treatment episode construction
+    -- CRITICAL: cp_period_start and cp_period_end define episode boundaries
+    -- ============================================================================
+    cp.id as cp_id,
+    cp.title as cp_title,
+    cp.status as cp_status,
+    cp.intent as cp_intent,
+    TRY(CAST(cp.created AS TIMESTAMP(3))) as cp_created,
+    TRY(CAST(cp.period_start AS TIMESTAMP(3))) as cp_period_start,
+    TRY(CAST(cp.period_end AS TIMESTAMP(3))) as cp_period_end,
+    cp.author_display as cp_author_display,
+
+    -- Care plan categories (treatment type classification)
+    cpc.categories_aggregated as cpc_categories_aggregated,
+
+    -- Care plan conditions (what conditions the plan addresses)
+    cpcon.addresses_aggregated as cpcon_addresses_aggregated,
+
+    -- Care plan activity (treatment activities and their status)
+    cpa.activity_detail_statuses as cpa_activity_detail_statuses,
+    cpa.activity_detail_descriptions as cpa_activity_detail_descriptions
 
 FROM fhir_prd_db.medication_request mr
 
@@ -479,6 +507,18 @@ LEFT JOIN medication_reason_references mrrefs
     ON mrrefs.medication_request_id = mr.id
 
 -- ================================================================================
+-- ADDED 2025-10-28: CarePlan JOINs for episode construction
+-- ================================================================================
+LEFT JOIN fhir_prd_db.care_plan cp
+    ON mbo.primary_care_plan_id = cp.id
+LEFT JOIN care_plan_categories cpc
+    ON cp.id = cpc.care_plan_id
+LEFT JOIN care_plan_conditions cpcon
+    ON cp.id = cpcon.care_plan_id
+LEFT JOIN care_plan_activity_agg cpa
+    ON cp.id = cpa.care_plan_id
+
+-- ================================================================================
 -- FILTERS: Status + Exclude Supportive Care
 -- ================================================================================
 WHERE mr.status IN ('active', 'completed', 'stopped', 'on-hold')
@@ -489,4 +529,5 @@ WHERE mr.status IN ('active', 'completed', 'stopped', 'on-hold')
         cmm.chemo_drug_category NOT IN ('supportive_care')
         OR cmm.chemo_drug_category IS NULL  -- Keep investigational_generic and uncategorized
     )
+;
 ;

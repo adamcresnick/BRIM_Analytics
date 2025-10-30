@@ -1,45 +1,86 @@
 -- ============================================================================
 -- VIEW: v_pathology_diagnostics
 -- ============================================================================
--- PURPOSE: Comprehensive pathology and diagnostic information for tumor assessment
+-- Purpose: Comprehensive surgery-anchored pathology diagnostics for tumor patients
 --
--- COMBINES:
---   1. Molecular testing (from molecular_tests/molecular_test_results)
---   2. Surgical pathology observations (histology, grade, IHC)
---   3. Procedure-linked pathology (frozen section, biopsies)
---   4. Specimen-linked diagnostics
---   5. ALL narrative text from diagnostic reports (conclusion, full report)
---   6. ALL care plan descriptions (complete narrative capture)
---   7. ALL procedure notes and outcomes (complete narrative capture)
+-- Design Philosophy: SURGERY-ANCHORED, FEATURE-AGNOSTIC, NLP-READY
+--   - Anchors to confirmed tumor surgeries from v_procedures_tumor
+--   - Captures pathology from surgical specimens only (±7 days of surgery)
+--   - NO hardcoded molecular features (works across all WHO classifications)
+--   - Uses FHIR resource types and standard codes for generic categorization
+--   - Result values preserved as-is for downstream analysis
+--   - Includes URLs to binary reports for NLP workflows
 --
--- AUGMENTS: problem_list_diagnoses with detailed pathology findings
+-- Data Sources (5 surgery-linked sources):
+--   1. molecular_tests/molecular_test_results (DGD lab, within 1 year of surgery)
+--   2. observation (linked to surgical specimens via specimen_reference)
+--   3. diagnostic_report (surgical encounters, ±30 days, includes presented_form URLs)
+--   4. document_reference (pathology documents, ±60 days, includes content URLs)
+--   5. condition (problem_list ICD-10/SNOMED diagnoses, ±180 days, patient-level)
 --
--- USE CASE: Complete diagnostic profile for tumor characterization beyond
---           diagnosis codes alone
+-- Temporal Windows:
+--   - Surgical specimens: ±7 days from surgery date
+--   - Molecular tests: ±365 days from surgery date
+--   - Diagnostic reports: ±30 days from surgery date
+--   - Documents: ±60 days from surgery date
+--   - Problem list diagnoses: ±180 days from surgery date
 --
--- DESIGN PHILOSOPHY: **INCLUSIVE, NOT EXCLUSIVE**
---   - Captures ALL narrative text from relevant FHIR resources
---   - Does NOT filter based on keyword patterns (too restrictive, loses data)
---   - Pattern matching used ONLY for molecular marker EXTRACTION (adds value)
---   - Pattern matching NOT used for filtering (which would exclude important data)
---   - Downstream analysts can filter results as needed for specific use cases
---
--- DATETIME STANDARDIZATION: All datetime fields cast to TIMESTAMP(3)
--- OID DECODING: Included for observation and procedure coding systems
+-- Created: 2025-10-30
+-- Last Modified: 2025-10-30
 -- ============================================================================
 
 CREATE OR REPLACE VIEW fhir_prd_db.v_pathology_diagnostics AS
 
-WITH
--- ============================================================================
--- CTE 1: OID Reference for Decoding
--- ============================================================================
-oid_reference AS (
+WITH oid_reference AS (
     SELECT * FROM fhir_prd_db.v_oid_reference
 ),
 
 -- ============================================================================
--- CTE 2: Molecular Testing Results (from materialized tables)
+-- CTE 1: Tumor Surgeries (anchor point from validated v_procedures_tumor)
+-- ============================================================================
+tumor_surgeries AS (
+    SELECT
+        patient_fhir_id,
+        procedure_fhir_id,
+        proc_performed_date_time as surgery_datetime,
+        CAST(proc_performed_date_time AS DATE) as surgery_date,
+        proc_code_text as surgery_name,
+        surgery_type,
+        pbs_body_site_text as surgical_site,
+        cpt_code as surgery_cpt,
+        proc_encounter_reference as surgery_encounter
+    FROM fhir_prd_db.v_procedures_tumor
+    WHERE is_tumor_surgery = TRUE
+      AND is_likely_performed = TRUE
+),
+
+-- ============================================================================
+-- CTE 2: Surgical Specimens (linked to tumor surgeries by patient + date)
+-- ============================================================================
+surgical_specimens AS (
+    SELECT DISTINCT
+        ts.patient_fhir_id,
+        ts.procedure_fhir_id,
+        ts.surgery_datetime,
+        ts.surgery_date,
+        ts.surgery_encounter,
+        s.id as specimen_id,
+        s.type_text as specimen_type,
+        s.collection_body_site_text as specimen_site,
+        TRY(CAST(s.collection_collected_date_time AS TIMESTAMP(3))) as collection_datetime,
+        TRY(CAST(CAST(s.collection_collected_date_time AS VARCHAR) AS DATE)) as collection_date
+    FROM tumor_surgeries ts
+    INNER JOIN fhir_prd_db.specimen s
+        ON ts.patient_fhir_id = REPLACE(s.subject_reference, 'Patient/', '')
+        AND ABS(DATE_DIFF('day',
+            ts.surgery_date,
+            TRY(CAST(CAST(s.collection_collected_date_time AS VARCHAR) AS DATE))
+        )) <= 7  -- Within 7 days of surgery
+    WHERE s.id IS NOT NULL
+),
+
+-- ============================================================================
+-- CTE 3: Molecular Diagnostics (from molecular_tests, surgery-linked)
 -- ============================================================================
 molecular_diagnostics AS (
     SELECT
@@ -47,23 +88,23 @@ molecular_diagnostics AS (
         'molecular_test' as diagnostic_source,
         mt.test_id as source_id,
         CAST(mt.result_datetime AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(mt.result_datetime AS DATE) as diagnostic_date,
+        TRY(CAST(CAST(mt.result_datetime AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Test identification
         mt.lab_test_name as diagnostic_name,
-        NULL as code,  -- No coding for molecular tests (Epic-specific)
+        NULL as code,
         NULL as coding_system_code,
         NULL as coding_system_name,
 
-        -- Test details from molecular_test_results
+        -- Test details
         mtr.test_component as component_name,
         mtr.test_result_narrative as result_value,
 
         -- Test metadata
         mt.dgd_id as test_identifier,
-        'DGD' as test_lab,  -- Division of Genomic Diagnostics
+        'DGD' as test_lab,
 
-        -- Specimen information from v_molecular_tests
+        -- Specimen information
         vmt.mt_specimen_types as specimen_types,
         vmt.mt_specimen_sites as specimen_sites,
         vmt.mt_specimen_collection_date as specimen_collection_datetime,
@@ -76,19 +117,12 @@ molecular_diagnostics AS (
         -- Encounter linkage
         vmt.mt_encounter_id as encounter_id,
 
-        -- Classification
+        -- Generic categorization (LOINC-based, no hardcoded features)
         CASE
-            WHEN LOWER(mtr.test_component) LIKE '%idh%' THEN 'IDH_Mutation'
-            WHEN LOWER(mtr.test_component) LIKE '%mgmt%' THEN 'MGMT_Methylation'
-            WHEN LOWER(mtr.test_component) LIKE '%1p%19q%' OR LOWER(mtr.test_component) LIKE '%codeletion%' THEN '1p19q_Codeletion'
-            WHEN LOWER(mtr.test_component) LIKE '%braf%' THEN 'BRAF_Mutation'
-            WHEN LOWER(mtr.test_component) LIKE '%tp53%' OR LOWER(mtr.test_component) LIKE '%p53%' THEN 'TP53_Mutation'
-            WHEN LOWER(mtr.test_component) LIKE '%h3%' OR LOWER(mtr.test_component) LIKE '%k27%' THEN 'H3_K27M_Mutation'
-            WHEN LOWER(mtr.test_component) LIKE '%tert%' THEN 'TERT_Promoter'
-            WHEN LOWER(mtr.test_component) LIKE '%atrx%' THEN 'ATRX_Loss'
-            WHEN LOWER(mtr.test_component) LIKE '%egfr%' THEN 'EGFR_Mutation'
-            WHEN LOWER(mtr.test_component) LIKE '%ki-67%' OR LOWER(mtr.test_component) LIKE '%ki67%' OR LOWER(mtr.test_component) LIKE '%proliferation%' THEN 'Ki67_Proliferation'
-            ELSE 'Other_Molecular'
+            WHEN occ.code_coding_code IN ('24419-4', '34574-4', '11526-1') THEN 'Pathology_Report'
+            WHEN LOWER(mt.lab_test_name) LIKE '%panel%' OR LOWER(mt.lab_test_name) LIKE '%profile%' THEN 'Test_Panel'
+            WHEN LOWER(mt.lab_test_name) LIKE '%sequencing%' THEN 'Sequencing'
+            ELSE 'Molecular_Test'
         END as diagnostic_category,
 
         -- Metadata
@@ -102,19 +136,28 @@ molecular_diagnostics AS (
     LEFT JOIN fhir_prd_db.v_molecular_tests vmt
         ON mt.test_id = vmt.mt_test_id
 
+    -- ANCHOR to tumor surgeries (within 1 year)
+    INNER JOIN tumor_surgeries ts
+        ON mt.patient_id = ts.patient_fhir_id
+        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(mt.result_datetime AS VARCHAR) AS DATE)))) <= 365
+
+    -- Join to observation_code_coding for LOINC codes (if available)
+    LEFT JOIN fhir_prd_db.observation_code_coding occ
+        ON mt.test_id = occ.observation_id
+
     WHERE mt.patient_id IS NOT NULL
 ),
 
 -- ============================================================================
--- CTE 3: Pathology Observations (histology, IHC, grade)
+-- CTE 4: Surgical Pathology Observations (from surgical specimens ONLY)
 -- ============================================================================
-pathology_observations AS (
+surgical_pathology_observations AS (
     SELECT
-        o.subject_reference as patient_fhir_id,
-        'pathology_observation' as diagnostic_source,
+        ss.patient_fhir_id,
+        'surgical_pathology_observation' as diagnostic_source,
         o.id as source_id,
         CAST(o.effective_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(o.effective_date_time AS DATE) as diagnostic_date,
+        TRY(CAST(CAST(o.effective_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Observation identification
         o.code_text as diagnostic_name,
@@ -122,46 +165,42 @@ pathology_observations AS (
         oid_obs.masterfile_code as coding_system_code,
         oid_obs.description as coding_system_name,
 
-        -- Component name (if part of panel)
+        -- Component
         o.code_text as component_name,
 
-        -- Result values
+        -- Result value (preserved as-is)
         COALESCE(o.value_string, o.value_codeable_concept_text, oi.interpretation_text) as result_value,
 
         -- Test metadata
         NULL as test_identifier,
-        'Clinical Lab' as test_lab,
+        'Surgical Pathology Lab' as test_lab,
 
         -- Specimen information
-        s.type_text as specimen_types,
-        s.collection_body_site_text as specimen_sites,
-        CAST(s.collection_collected_date_time AS TIMESTAMP(3)) as specimen_collection_datetime,
+        ss.specimen_type as specimen_types,
+        ss.specimen_site as specimen_sites,
+        ss.collection_datetime as specimen_collection_datetime,
 
-        -- Procedure linkage (find procedures in same encounter)
-        p.id as linked_procedure_id,
-        p.code_text as linked_procedure_name,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as linked_procedure_datetime,
+        -- Procedure linkage
+        ss.procedure_fhir_id as linked_procedure_id,
+        NULL as linked_procedure_name,
+        ss.surgery_datetime as linked_procedure_datetime,
 
         -- Encounter linkage
         REPLACE(o.encounter_reference, 'Encounter/', '') as encounter_id,
 
-        -- Classification
+        -- Generic categorization (LOINC/resource-based, no hardcoded features)
         CASE
-            WHEN LOWER(o.code_text) LIKE '%idh%' THEN 'IDH_Mutation'
-            WHEN LOWER(o.code_text) LIKE '%mgmt%' THEN 'MGMT_Methylation'
-            WHEN LOWER(o.code_text) LIKE '%1p%19q%' OR LOWER(o.code_text) LIKE '%codeletion%' THEN '1p19q_Codeletion'
-            WHEN LOWER(o.code_text) LIKE '%braf%' THEN 'BRAF_Mutation'
-            WHEN LOWER(o.code_text) LIKE '%tp53%' OR LOWER(o.code_text) LIKE '%p53%' THEN 'TP53_Mutation'
-            WHEN LOWER(o.code_text) LIKE '%h3%' OR LOWER(o.code_text) LIKE '%k27%' THEN 'H3_K27M_Mutation'
-            WHEN LOWER(o.code_text) LIKE '%ki-67%' OR LOWER(o.code_text) LIKE '%ki67%' OR LOWER(o.code_text) LIKE '%proliferation%' THEN 'Ki67_Proliferation'
-            WHEN LOWER(o.code_text) LIKE '%who grade%' OR LOWER(o.code_text) LIKE '%tumor grade%' OR LOWER(o.code_text) LIKE '%histologic grade%' THEN 'WHO_Grade'
-            WHEN LOWER(o.code_text) LIKE '%histology%' OR LOWER(o.code_text) LIKE '%histologic type%' THEN 'Histology'
-            WHEN LOWER(o.code_text) LIKE '%gfap%' THEN 'IHC_GFAP'
-            WHEN LOWER(o.code_text) LIKE '%olig2%' THEN 'IHC_OLIG2'
-            WHEN LOWER(o.code_text) LIKE '%synaptophysin%' THEN 'IHC_Synaptophysin'
-            WHEN LOWER(o.code_text) LIKE '%neun%' THEN 'IHC_NeuN'
-            WHEN LOWER(o.code_text) LIKE '%immunohistochemistry%' OR LOWER(o.code_text) LIKE '%ihc%' THEN 'IHC_Other'
-            ELSE 'Other_Pathology'
+            -- Use LOINC codes for categorization
+            WHEN occ.code_coding_code IN ('24419-4') THEN 'Gross_Observation'
+            WHEN occ.code_coding_code IN ('34574-4') THEN 'Final_Diagnosis'
+            WHEN occ.code_coding_code IN ('11526-1') THEN 'Pathology_Study'
+
+            -- Use observation category if available
+            WHEN oc.category_text = 'Laboratory' THEN 'Laboratory_Observation'
+            WHEN oc.category_text = 'Imaging' THEN 'Imaging_Observation'
+
+            -- Generic fallback
+            ELSE 'Clinical_Observation'
         END as diagnostic_category,
 
         -- Metadata
@@ -169,152 +208,34 @@ pathology_observations AS (
         NULL as test_orderer,
         NULL as component_count
 
-    FROM fhir_prd_db.observation o
+    FROM surgical_specimens ss
+    INNER JOIN fhir_prd_db.observation o
+        ON REPLACE(o.specimen_reference, 'Specimen/', '') = ss.specimen_id
+
+    -- Join to observation tables for metadata
     LEFT JOIN fhir_prd_db.observation_code_coding occ
         ON o.id = occ.observation_id
     LEFT JOIN fhir_prd_db.observation_interpretation oi
         ON o.id = oi.observation_id
+    LEFT JOIN fhir_prd_db.observation_category oc
+        ON o.id = oc.observation_id
     LEFT JOIN oid_reference oid_obs
         ON occ.code_coding_system = oid_obs.oid_uri
-    LEFT JOIN fhir_prd_db.specimen s
-        ON REPLACE(o.specimen_reference, 'Specimen/', '') = s.id
-    LEFT JOIN fhir_prd_db.procedure p
-        ON REPLACE(o.encounter_reference, 'Encounter/', '') = REPLACE(p.encounter_reference, 'Encounter/', '')
-        AND o.subject_reference = p.subject_reference
-        AND (LOWER(p.code_text) LIKE '%surgical%'
-            OR LOWER(p.code_text) LIKE '%resection%'
-            OR LOWER(p.code_text) LIKE '%biopsy%'
-            OR LOWER(p.code_text) LIKE '%craniotomy%')
 
-    WHERE
-        -- Filter to pathology-related observations
-        (LOWER(o.code_text) LIKE '%pathology%'
-        OR LOWER(o.code_text) LIKE '%histology%'
-        OR LOWER(o.code_text) LIKE '%histologic%'
-        OR LOWER(o.code_text) LIKE '%who grade%'
-        OR LOWER(o.code_text) LIKE '%tumor grade%'
-        OR LOWER(o.code_text) LIKE '%idh%'
-        OR LOWER(o.code_text) LIKE '%mgmt%'
-        OR LOWER(o.code_text) LIKE '%1p%19q%'
-        OR LOWER(o.code_text) LIKE '%chromosome%'
-        OR LOWER(o.code_text) LIKE '%molecular%'
-        OR LOWER(o.code_text) LIKE '%genetic%'
-        OR LOWER(o.code_text) LIKE '%mutation%'
-        OR LOWER(o.code_text) LIKE '%methylation%'
-        OR LOWER(o.code_text) LIKE '%immunohistochemistry%'
-        OR LOWER(o.code_text) LIKE '%ihc%'
-        OR LOWER(o.code_text) LIKE '%ki-67%'
-        OR LOWER(o.code_text) LIKE '%ki67%'
-        OR LOWER(o.code_text) LIKE '%gfap%'
-        OR LOWER(o.code_text) LIKE '%olig2%'
-        OR LOWER(o.code_text) LIKE '%braf%'
-        OR LOWER(o.code_text) LIKE '%tp53%'
-        OR LOWER(o.code_text) LIKE '%p53%'
-        OR LOWER(o.code_text) LIKE '%h3%k27%'
-        OR LOWER(o.code_text) LIKE '%tert%'
-        OR LOWER(o.code_text) LIKE '%atrx%'
-        OR LOWER(o.code_text) LIKE '%egfr%')
-
-        AND o.subject_reference IS NOT NULL
+    WHERE o.subject_reference IS NOT NULL
+      AND o.id IS NOT NULL
 ),
 
 -- ============================================================================
--- CTE 4: Pathology Procedures (biopsies, frozen sections, specimen processing)
+-- CTE 5: Surgical Pathology Reports (from surgical encounters)
 -- ============================================================================
-pathology_procedures AS (
+surgical_pathology_narratives AS (
     SELECT
-        p.subject_reference as patient_fhir_id,
-        'pathology_procedure' as diagnostic_source,
-        p.id as source_id,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(p.performed_date_time AS DATE) as diagnostic_date,
-
-        -- Procedure identification
-        p.code_text as diagnostic_name,
-        pcc.code_coding_code as code,
-        oid_proc.masterfile_code as coding_system_code,
-        oid_proc.description as coding_system_name,
-
-        -- Component name
-        p.code_text as component_name,
-
-        -- Result/outcome
-        p.outcome_text as result_value,
-
-        -- Test metadata
-        NULL as test_identifier,
-        'Pathology Lab' as test_lab,
-
-        -- Specimen information (linked through encounter)
-        s.type_text as specimen_types,
-        s.collection_body_site_text as specimen_sites,
-        CAST(s.collection_collected_date_time AS TIMESTAMP(3)) as specimen_collection_datetime,
-
-        -- Self-reference for procedures
-        p.id as linked_procedure_id,
-        p.code_text as linked_procedure_name,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as linked_procedure_datetime,
-
-        -- Encounter linkage
-        REPLACE(p.encounter_reference, 'Encounter/', '') as encounter_id,
-
-        -- Classification
-        CASE
-            WHEN LOWER(p.code_text) LIKE '%frozen section%' THEN 'Frozen_Section'
-            WHEN LOWER(p.code_text) LIKE '%biopsy%' AND LOWER(p.code_text) LIKE '%brain%' THEN 'Brain_Biopsy'
-            WHEN LOWER(p.code_text) LIKE '%biopsy%' THEN 'Biopsy_Other'
-            WHEN LOWER(p.code_text) LIKE '%surgical pathology%' THEN 'Surgical_Pathology'
-            WHEN LOWER(p.code_text) LIKE '%specimen%' THEN 'Specimen_Processing'
-            WHEN pcc.code_coding_code BETWEEN '88300' AND '88309' THEN 'Surgical_Pathology'
-            WHEN pcc.code_coding_code BETWEEN '88331' AND '88334' THEN 'Frozen_Section'
-            WHEN pcc.code_coding_code IN ('61140', '61750', '61751', '62269') THEN 'CNS_Biopsy'
-            ELSE 'Other_Procedure'
-        END as diagnostic_category,
-
-        -- Metadata
-        p.status as test_status,
-        NULL as test_orderer,
-        NULL as component_count
-
-    FROM fhir_prd_db.procedure p
-    LEFT JOIN fhir_prd_db.procedure_code_coding pcc
-        ON p.id = pcc.procedure_id
-    LEFT JOIN oid_reference oid_proc
-        ON pcc.code_coding_system = oid_proc.oid_uri
-    LEFT JOIN fhir_prd_db.specimen s
-        ON REPLACE(p.encounter_reference, 'Encounter/', '') = REPLACE(s.subject_reference, 'Patient/', '')
-        -- Linking specimens to procedures via encounter is approximate
-
-    WHERE
-        -- Filter to pathology-related procedures
-        (LOWER(p.code_text) LIKE '%biopsy%'
-        OR LOWER(p.code_text) LIKE '%pathology%'
-        OR LOWER(p.code_text) LIKE '%frozen section%'
-        OR LOWER(p.code_text) LIKE '%frozen%'
-        OR LOWER(p.code_text) LIKE '%specimen%'
-        OR LOWER(p.code_text) LIKE '%tissue exam%'
-
-        -- Pathology CPT codes
-        OR pcc.code_coding_code BETWEEN '88000' AND '88099'  -- Pathology consultation
-        OR pcc.code_coding_code BETWEEN '88300' AND '88399'  -- Surgical pathology
-        OR pcc.code_coding_code BETWEEN '88400' AND '88499'  -- In vivo procedures
-
-        -- Brain biopsy CPT codes
-        OR pcc.code_coding_code IN ('61140', '61750', '61751', '62269'))
-
-        AND p.subject_reference IS NOT NULL
-),
-
--- ============================================================================
--- CTE 5: Pathology Narrative Reports (free-text from FHIR resources)
--- ============================================================================
-pathology_narratives AS (
-    SELECT
-        dr.subject_reference as patient_fhir_id,
-        'pathology_narrative' as diagnostic_source,
+        ss.patient_fhir_id,
+        'surgical_pathology_report' as diagnostic_source,
         dr.id as source_id,
         CAST(dr.effective_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(dr.effective_date_time AS DATE) as diagnostic_date,
+        TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Report identification
         dr.code_text as diagnostic_name,
@@ -322,37 +243,43 @@ pathology_narratives AS (
         NULL as coding_system_code,
         NULL as coding_system_name,
 
-        -- Narrative content (primary value)
-        dr.conclusion as result_value,
-
-        -- Component name
+        -- Component
         dr.code_text as component_name,
 
-        -- Specimen information (if linked)
-        s.type_text as specimen_types,
-        s.collection_body_site_text as specimen_sites,
-        CAST(s.collection_collected_date_time AS TIMESTAMP(3)) as specimen_collection_datetime,
+        -- Narrative content (preserved as-is for downstream analysis)
+        -- Include BOTH conclusion AND URL to full report for NLP workflows
+        CASE
+            WHEN dr.conclusion IS NOT NULL AND drpf.presented_form_url IS NOT NULL
+                THEN dr.conclusion || ' | URL: ' || drpf.presented_form_url
+            WHEN dr.conclusion IS NOT NULL
+                THEN dr.conclusion
+            WHEN drpf.presented_form_url IS NOT NULL
+                THEN 'Full report at: ' || drpf.presented_form_url
+            ELSE NULL
+        END as result_value,
 
-        -- Procedure linkage (via encounter or based_on)
-        p.id as linked_procedure_id,
-        p.code_text as linked_procedure_name,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as linked_procedure_datetime,
+        -- Test metadata
+        NULL as test_identifier,
+        'Pathology Report' as test_lab,
+
+        -- Specimen information
+        ss.specimen_type as specimen_types,
+        ss.specimen_site as specimen_sites,
+        ss.collection_datetime as specimen_collection_datetime,
+
+        -- Procedure linkage
+        ss.procedure_fhir_id as linked_procedure_id,
+        NULL as linked_procedure_name,
+        ss.surgery_datetime as linked_procedure_datetime,
 
         -- Encounter linkage
         REPLACE(dr.encounter_reference, 'Encounter/', '') as encounter_id,
 
-        -- Test identifier (from based_on service request)
-        sri.identifier_value as test_identifier,
-        'Pathology Report' as test_lab,
-
-        -- Classification based on report type
+        -- Generic categorization (resource type-based, no hardcoded features)
         CASE
-            WHEN LOWER(dr.code_text) LIKE '%surgical pathology%' THEN 'Surgical_Pathology_Report'
-            WHEN LOWER(dr.code_text) LIKE '%frozen section%' THEN 'Frozen_Section_Report'
-            WHEN LOWER(dr.code_text) LIKE '%cytology%' THEN 'Cytology_Report'
-            WHEN LOWER(dr.code_text) LIKE '%molecular%' OR LOWER(dr.code_text) LIKE '%genomic%' THEN 'Molecular_Report'
-            WHEN LOWER(dr.code_text) LIKE '%immunohistochemistry%' OR LOWER(dr.code_text) LIKE '%ihc%' THEN 'IHC_Report'
-            ELSE 'Pathology_Report_Other'
+            WHEN dr.resource_type = 'DiagnosticReport' THEN 'Diagnostic_Report'
+            WHEN drcc.code_coding_code IN ('24419-4', '34574-4', '11526-1') THEN 'Pathology_Report'
+            ELSE 'Clinical_Report'
         END as diagnostic_category,
 
         -- Metadata
@@ -360,153 +287,215 @@ pathology_narratives AS (
         NULL as test_orderer,
         NULL as component_count
 
-    FROM fhir_prd_db.diagnostic_report dr
+    FROM surgical_specimens ss
+    INNER JOIN fhir_prd_db.diagnostic_report dr
+        ON ss.patient_fhir_id = REPLACE(dr.subject_reference, 'Patient/', '')
+        AND ABS(DATE_DIFF('day', ss.surgery_date, TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)))) <= 30
+
+    -- Join for code information
     LEFT JOIN fhir_prd_db.diagnostic_report_code_coding drcc
         ON dr.id = drcc.diagnostic_report_id
-    LEFT JOIN fhir_prd_db.diagnostic_report_based_on drbo
-        ON dr.id = drbo.diagnostic_report_id
-    LEFT JOIN fhir_prd_db.service_request sr
-        ON REPLACE(drbo.based_on_reference, 'ServiceRequest/', '') = sr.id
-    LEFT JOIN fhir_prd_db.service_request_identifier sri
-        ON sr.id = sri.service_request_id
-    LEFT JOIN fhir_prd_db.specimen s
-        ON REPLACE(dr.subject_reference, 'Patient/', '') = REPLACE(s.subject_reference, 'Patient/', '')
-        AND ABS(DATE_DIFF('day', CAST(dr.effective_date_time AS DATE), CAST(s.collection_collected_date_time AS DATE))) <= 30
-    LEFT JOIN fhir_prd_db.procedure p
-        ON REPLACE(dr.encounter_reference, 'Encounter/', '') = REPLACE(p.encounter_reference, 'Encounter/', '')
-        AND dr.subject_reference = p.subject_reference
-        AND (LOWER(p.code_text) LIKE '%surgical%'
-            OR LOWER(p.code_text) LIKE '%resection%'
-            OR LOWER(p.code_text) LIKE '%biopsy%'
-            OR LOWER(p.code_text) LIKE '%craniotomy%')
 
-    WHERE
-        -- Include ALL diagnostic reports with narrative content
-        -- (do not filter by keywords - capture everything, let pattern matching extract markers)
-        dr.subject_reference IS NOT NULL
-        AND dr.conclusion IS NOT NULL
+    -- Join for presented_form URL (for NLP workflows on binary reports)
+    LEFT JOIN fhir_prd_db.diagnostic_report_presented_form drpf
+        ON dr.id = drpf.diagnostic_report_id
 
-        -- Exclude reports already captured in molecular_tests to avoid duplication
-        AND NOT EXISTS (
-            SELECT 1 FROM fhir_prd_db.molecular_tests mt
-            WHERE mt.result_diagnostic_report_id = dr.id
-        )
+    WHERE dr.subject_reference IS NOT NULL
+      AND (dr.conclusion IS NOT NULL OR drpf.presented_form_url IS NOT NULL)
+
+      -- Exclude reports already captured in molecular_tests
+      AND NOT EXISTS (
+          SELECT 1 FROM fhir_prd_db.molecular_tests mt
+          WHERE mt.result_diagnostic_report_id = dr.id
+      )
 ),
 
 -- ============================================================================
--- CTE 6: Care Plan Pathology Notes (narrative findings in care plans)
+-- CTE 6: Pathology Document References (for NLP workflows)
 -- ============================================================================
-care_plan_pathology_notes AS (
+pathology_document_references AS (
     SELECT
-        cp.subject_reference as patient_fhir_id,
-        'care_plan_pathology_note' as diagnostic_source,
-        cp.id as source_id,
-        CAST(cp.created AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(cp.created AS DATE) as diagnostic_date,
+        ss.patient_fhir_id,
+        'pathology_document' as diagnostic_source,
+        dref.id as source_id,
+        CAST(dref.date AS TIMESTAMP(3)) as diagnostic_datetime,
+        TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)) as diagnostic_date,
 
-        -- Care plan identification
-        cp.title as diagnostic_name,
+        -- Document identification
+        dref.description as diagnostic_name,
         NULL as code,
         NULL as coding_system_code,
         NULL as coding_system_name,
 
-        -- Narrative content
-        cp.description as result_value,
-
         -- Component
-        cp.title as component_name,
+        dref.type_text as component_name,
 
-        -- No specimen info from care plans
-        NULL as specimen_types,
-        NULL as specimen_sites,
-        NULL as specimen_collection_datetime,
+        -- Document URL for NLP workflows
+        CASE
+            WHEN drefc.content_attachment_url IS NOT NULL
+                THEN 'Document: ' || drefc.content_attachment_url ||
+                     ' | Type: ' || COALESCE(drefc.content_attachment_content_type, 'unknown') ||
+                     ' | Title: ' || COALESCE(drefc.content_attachment_title, dref.description)
+            ELSE dref.description
+        END as result_value,
 
-        -- No direct procedure link
-        NULL as linked_procedure_id,
+        -- Test metadata
+        NULL as test_identifier,
+        'Document Repository' as test_lab,
+
+        -- Specimen information
+        ss.specimen_type as specimen_types,
+        ss.specimen_site as specimen_sites,
+        ss.collection_datetime as specimen_collection_datetime,
+
+        -- Procedure linkage
+        ss.procedure_fhir_id as linked_procedure_id,
         NULL as linked_procedure_name,
-        NULL as linked_procedure_datetime,
+        ss.surgery_datetime as linked_procedure_datetime,
 
-        -- Encounter linkage
-        REPLACE(cp.encounter_reference, 'Encounter/', '') as encounter_id,
+        -- Encounter linkage (would require additional JOIN to document_reference_context_encounter)
+        NULL as encounter_id,
 
-        -- Test identifier
-        NULL as test_identifier,
-        'Care Plan' as test_lab,
-
-        -- Classification
-        'Care_Plan_Pathology' as diagnostic_category,
+        -- Generic categorization
+        CASE
+            WHEN drefc.content_attachment_content_type LIKE '%pdf%' THEN 'PDF_Document'
+            WHEN drefc.content_attachment_content_type LIKE '%image%' THEN 'Image_Document'
+            WHEN drefc.content_attachment_content_type LIKE '%text%' THEN 'Text_Document'
+            ELSE 'Document_Reference'
+        END as diagnostic_category,
 
         -- Metadata
-        cp.status as test_status,
+        dref.doc_status as test_status,
         NULL as test_orderer,
         NULL as component_count
 
-    FROM fhir_prd_db.care_plan cp
+    FROM surgical_specimens ss
+    INNER JOIN fhir_prd_db.document_reference dref
+        ON ss.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
+        AND ABS(DATE_DIFF('day', ss.surgery_date, TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)))) <= 60
 
-    WHERE
-        -- Include ALL care plans with description text
-        -- (do not filter by keywords - capture everything)
-        cp.subject_reference IS NOT NULL
-        AND cp.description IS NOT NULL
+    -- Join for document content/URL
+    LEFT JOIN fhir_prd_db.document_reference_content drefc
+        ON dref.id = drefc.document_reference_id
+
+    WHERE dref.subject_reference IS NOT NULL
+      AND (dref.description IS NOT NULL OR drefc.content_attachment_url IS NOT NULL)
+
+      -- Filter to pathology-related documents
+      AND (
+          LOWER(dref.description) LIKE '%pathology%'
+          OR LOWER(dref.description) LIKE '%surgical%'
+          OR LOWER(dref.description) LIKE '%biopsy%'
+          OR LOWER(dref.description) LIKE '%specimen%'
+          OR LOWER(dref.type_text) LIKE '%pathology%'
+          OR LOWER(dref.type_text) LIKE '%surgical%'
+      )
 ),
 
 -- ============================================================================
--- CTE 7: Procedure Notes with Pathology Content
+-- CTE 7: Problem List Diagnoses (patient-level ICD-10/SNOMED codes)
 -- ============================================================================
-procedure_pathology_notes AS (
+problem_list_diagnoses AS (
     SELECT
-        p.subject_reference as patient_fhir_id,
-        'procedure_pathology_note' as diagnostic_source,
-        p.id as source_id,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
-        CAST(p.performed_date_time AS DATE) as diagnostic_date,
+        ts.patient_fhir_id,
+        'problem_list_diagnosis' as diagnostic_source,
+        c.id as source_id,
+        TRY(CAST(c.onset_date_time AS TIMESTAMP(3))) as diagnostic_datetime,
+        TRY(CAST(CAST(c.onset_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
-        -- Procedure identification
-        p.code_text as diagnostic_name,
-        NULL as code,
+        -- Diagnosis identification
+        c.code_text as diagnostic_name,
+        cc.code_coding_code as code,  -- ICD-10 or SNOMED code
         NULL as coding_system_code,
-        NULL as coding_system_name,
+        cc.code_coding_system as coding_system_name,  -- Will be ICD-10 or SNOMED URI
 
-        -- Narrative content from procedure notes
-        COALESCE(pn.note_text, p.outcome_text) as result_value,
+        -- Component (condition category)
+        COALESCE(ccat.category_text, 'Unknown') as component_name,
 
-        -- Component
-        p.code_text as component_name,
+        -- Result value (combine code display and verification status)
+        CASE
+            WHEN cc.code_coding_display IS NOT NULL AND c.verification_status_text IS NOT NULL
+                THEN cc.code_coding_display || ' | Status: ' || c.verification_status_text
+            WHEN cc.code_coding_display IS NOT NULL
+                THEN cc.code_coding_display
+            ELSE c.code_text
+        END as result_value,
 
-        -- No specimen info
+        -- Test metadata
+        NULL as test_identifier,
+        'Problem List' as test_lab,
+
+        -- No specimen for problem list diagnoses (patient-level, not specimen-level)
         NULL as specimen_types,
         NULL as specimen_sites,
         NULL as specimen_collection_datetime,
 
-        -- Self-reference
-        p.id as linked_procedure_id,
-        p.code_text as linked_procedure_name,
-        CAST(p.performed_date_time AS TIMESTAMP(3)) as linked_procedure_datetime,
+        -- Procedure linkage (to surgery)
+        ts.procedure_fhir_id as linked_procedure_id,
+        ts.surgery_name as linked_procedure_name,
+        ts.surgery_datetime as linked_procedure_datetime,
 
         -- Encounter linkage
-        REPLACE(p.encounter_reference, 'Encounter/', '') as encounter_id,
+        REPLACE(c.encounter_reference, 'Encounter/', '') as encounter_id,
 
-        -- Test identifier
-        NULL as test_identifier,
-        'Procedure Note' as test_lab,
-
-        -- Classification
-        'Procedure_Pathology_Note' as diagnostic_category,
+        -- Generic categorization based on ICD-10/SNOMED code
+        CASE
+            WHEN cc.code_coding_system LIKE '%icd-10%' THEN 'ICD10_Diagnosis'
+            WHEN cc.code_coding_system LIKE '%snomed%' THEN 'SNOMED_Diagnosis'
+            WHEN ccat.category_text = 'problem-list-item' THEN 'Problem_List_Item'
+            WHEN ccat.category_text = 'encounter-diagnosis' THEN 'Encounter_Diagnosis'
+            ELSE 'Clinical_Diagnosis'
+        END as diagnostic_category,
 
         -- Metadata
-        p.status as test_status,
-        NULL as test_orderer,
+        c.clinical_status_text as test_status,
+        c.recorder_display as test_orderer,
         NULL as component_count
 
-    FROM fhir_prd_db.procedure p
-    LEFT JOIN fhir_prd_db.procedure_note pn
-        ON p.id = pn.procedure_id
+    FROM tumor_surgeries ts
+    INNER JOIN fhir_prd_db.condition c
+        ON ts.patient_fhir_id = REPLACE(c.subject_reference, 'Patient/', '')
+        -- Link diagnoses within ±180 days of surgery (may predate or follow surgery)
+        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(c.onset_date_time AS VARCHAR) AS DATE)))) <= 180
 
-    WHERE
-        -- Include ALL procedures with notes/outcome text
-        -- (do not filter by keywords - capture everything)
-        p.subject_reference IS NOT NULL
-        AND (pn.note_text IS NOT NULL OR p.outcome_text IS NOT NULL)
+    -- Join for ICD-10/SNOMED codes
+    LEFT JOIN fhir_prd_db.condition_code_coding cc
+        ON c.id = cc.condition_id
+
+    -- Join for condition category (problem-list-item vs encounter-diagnosis)
+    LEFT JOIN fhir_prd_db.condition_category ccat
+        ON c.id = ccat.condition_id
+
+    WHERE c.subject_reference IS NOT NULL
+      AND c.id IS NOT NULL
+
+      -- Filter to CNS/brain tumor-related diagnoses
+      AND (
+          -- ICD-10 C-codes for brain tumors (C70-C72, C79.3x)
+          cc.code_coding_code LIKE 'C70%'
+          OR cc.code_coding_code LIKE 'C71%'
+          OR cc.code_coding_code LIKE 'C72%'
+          OR cc.code_coding_code LIKE 'C79.3%'
+
+          -- ICD-10 D-codes for benign brain tumors (D32-D33, D43)
+          OR cc.code_coding_code LIKE 'D32%'
+          OR cc.code_coding_code LIKE 'D33%'
+          OR cc.code_coding_code LIKE 'D43%'
+
+          -- SNOMED codes for brain/CNS neoplasms
+          OR LOWER(c.code_text) LIKE '%brain%tumor%'
+          OR LOWER(c.code_text) LIKE '%brain%neoplasm%'
+          OR LOWER(c.code_text) LIKE '%glioma%'
+          OR LOWER(c.code_text) LIKE '%glioblastoma%'
+          OR LOWER(c.code_text) LIKE '%medulloblastoma%'
+          OR LOWER(c.code_text) LIKE '%ependymoma%'
+          OR LOWER(c.code_text) LIKE '%astrocytoma%'
+          OR LOWER(c.code_text) LIKE '%oligodendroglioma%'
+          OR LOWER(c.code_text) LIKE '%craniopharyngioma%'
+          OR LOWER(c.code_text) LIKE '%meningioma%'
+          OR LOWER(c.code_text) LIKE '%cns%tumor%'
+          OR LOWER(c.code_text) LIKE '%central nervous system%neoplasm%'
+      )
 ),
 
 -- ============================================================================
@@ -515,19 +504,17 @@ procedure_pathology_notes AS (
 unified_diagnostics AS (
     SELECT * FROM molecular_diagnostics
     UNION ALL
-    SELECT * FROM pathology_observations
+    SELECT * FROM surgical_pathology_observations
     UNION ALL
-    SELECT * FROM pathology_procedures
+    SELECT * FROM surgical_pathology_narratives
     UNION ALL
-    SELECT * FROM pathology_narratives
+    SELECT * FROM pathology_document_references
     UNION ALL
-    SELECT * FROM care_plan_pathology_notes
-    UNION ALL
-    SELECT * FROM procedure_pathology_notes
+    SELECT * FROM problem_list_diagnoses
 )
 
 -- ============================================================================
--- FINAL SELECT: All pathology diagnostics with enrichment
+-- FINAL SELECT: All surgery-linked pathology diagnostics
 -- ============================================================================
 SELECT
     ud.patient_fhir_id,
@@ -536,25 +523,16 @@ SELECT
     ud.diagnostic_datetime,
     ud.diagnostic_date,
 
-    -- Age at diagnostic test
-    TRY(DATE_DIFF('day',
-        DATE(pa.birth_date),
-        ud.diagnostic_date)) as age_at_diagnostic_days,
-    TRY(DATE_DIFF('year',
-        DATE(pa.birth_date),
-        ud.diagnostic_date)) as age_at_diagnostic_years,
-
-    -- Diagnostic identification
+    -- Diagnostic details (preserved as-is, no interpretation)
     ud.diagnostic_name,
-    ud.component_name,
-    ud.result_value,
-    ud.diagnostic_category,
-
-    -- Coding system information
+    ud.code,
     ud.coding_system_code,
     ud.coding_system_name,
+    ud.component_name,
+    ud.result_value,  -- Raw result value for downstream analysis
+    ud.diagnostic_category,  -- Generic category based on FHIR resource type
 
-    -- Specimen information
+    -- Specimen details
     ud.specimen_types,
     ud.specimen_sites,
     ud.specimen_collection_datetime,
@@ -570,23 +548,12 @@ SELECT
     ud.linked_procedure_id,
     ud.linked_procedure_name,
     ud.linked_procedure_datetime,
+    TRY(DATE_DIFF('day', CAST(ud.linked_procedure_datetime AS DATE), ud.diagnostic_date)) as days_from_procedure,
 
-    -- Days between procedure and diagnostic test
-    TRY(DATE_DIFF('day',
-        CAST(ud.linked_procedure_datetime AS DATE),
-        ud.diagnostic_date)) as days_from_procedure,
-
-    -- Encounter linkage
-    ud.encounter_id,
-
-    -- Patient demographics
-    pa.mrn as patient_mrn,
-    pa.birth_date as patient_birth_date,
-    pa.gender as patient_gender
+    -- Encounter
+    ud.encounter_id
 
 FROM unified_diagnostics ud
-LEFT JOIN fhir_prd_db.patient_access pa
-    ON ud.patient_fhir_id = pa.id
 
 WHERE ud.patient_fhir_id IS NOT NULL
 
