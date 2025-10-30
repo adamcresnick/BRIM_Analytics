@@ -121,6 +121,18 @@ SELECT * FROM (VALUES
      'Standard for lab tests and clinical observations. Universal test codes.',
      'observation_code_coding', TRUE),
 
+    -- CDT-2: Dental Procedures (ADA) - DISCOVERED IN PRODUCTION
+    ('urn:oid:2.16.840.1.113883.6.13', 'Standard', 'ADA', 'CDT-2', 'Dental', NULL,
+     'Current Dental Terminology',
+     'Dental procedure codes. Used for oral/maxillofacial surgery, TMJ procedures.',
+     'procedure_code_coding', TRUE),
+
+    -- HCPCS: Healthcare Common Procedure Coding (CMS) - DISCOVERED IN PRODUCTION
+    ('urn:oid:2.16.840.1.113883.6.14', 'Standard', 'CMS', 'HCPCS', 'Procedure', NULL,
+     'Healthcare Common Procedure Coding System',
+     'CMS billing codes for procedures, DME, ambulance, services not covered by CPT.',
+     'procedure_code_coding', TRUE),
+
     -- HL7 v2 Identifier Types
     ('http://terminology.hl7.org/CodeSystem/v2-0203', 'Standard', 'HL7', 'v2-0203', 'Identifier', NULL,
      'HL7 v2 Identifier Type Codes',
