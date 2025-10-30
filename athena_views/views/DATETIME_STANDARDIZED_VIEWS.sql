@@ -7126,7 +7126,7 @@ surgical_specimens AS (
         s.id as specimen_id,
         s.type_text as specimen_type,
         s.collection_body_site_text as specimen_site,
-        TRY(CAST(s.collection_collected_date_time AS TIMESTAMP(3))) as collection_datetime,
+        CAST(TRY(from_iso8601_timestamp(s.collection_collected_date_time)) AS TIMESTAMP(3)) as collection_datetime,
         TRY(CAST(CAST(s.collection_collected_date_time AS VARCHAR) AS DATE)) as collection_date
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.specimen s
@@ -7146,7 +7146,7 @@ molecular_diagnostics AS (
         mt.patient_id as patient_fhir_id,
         'molecular_test' as diagnostic_source,
         mt.test_id as source_id,
-        CAST(mt.result_datetime AS TIMESTAMP(3)) as diagnostic_datetime,
+        CAST(TRY(from_iso8601_timestamp(mt.result_datetime)) AS TIMESTAMP(3)) as diagnostic_datetime,
         TRY(CAST(CAST(mt.result_datetime AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Test identification
@@ -7215,7 +7215,7 @@ surgical_pathology_observations AS (
         ss.patient_fhir_id,
         'surgical_pathology_observation' as diagnostic_source,
         o.id as source_id,
-        CAST(o.effective_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
+        CAST(TRY(from_iso8601_timestamp(o.effective_date_time)) AS TIMESTAMP(3)) as diagnostic_datetime,
         TRY(CAST(CAST(o.effective_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Observation identification
@@ -7293,7 +7293,7 @@ surgical_pathology_narratives AS (
         ss.patient_fhir_id,
         'surgical_pathology_report' as diagnostic_source,
         dr.id as source_id,
-        CAST(dr.effective_date_time AS TIMESTAMP(3)) as diagnostic_datetime,
+        CAST(TRY(from_iso8601_timestamp(dr.effective_date_time)) AS TIMESTAMP(3)) as diagnostic_datetime,
         TRY(CAST(CAST(dr.effective_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Report identification
@@ -7377,7 +7377,7 @@ pathology_document_references AS (
         ss.patient_fhir_id,
         'pathology_document' as diagnostic_source,
         dref.id as source_id,
-        CAST(dref.date AS TIMESTAMP(3)) as diagnostic_datetime,
+        CAST(TRY(from_iso8601_timestamp(dref.date)) AS TIMESTAMP(3)) as diagnostic_datetime,
         TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Document identification
@@ -7459,7 +7459,7 @@ problem_list_diagnoses AS (
         ts.patient_fhir_id,
         'problem_list_diagnosis' as diagnostic_source,
         c.id as source_id,
-        TRY(CAST(c.onset_date_time AS TIMESTAMP(3))) as diagnostic_datetime,
+        CAST(TRY(from_iso8601_timestamp(c.onset_date_time)) AS TIMESTAMP(3)) as diagnostic_datetime,
         TRY(CAST(CAST(c.onset_date_time AS VARCHAR) AS DATE)) as diagnostic_date,
 
         -- Diagnosis identification
