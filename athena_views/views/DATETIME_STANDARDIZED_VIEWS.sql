@@ -2959,6 +2959,27 @@ combined_classification AS (
     LEFT JOIN epic_codes epic ON p.id = epic.procedure_id
     LEFT JOIN procedure_codes pc ON p.id = pc.procedure_id
     LEFT JOIN procedure_validation pv ON p.id = pv.procedure_id
+),
+
+-- ========================================================================
+-- ENHANCEMENT: Epic OR Log and Surgical Procedures Linkage (2025-10-29)
+-- ========================================================================
+
+epic_or_identifiers AS (
+    SELECT
+        procedure_id,
+        identifier_value as epic_or_log_id
+    FROM fhir_prd_db.procedure_identifier
+    WHERE identifier_type_text = 'ORL'
+),
+
+surgical_procedures_link AS (
+    SELECT
+        procedure_id,
+        epic_case_orlog_id,
+        mrn,
+        TRUE as in_surgical_procedures_table
+    FROM fhir_prd_db.surgical_procedures
 )
 
 SELECT
@@ -3019,7 +3040,76 @@ SELECT
     pcat.category_coding_display as pcat_category_coding_display,
     pbs.body_site_text as pbs_body_site_text,
     pp.performer_actor_display as pp_performer_actor_display,
-    pp.performer_function_text as pp_performer_function_text
+    pp.performer_function_text as pp_performer_function_text,
+
+    -- ========================================================================
+    -- ENHANCEMENT: New Annotation Columns (2025-10-29)
+    -- ========================================================================
+
+    -- 1. Epic OR Log ID from procedure_identifier table
+    epi.epic_or_log_id,
+
+    -- 2. Flag if procedure exists in surgical_procedures table
+    COALESCE(spl.in_surgical_procedures_table, FALSE) as in_surgical_procedures_table,
+
+    -- 3-4. MRN and Epic case ID from surgical_procedures (if linked)
+    spl.mrn as surgical_procedures_mrn,
+    spl.epic_case_orlog_id as surgical_procedures_epic_case_id,
+
+    -- 5. Categorize proc_category_text for easier filtering
+    CASE
+        WHEN p.category_text = 'Ordered Procedures' THEN 'PROCEDURE_ORDER'
+        WHEN p.category_text = 'Surgical History' THEN 'SURGICAL_HISTORY'
+        WHEN p.category_text = 'Surgical Procedures' THEN 'SURGICAL_PROCEDURE'
+        WHEN p.category_text IS NULL THEN 'UNCATEGORIZED'
+        ELSE 'OTHER_CATEGORY'
+    END as proc_category_annotation,
+
+    -- 6. High-level source type classification
+    CASE
+        WHEN epi.epic_or_log_id IS NOT NULL THEN 'OR_CASE'
+        WHEN spl.in_surgical_procedures_table THEN 'OR_CASE'
+        WHEN p.category_text = 'Surgical History' THEN 'SURGICAL_HISTORY'
+        WHEN p.category_text = 'Ordered Procedures' THEN 'PROCEDURE_ORDER'
+        WHEN p.category_text = 'Surgical Procedures' AND p.status = 'completed' THEN 'COMPLETED_SURGICAL'
+        WHEN p.status = 'not-done' THEN 'NOT_DONE'
+        ELSE 'OTHER'
+    END as procedure_source_type,
+
+    -- 7. Flag for likely performed procedures (excludes orders, history, not-done)
+    CASE
+        WHEN p.category_text IN ('Ordered Procedures') THEN FALSE
+        WHEN p.status = 'not-done' THEN FALSE
+        WHEN p.status = 'entered-in-error' THEN FALSE
+        WHEN p.status = 'completed' THEN TRUE
+        WHEN epi.epic_or_log_id IS NOT NULL THEN TRUE
+        WHEN spl.in_surgical_procedures_table THEN TRUE
+        ELSE FALSE
+    END as is_likely_performed,
+
+    -- 8. Annotation for status
+    CASE
+        WHEN p.status = 'completed' THEN 'COMPLETED'
+        WHEN p.status = 'not-done' THEN 'NOT_DONE'
+        WHEN p.status = 'entered-in-error' THEN 'ERROR'
+        WHEN p.status = 'in-progress' THEN 'IN_PROGRESS'
+        WHEN p.status = 'on-hold' THEN 'ON_HOLD'
+        WHEN p.status = 'stopped' THEN 'STOPPED'
+        WHEN p.status = 'unknown' THEN 'UNKNOWN'
+        ELSE 'OTHER_STATUS'
+    END as proc_status_annotation,
+
+    -- 9. Data quality flag: Has minimum required data for analysis
+    CASE
+        WHEN pd.procedure_date IS NOT NULL
+            AND p.status = 'completed'
+            AND pc.code_coding_code IS NOT NULL
+        THEN TRUE
+        ELSE FALSE
+    END as has_minimum_data_quality,
+
+    -- 10. SNOMED category code (useful for filtering)
+    pcat.category_coding_code as category_coding_code
 
 FROM fhir_prd_db.procedure p
 LEFT JOIN procedure_dates pd ON p.id = pd.procedure_id
@@ -3029,6 +3119,11 @@ LEFT JOIN combined_classification cc ON p.id = cc.procedure_id
 LEFT JOIN fhir_prd_db.procedure_category_coding pcat ON p.id = pcat.procedure_id
 LEFT JOIN fhir_prd_db.procedure_body_site pbs ON p.id = pbs.procedure_id
 LEFT JOIN fhir_prd_db.procedure_performer pp ON p.id = pp.procedure_id
+
+-- ENHANCEMENT: New JOINs for annotation columns (2025-10-29)
+LEFT JOIN epic_or_identifiers epi ON p.id = epi.procedure_id
+LEFT JOIN surgical_procedures_link spl ON p.id = spl.procedure_id
+
 ORDER BY p.subject_reference, pd.procedure_date;
 
 -- ================================================================================
