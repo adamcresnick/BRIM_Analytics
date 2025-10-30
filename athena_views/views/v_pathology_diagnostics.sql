@@ -361,8 +361,7 @@ pathology_document_references AS (
     FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.document_reference dref
         ON ts.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
-        -- Temporal window: ±90 days from surgery (wider for send-out analyses)
-        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)))) <= 90
+        -- NO temporal window - send-out analyses can occur months/years after surgery
 
     -- Join for document content/URL (REQUIRED for NLP processing)
     LEFT JOIN fhir_prd_db.document_reference_content drefc
