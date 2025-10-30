@@ -2566,8 +2566,27 @@ WHERE mr.status IN ('active', 'completed', 'stopped', 'on-hold')
 ;
 ;
 
+-- ============================================================================
+-- CODING SYSTEMS USED IN v_procedures_tumor
+-- ============================================================================
+-- Epic CHOP OIDs:
+--   urn:oid:1.2.840.114350.1.13.20.2.7.2.696580 = EAP .1 (Procedure Masterfile)
+--
+-- Standard OIDs:
+--   http://www.ama-assn.org/go/cpt = CPT codes (Current Procedural Terminology)
+--
+-- Reference: See v_oid_reference view for complete OID documentation
+-- ============================================================================
+
 CREATE OR REPLACE VIEW fhir_prd_db.v_procedures_tumor AS
 WITH
+-- ============================================================================
+-- OID Reference: Decode coding systems to human-readable labels
+-- ============================================================================
+oid_reference AS (
+    SELECT * FROM fhir_prd_db.v_oid_reference
+),
+
 cpt_classifications AS (
     SELECT
         pcc.procedure_id,
@@ -3018,6 +3037,11 @@ SELECT
     pc.code_coding_display as pcc_code_coding_display,
     pc.is_surgical_keyword,
 
+    -- OID Decoding: Human-readable coding system information
+    oid_pc.masterfile_code as pcc_coding_system_code,
+    oid_pc.description as pcc_coding_system_name,
+    oid_pc.oid_source as pcc_coding_system_source,
+
     cc.procedure_classification,
     cc.cpt_classification,
     cc.cpt_code,
@@ -3123,6 +3147,9 @@ LEFT JOIN fhir_prd_db.procedure_performer pp ON p.id = pp.procedure_id
 -- ENHANCEMENT: New JOINs for annotation columns (2025-10-29)
 LEFT JOIN epic_or_identifiers epi ON p.id = epi.procedure_id
 LEFT JOIN surgical_procedures_link spl ON p.id = spl.procedure_id
+
+-- OID Decoding: Join to OID reference for human-readable coding system labels
+LEFT JOIN oid_reference oid_pc ON pc.code_coding_system = oid_pc.oid_uri
 
 ORDER BY p.subject_reference, pd.procedure_date;
 
