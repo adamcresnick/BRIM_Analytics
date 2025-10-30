@@ -7160,6 +7160,7 @@ molecular_diagnostics AS (
         CAST(vmt.mtr_component_count AS VARCHAR) || ' components' as result_value,
 
         -- Test metadata
+        NULL as test_identifier,
         'DGD' as test_lab,
 
         -- Specimen information
@@ -7221,6 +7222,7 @@ surgical_pathology_observations AS (
         COALESCE(o.value_string, o.value_codeable_concept_text, oi.interpretation_text) as result_value,
 
         -- Test metadata
+        NULL as test_identifier,
         'Surgical Pathology Lab' as test_lab,
 
         -- Specimen information
@@ -7307,6 +7309,7 @@ surgical_pathology_narratives AS (
         END as result_value,
 
         -- Test metadata
+        NULL as test_identifier,
         'Pathology Report' as test_lab,
 
         -- Specimen information
@@ -7387,6 +7390,7 @@ pathology_document_references AS (
         END as result_value,
 
         -- Test metadata
+        NULL as test_identifier,
         'Document Repository' as test_lab,
 
         -- Specimen information
@@ -7468,6 +7472,7 @@ problem_list_diagnoses AS (
         END as result_value,
 
         -- Test metadata
+        NULL as test_identifier,
         'Problem List' as test_lab,
 
         -- No specimen for problem list diagnoses (patient-level, not specimen-level)
@@ -7583,6 +7588,7 @@ SELECT
     ud.specimen_collection_datetime,
 
     -- Test metadata
+    ud.test_identifier,
     ud.test_lab,
     ud.test_status,
     ud.test_orderer,
