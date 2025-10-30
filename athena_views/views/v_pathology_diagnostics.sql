@@ -298,11 +298,14 @@ surgical_pathology_narratives AS (
 ),
 
 -- ============================================================================
--- CTE 6: Pathology Document References (for NLP workflows)
+-- CTE 6: Pathology Document References (for NLP workflows, including send-outs)
+-- ============================================================================
+-- NOTE: Captures ALL document_reference resources linked to surgical encounters
+--       for NLP processing. Includes send-out pathology analyses, external reports, etc.
 -- ============================================================================
 pathology_document_references AS (
     SELECT
-        ss.patient_fhir_id,
+        ts.patient_fhir_id,
         'pathology_document' as diagnostic_source,
         dref.id as source_id,
         CAST(TRY(from_iso8601_timestamp(dref.date)) AS TIMESTAMP(3)) as diagnostic_datetime,
@@ -317,7 +320,7 @@ pathology_document_references AS (
         -- Component
         dref.type_text as component_name,
 
-        -- Document URL for NLP workflows
+        -- Document URL for NLP workflows (CRITICAL for send-out analyses)
         CASE
             WHEN drefc.content_attachment_url IS NOT NULL
                 THEN 'Document: ' || drefc.content_attachment_url ||
@@ -329,18 +332,18 @@ pathology_document_references AS (
         -- Test metadata
         'Document Repository' as test_lab,
 
-        -- Specimen information
+        -- Specimen information (try to link via surgical_specimens if available)
         ss.specimen_type as specimen_types,
         ss.specimen_site as specimen_sites,
         ss.collection_datetime as specimen_collection_datetime,
 
-        -- Procedure linkage
-        ss.procedure_fhir_id as linked_procedure_id,
-        NULL as linked_procedure_name,
-        ss.surgery_datetime as linked_procedure_datetime,
+        -- Procedure linkage (from tumor_surgeries)
+        ts.procedure_fhir_id as linked_procedure_id,
+        ts.surgery_name as linked_procedure_name,
+        ts.surgery_datetime as linked_procedure_datetime,
 
-        -- Encounter linkage (would require additional JOIN to document_reference_context_encounter)
-        NULL as encounter_id,
+        -- Encounter linkage (via document_reference_context_encounter)
+        drce.context_encounter_reference as encounter_id,
 
         -- Generic categorization
         CASE
@@ -355,26 +358,44 @@ pathology_document_references AS (
         NULL as test_orderer,
         CAST(NULL AS BIGINT) as component_count
 
-    FROM surgical_specimens ss
+    FROM tumor_surgeries ts
     INNER JOIN fhir_prd_db.document_reference dref
-        ON ss.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
-        AND ABS(DATE_DIFF('day', ss.surgery_date, TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)))) <= 60
+        ON ts.patient_fhir_id = REPLACE(dref.subject_reference, 'Patient/', '')
+        -- Temporal window: ±90 days from surgery (wider for send-out analyses)
+        AND ABS(DATE_DIFF('day', ts.surgery_date, TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)))) <= 90
 
-    -- Join for document content/URL
+    -- Join for document content/URL (REQUIRED for NLP processing)
     LEFT JOIN fhir_prd_db.document_reference_content drefc
         ON dref.id = drefc.document_reference_id
 
+    -- Join for encounter linkage
+    LEFT JOIN fhir_prd_db.document_reference_context_encounter drce
+        ON dref.id = drce.document_reference_id
+
+    -- LEFT JOIN to surgical_specimens (if available)
+    LEFT JOIN surgical_specimens ss
+        ON ts.patient_fhir_id = ss.patient_fhir_id
+        AND ABS(DATE_DIFF('day',
+            TRY(CAST(CAST(dref.date AS VARCHAR) AS DATE)),
+            ss.surgery_date
+        )) <= 7
+
     WHERE dref.subject_reference IS NOT NULL
       AND (dref.description IS NOT NULL OR drefc.content_attachment_url IS NOT NULL)
-
-      -- Filter to pathology-related documents
+      -- Capture ALL pathology/diagnostic documents (not just keyword-filtered)
+      -- Include send-out analyses which may not have "pathology" in description
       AND (
           LOWER(dref.description) LIKE '%pathology%'
           OR LOWER(dref.description) LIKE '%surgical%'
           OR LOWER(dref.description) LIKE '%biopsy%'
           OR LOWER(dref.description) LIKE '%specimen%'
+          OR LOWER(dref.description) LIKE '%diagnostic%'
+          OR LOWER(dref.description) LIKE '%genomic%'
+          OR LOWER(dref.description) LIKE '%molecular%'
           OR LOWER(dref.type_text) LIKE '%pathology%'
           OR LOWER(dref.type_text) LIKE '%surgical%'
+          OR LOWER(dref.type_text) LIKE '%diagnostic%'
+          OR drefc.content_attachment_url IS NOT NULL  -- Capture ALL documents with URLs
       )
 ),
 
