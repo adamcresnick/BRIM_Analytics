@@ -947,3 +947,131 @@ radiation_episodes_assessment/README.md             # Datetime handling
 **Last Updated**: 2025-10-30
 **Maintained By**: Claude Code Agents
 **Version**: 1.0 (Initial comprehensive handoff)
+
+---
+
+## 📍 Patient Clinical Journey Timeline Framework
+
+**Location**: `patient_clinical_journey_timeline/`
+**Status**: Phases 1-3 COMPLETE, Phase 4 READY TO IMPLEMENT
+**Next Session Start Here**: Read `patient_clinical_journey_timeline/NEW_SESSION_PROMPT.md`
+
+### Overview
+
+Comprehensive per-patient timeline framework combining:
+1. WHO 2021 CNS tumor molecular classifications (already done for 9 patients)
+2. Structured Athena data from 6 views (visits, procedures, chemo, radiation, imaging, pathology)
+3. Context-aware MedGemma binary extraction for missing data
+4. Protocol validation against WHO 2021 expected paradigms
+
+### What's Complete ✅
+
+**Phases 1-3 Working**:
+- ✅ 7-stage stepwise timeline construction
+- ✅ Tested on Pineoblastoma patient: 2,202 events, 153 extraction gaps identified
+- ✅ Protocol validation at each stage (chemotherapy regimen, radiation dose vs expected)
+- ✅ Gap identification with `medgemma_target` fields for binary extraction
+
+**Infrastructure**:
+- ✅ Agents copied from MVP: `medgemma_agent.py` (gemma2:27b), `binary_file_agent.py` (S3)
+- ✅ WHO 2021 classifications embedded (DO NOT re-extract)
+- ✅ 150+ pages of documentation
+
+### What's Next 🚀
+
+**Phase 4: MedGemma Binary Extraction** (2-3 hours to implement)
+
+Create `scripts/patient_timeline_abstraction_V2.py` that:
+1. Initializes MedGemmaAgent and BinaryFileAgent
+2. Generates context-aware prompts based on WHO 2021 diagnosis + timeline phase
+3. Fetches binary documents from S3
+4. Calls MedGemma for structured extraction
+5. Integrates extractions back into timeline events
+6. Outputs enriched JSON artifacts
+
+**Start New Session With**:
+```
+Read patient_clinical_journey_timeline/NEW_SESSION_PROMPT.md for complete context.
+
+Quick summary: Implement Phase 4 (MedGemma binary extraction) in patient_timeline_abstraction_V2.py.
+All infrastructure ready, agents copied, documentation complete. Just need to implement the extraction loop.
+```
+
+### Key Files
+
+**Documentation (READ THESE FIRST)**:
+- `NEW_SESSION_PROMPT.md` - ⭐ Complete prompt for new session
+- `SESSION_COMPLETE_PHASE4_READY.md` - Implementation roadmap
+- `PHASE4_READY_TO_IMPLEMENT.md` - Real MedGemma integration plan
+- `MEDGEMMA_ORCHESTRATION_ARCHITECTURE.md` - Two-agent architecture + 3 detailed prompt examples
+
+**Scripts**:
+- `scripts/patient_timeline_abstraction_V1.py` - Working (Phases 1-3)
+- `scripts/patient_timeline_abstraction_V2.py` - TO CREATE (add Phase 4)
+
+**Agents**:
+- `agents/medgemma_agent.py` - Medical LLM (gemma2:27b via Ollama)
+- `agents/binary_file_agent.py` - S3 streaming + PDF/HTML extraction
+
+**Data**:
+- `WHO_2021_INTEGRATED_DIAGNOSES_9_PATIENTS.md` - Existing molecular classifications
+- `config/patient_cohorts.json` - Patient cohort configuration
+
+### Critical Requirements
+
+**DO NOT**:
+- ❌ Re-extract WHO 2021 classifications (already done, embedded in script)
+- ❌ Create SQL view for Phase 4 (it's a per-patient Python workflow)
+- ❌ Use mock MedGemma (use real gemma2:27b via Ollama)
+
+**DO**:
+- ✅ Use existing agents from `agents/`
+- ✅ Generate context-aware prompts (examples in MEDGEMMA_ORCHESTRATION_ARCHITECTURE.md)
+- ✅ Test incrementally: 1 extraction → high-priority → all 153
+
+### Test Results (Pineoblastoma Patient)
+
+```
+PHASE 1: LOAD STRUCTURED DATA
+  ✅ pathology: 1309 records
+  ✅ procedures: 11 records
+  ✅ chemotherapy: 42 records
+  ✅ radiation: 2 records
+  ✅ imaging: 140 records
+  ✅ visits: 683 records
+
+PHASE 2: CONSTRUCT INITIAL TIMELINE
+  Stage 0: Molecular diagnosis
+    ✅ WHO 2021: Pineoblastoma, CNS WHO grade 4
+  Stage 1: Encounters/appointments
+    ✅ Added 683 encounters/appointments
+  Stage 2: Procedures (surgeries)
+    ✅ Added 11 surgical procedures
+  Stage 3: Chemotherapy episodes
+    ✅ Added 42 chemotherapy episodes
+    📋 Expected per WHO 2021: High-dose platinum-based
+  Stage 4: Radiation episodes
+    ✅ Added 2 radiation episodes
+    📋 Expected per WHO 2021: 54 Gy craniospinal + posterior fossa boost
+  Stage 5: Imaging studies
+    ✅ Added 140 imaging studies
+  Stage 6: Pathology events
+    ✅ Added 1309 pathology records
+
+  ✅ Timeline construction complete: 2202 total events
+
+PHASE 3: IDENTIFY GAPS
+  ✅ 153 extraction opportunities identified:
+     missing_eor: 11
+     missing_radiation_dose: 2
+     vague_imaging_conclusion: 140
+```
+
+### Prerequisites for Phase 4
+
+Before implementing in new session:
+- ✅ Agents infrastructure: COMPLETE
+- ✅ Documentation: 150+ pages
+- ⬜ Ollama running: Verify `ollama list` shows `gemma2:27b`
+- ⬜ AWS SSO: Login with `aws sso login --profile radiant-prod`
+
