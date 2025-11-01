@@ -906,48 +906,57 @@ class PatientTimelineAbstractor:
         candidates = []
 
         if gap_type == 'missing_eor':
-            # Priority 1: Operative records (if any missed)
-            for doc in inventory.get('operative_records', []):
+            # TEMPORAL + TYPE APPROACH: No keyword filtering for surgery gaps
+
+            # Priority 1: Operative records (ALL - temporal filtering will narrow)
+            operative_records = inventory.get('operative_records', [])
+            print(f"       🔍 Priority 1: Adding ALL {len(operative_records)} operative_records (no keyword filter)")
+            for doc in operative_records:
                 candidates.append({
                     'priority': 1,
                     'source_type': 'operative_record',
                     **doc
                 })
 
-            # Priority 2: Discharge summaries mentioning surgery
-            for doc in inventory.get('discharge_summaries', []):
-                desc = doc.get('dr_description', '').lower()
-                if any(kw in desc for kw in ['surgery', 'resection', 'craniotomy', 'biopsy']):
-                    candidates.append({
-                        'priority': 2,
-                        'source_type': 'discharge_summary',
-                        **doc
-                    })
+            # Priority 2: Discharge summaries (ALL - temporal filtering will narrow)
+            discharge_summaries = inventory.get('discharge_summaries', [])
+            print(f"       🔍 Priority 2: Adding ALL {len(discharge_summaries)} discharge_summaries (no keyword filter)")
+            for doc in discharge_summaries:
+                candidates.append({
+                    'priority': 2,
+                    'source_type': 'discharge_summary',
+                    **doc
+                })
 
-            # Priority 3: Post-op imaging reports
-            for doc in inventory.get('imaging_reports', []):
-                desc = doc.get('dr_description', '').lower()
-                if any(kw in desc for kw in ['post', 'resection', 'operative', 'residual']):
-                    candidates.append({
-                        'priority': 3,
-                        'source_type': 'postop_imaging',
-                        **doc
-                    })
+            # Priority 3: Progress notes (ALL - temporal filtering will narrow)
+            progress_notes = inventory.get('progress_notes', [])
+            print(f"       🔍 Priority 3: Adding ALL {len(progress_notes)} progress_notes (no keyword filter)")
+            for doc in progress_notes:
+                candidates.append({
+                    'priority': 3,
+                    'source_type': 'progress_note',
+                    **doc
+                })
 
-            # Priority 4: Progress notes mentioning surgery
-            for doc in inventory.get('progress_notes', []):
-                desc = doc.get('dr_description', '').lower()
-                if any(kw in desc for kw in ['surgery', 'resection', 'post-op']):
-                    candidates.append({
-                        'priority': 4,
-                        'source_type': 'progress_note',
-                        **doc
-                    })
+            # Priority 4: Post-op imaging reports (ALL - temporal filtering will narrow)
+            imaging_reports = inventory.get('imaging_reports', [])
+            print(f"       🔍 Priority 4: Adding ALL {len(imaging_reports)} imaging_reports (no keyword filter)")
+            for doc in imaging_reports:
+                candidates.append({
+                    'priority': 4,
+                    'source_type': 'postop_imaging',
+                    **doc
+                })
+
+            print(f"       📊 Total {len(candidates)} candidates before temporal filtering")
 
         elif gap_type == 'missing_radiation_details':
-            # Priority 1: Radiation-specific documents
+            # TEMPORAL + TYPE APPROACH: No keyword filtering - rely on document type + date proximity
+            # Rationale: dr_description often NULL/empty; progress notes near radiation WILL mention it
+
+            # Priority 1: Radiation-specific documents (ALL within temporal window)
             rad_docs = inventory.get('radiation_documents', [])
-            print(f"       🔍 Checking {len(rad_docs)} radiation_documents for alternatives")
+            print(f"       🔍 Priority 1: Adding ALL {len(rad_docs)} radiation_documents (no keyword filter)")
             for doc in rad_docs:
                 candidates.append({
                     'priority': 1,
@@ -955,50 +964,35 @@ class PatientTimelineAbstractor:
                     **doc
                 })
 
-            # Priority 2: Treatment plans
-            treatment_plans = inventory.get('treatment_plans', [])
-            print(f"       🔍 Checking {len(treatment_plans)} treatment_plans for radiation mentions")
-            count_with_radiation = 0
-            for doc in treatment_plans:
-                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
-                if 'radiation' in desc:
-                    count_with_radiation += 1
-                    candidates.append({
-                        'priority': 2,
-                        'source_type': 'treatment_plan',
-                        **doc
-                    })
-            print(f"          → Found {count_with_radiation} treatment plans mentioning radiation")
-
-            # Priority 3: Progress notes mentioning radiation
+            # Priority 2: Progress notes (ALL - temporal filtering will narrow down)
             progress_notes = inventory.get('progress_notes', [])
-            print(f"       🔍 Checking {len(progress_notes)} progress_notes for radiation keywords")
-            count_with_keywords = 0
+            print(f"       🔍 Priority 2: Adding ALL {len(progress_notes)} progress_notes (no keyword filter)")
             for doc in progress_notes:
-                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
-                if any(kw in desc for kw in ['radiation', 'proton', 'dose', 'treatment']):
-                    count_with_keywords += 1
-                    candidates.append({
-                        'priority': 3,
-                        'source_type': 'progress_note',
-                        **doc
-                    })
-            print(f"          → Found {count_with_keywords} progress notes with keywords")
+                candidates.append({
+                    'priority': 2,
+                    'source_type': 'progress_note',
+                    **doc
+                })
 
-            # Priority 4: Discharge summaries
+            # Priority 3: Discharge summaries (ALL - temporal filtering will narrow down)
             discharge_summaries = inventory.get('discharge_summaries', [])
-            print(f"       🔍 Checking {len(discharge_summaries)} discharge_summaries for radiation mentions")
-            count_with_radiation_ds = 0
+            print(f"       🔍 Priority 3: Adding ALL {len(discharge_summaries)} discharge_summaries (no keyword filter)")
             for doc in discharge_summaries:
-                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
-                if 'radiation' in desc:
-                    count_with_radiation_ds += 1
-                    candidates.append({
-                        'priority': 4,
-                        'source_type': 'discharge_summary',
-                        **doc
-                    })
-            print(f"          → Found {count_with_radiation_ds} discharge summaries mentioning radiation")
+                candidates.append({
+                    'priority': 3,
+                    'source_type': 'discharge_summary',
+                    **doc
+                })
+
+            # Priority 4: Treatment plans (ALL - temporal filtering will narrow down)
+            treatment_plans = inventory.get('treatment_plans', [])
+            print(f"       🔍 Priority 4: Adding ALL {len(treatment_plans)} treatment_plans (no keyword filter)")
+            for doc in treatment_plans:
+                candidates.append({
+                    'priority': 4,
+                    'source_type': 'treatment_plan',
+                    **doc
+                })
 
             print(f"       📊 Total {len(candidates)} candidates before temporal filtering")
 
