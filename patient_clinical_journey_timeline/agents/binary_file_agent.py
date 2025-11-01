@@ -372,7 +372,8 @@ class BinaryFileAgent:
 
         if metadata.content_type == "application/pdf":
             extracted_text, error_msg = self.extract_text_from_pdf(binary_content)
-        elif metadata.content_type in ["text/html", "text/plain", "text/rtf"]:
+        elif metadata.content_type in ["text/html", "text/plain", "text/rtf", "text/xml", "application/xml"]:
+            # Use HTML parser for all text-based formats (works for XML too)
             extracted_text, error_msg = self.extract_text_from_html(binary_content)
         else:
             error_msg = f"Unsupported content type: {metadata.content_type}"
