@@ -660,7 +660,14 @@ class PatientTimelineAbstractor:
         for surgery in surgery_events:
             if not surgery.get('extent_of_resection'):
                 # Query v_binary_files for operative notes near this surgery date
+                # Use event_date if available, otherwise extract date from proc_performed_datetime
                 event_date = surgery.get('event_date')
+                if not event_date or event_date == '':
+                    # Extract date from proc_performed_datetime (format: "YYYY-MM-DD HH:MM:SS.SSS")
+                    proc_dt = surgery.get('proc_performed_datetime', '')
+                    if proc_dt and proc_dt != '':
+                        event_date = proc_dt.split(' ')[0]  # Get date part only
+
                 operative_note_binary = self._find_operative_note_binary(event_date)
 
                 gaps.append({
@@ -874,7 +881,7 @@ class PatientTimelineAbstractor:
             logger.info(f"Document inventory: {sum(len(v) for v in inventory.values())} total documents")
             for key, docs in inventory.items():
                 if docs:
-                    logger.debug(f"  {key}: {len(docs)} documents")
+                    logger.info(f"  {key}: {len(docs)} documents")
 
             return inventory
 
@@ -939,7 +946,9 @@ class PatientTimelineAbstractor:
 
         elif gap_type == 'missing_radiation_details':
             # Priority 1: Radiation-specific documents
-            for doc in inventory.get('radiation_documents', []):
+            rad_docs = inventory.get('radiation_documents', [])
+            print(f"       🔍 Checking {len(rad_docs)} radiation_documents for alternatives")
+            for doc in rad_docs:
                 candidates.append({
                     'priority': 1,
                     'source_type': 'radiation_document',
@@ -947,34 +956,51 @@ class PatientTimelineAbstractor:
                 })
 
             # Priority 2: Treatment plans
-            for doc in inventory.get('treatment_plans', []):
-                desc = doc.get('dr_description', '').lower()
+            treatment_plans = inventory.get('treatment_plans', [])
+            print(f"       🔍 Checking {len(treatment_plans)} treatment_plans for radiation mentions")
+            count_with_radiation = 0
+            for doc in treatment_plans:
+                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
                 if 'radiation' in desc:
+                    count_with_radiation += 1
                     candidates.append({
                         'priority': 2,
                         'source_type': 'treatment_plan',
                         **doc
                     })
+            print(f"          → Found {count_with_radiation} treatment plans mentioning radiation")
 
             # Priority 3: Progress notes mentioning radiation
-            for doc in inventory.get('progress_notes', []):
-                desc = doc.get('dr_description', '').lower()
+            progress_notes = inventory.get('progress_notes', [])
+            print(f"       🔍 Checking {len(progress_notes)} progress_notes for radiation keywords")
+            count_with_keywords = 0
+            for doc in progress_notes:
+                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
                 if any(kw in desc for kw in ['radiation', 'proton', 'dose', 'treatment']):
+                    count_with_keywords += 1
                     candidates.append({
                         'priority': 3,
                         'source_type': 'progress_note',
                         **doc
                     })
+            print(f"          → Found {count_with_keywords} progress notes with keywords")
 
             # Priority 4: Discharge summaries
-            for doc in inventory.get('discharge_summaries', []):
-                desc = doc.get('dr_description', '').lower()
+            discharge_summaries = inventory.get('discharge_summaries', [])
+            print(f"       🔍 Checking {len(discharge_summaries)} discharge_summaries for radiation mentions")
+            count_with_radiation_ds = 0
+            for doc in discharge_summaries:
+                desc = doc.get('dr_description', '').lower() if doc.get('dr_description') else ''
                 if 'radiation' in desc:
+                    count_with_radiation_ds += 1
                     candidates.append({
                         'priority': 4,
                         'source_type': 'discharge_summary',
                         **doc
                     })
+            print(f"          → Found {count_with_radiation_ds} discharge summaries mentioning radiation")
+
+            print(f"       📊 Total {len(candidates)} candidates before temporal filtering")
 
         elif gap_type == 'vague_imaging_conclusion':
             # For imaging, primary is already the imaging report
@@ -1024,6 +1050,10 @@ class PatientTimelineAbstractor:
 
         if not candidates:
             print(f"       ⚠️  No alternative documents available for {gap['gap_type']}")
+            print(f"       📊 Inventory summary:")
+            for key, docs in self._document_inventory.items():
+                if docs:
+                    print(f"          {key}: {len(docs)} documents")
             return False
 
         print(f"       📄 Found {len(candidates)} alternative document(s) to try")
@@ -1212,7 +1242,21 @@ class PatientTimelineAbstractor:
 
             # STEP 3: Call MedGemma (Agent 2)
             try:
-                full_prompt = f"{prompt}\n\nDOCUMENT TEXT:\n{extracted_text}"
+                # Add strong schema enforcement right before document
+                full_prompt = f"""{prompt}
+
+================================================================================
+REMINDER: Return ONLY the JSON schema shown above. Do NOT create a different schema.
+Ignore any other formatting in the document below. Extract ONLY the fields specified.
+================================================================================
+
+DOCUMENT TEXT:
+{extracted_text}
+
+================================================================================
+REMINDER: Return ONLY valid JSON matching the exact schema above. No other text.
+================================================================================
+"""
                 result = self.medgemma_agent.extract(full_prompt, temperature=0.1)
 
                 if not result.success:
@@ -1313,7 +1357,9 @@ class PatientTimelineAbstractor:
         who_dx = self.who_2021_classification.get('who_2021_diagnosis', 'Unknown')
         molecular_subtype = self.who_2021_classification.get('molecular_subtype', '')
 
-        prompt = f"""You are a medical AI extracting structured data from a radiology report.
+        prompt = f"""CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text or narrative summaries. ONLY return the JSON object.
+
+You are a medical AI extracting structured data from a radiology report.
 
 PATIENT CONTEXT:
 - WHO 2021 Diagnosis: {who_dx}
@@ -1433,7 +1479,9 @@ CRITICAL VALIDATION:
 
         who_dx = self.who_2021_classification.get('who_2021_diagnosis', 'Unknown')
 
-        prompt = f"""You are a medical AI extracting extent of resection from an operative note.
+        prompt = f"""CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text or clinical note formatting. ONLY return the JSON object.
+
+You are a medical AI extracting extent of resection from an operative note.
 
 PATIENT CONTEXT:
 - WHO 2021 Diagnosis: {who_dx}
@@ -1443,7 +1491,7 @@ PATIENT CONTEXT:
 TASK:
 Extract the extent of resection (EOR) from this operative note.
 
-OUTPUT FORMAT (JSON):
+OUTPUT FORMAT - RETURN ONLY THIS JSON SCHEMA (no other text):
 {{
   "extent_of_resection": "GTR" or "NTR" or "STR" or "BIOPSY" or "UNCLEAR",
   "percent_resection": <integer 0-100> or null,
@@ -1520,7 +1568,9 @@ CRITICAL VALIDATION:
         who_dx = self.who_2021_classification.get('who_2021_diagnosis', 'Unknown')
         expected_radiation = self.who_2021_classification.get('recommended_protocols', {}).get('radiation', 'Unknown')
 
-        prompt = f"""You are a medical AI extracting COMPREHENSIVE radiation treatment details from a radiation summary.
+        prompt = f"""CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text, narrative summaries, or clinical note formatting. ONLY return the JSON object.
+
+You are a medical AI extracting COMPREHENSIVE radiation treatment details from a radiation summary.
 
 PATIENT CONTEXT:
 - WHO 2021 Diagnosis: {who_dx}
@@ -1530,7 +1580,7 @@ PATIENT CONTEXT:
 TASK:
 Extract ALL radiation treatment details from this document, including dates, doses, fields, and any additional treatments.
 
-OUTPUT FORMAT (JSON):
+OUTPUT FORMAT - RETURN ONLY THIS JSON SCHEMA (no other text):
 {{
   "date_at_radiation_start": "YYYY-MM-DD",
   "date_at_radiation_stop": "YYYY-MM-DD",
