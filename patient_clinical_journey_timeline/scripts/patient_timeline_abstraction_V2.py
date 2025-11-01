@@ -1063,7 +1063,8 @@ class PatientTimelineAbstractor:
                 print(f"          ⚠️  No binary_id for this document")
                 continue
 
-            alt_text = self._fetch_binary_document(f"Binary/{binary_id}")
+            # binary_id from v_binary_files already includes "Binary/" prefix
+            alt_text = self._fetch_binary_document(binary_id)
             if not alt_text:
                 print(f"          ⚠️  Could not fetch document")
                 continue
