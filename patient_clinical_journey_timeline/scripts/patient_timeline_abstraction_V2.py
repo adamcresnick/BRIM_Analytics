@@ -726,6 +726,33 @@ class PatientTimelineAbstractor:
                     'medgemma_target': f'DiagnosticReport/{diagnostic_report_id}' if diagnostic_report_id else 'MISSING_REFERENCE'
                 })
 
+        # Gap type 4: Chemotherapy without protocol details
+        chemotherapy_events = [e for e in self.timeline_events if e['event_type'] == 'chemotherapy']
+        for chemo in chemotherapy_events:
+            # Check if we're missing ANY critical chemotherapy fields
+            missing_fields = []
+            if not chemo.get('protocol_name'):
+                missing_fields.append('protocol_name')
+            if not chemo.get('on_protocol_status'):
+                missing_fields.append('on_protocol_status')
+            if not chemo.get('agent_names'):
+                missing_fields.append('agent_names')
+
+            # Identify gaps if critical fields missing
+            if missing_fields:
+                event_date = chemo.get('event_date') or chemo.get('med_admin_effective_datetime')
+                chemo_doc = self._find_chemotherapy_document(event_date)
+
+                gaps.append({
+                    'gap_type': 'missing_chemotherapy_details',
+                    'priority': 'HIGH',
+                    'event_date': event_date,
+                    'missing_fields': missing_fields,
+                    'recommended_action': 'Extract protocol name, enrollment status, agents, and therapy changes',
+                    'clinical_significance': 'Protocol tracking and therapy modification reasons required for treatment trajectory analysis',
+                    'medgemma_target': chemo_doc if chemo_doc else None
+                })
+
         self.extraction_gaps = gaps
 
         print(f"  ✅ Identified {len(gaps)} extraction opportunities")
@@ -820,6 +847,57 @@ class PatientTimelineAbstractor:
 
         except Exception as e:
             logger.error(f"Error querying radiation documents for {radiation_date}: {e}")
+            return None
+
+    def _find_chemotherapy_document(self, chemo_date: str) -> Optional[str]:
+        """
+        Query v_binary_files for chemotherapy-related documents
+
+        Look for treatment summaries, infusion records, or progress notes near chemotherapy date
+
+        Args:
+            chemo_date: Date of chemotherapy administration (YYYY-MM-DD)
+
+        Returns:
+            DocumentReference ID if found, None otherwise
+        """
+        if not chemo_date:
+            return None
+
+        try:
+            # Query v_binary_files for chemotherapy-related documents
+            # Look for keywords in dr_type_text or dr_description
+            query = f"""
+            SELECT dr_id, dr_type_text, dr_date, dr_description
+            FROM fhir_prd_db.v_binary_files
+            WHERE patient_fhir_id = '{self.athena_patient_id}'
+              AND ABS(DATE_DIFF('day', CAST(dr_date AS DATE), CAST(TIMESTAMP '{chemo_date}' AS DATE))) <= 14
+              AND (
+                  LOWER(dr_type_text) LIKE '%chemotherapy%'
+                  OR LOWER(dr_type_text) LIKE '%infusion%'
+                  OR LOWER(dr_type_text) LIKE '%treatment%'
+                  OR LOWER(dr_type_text) LIKE '%oncology%'
+                  OR LOWER(dr_type_text) LIKE '%progress%'
+                  OR LOWER(dr_description) LIKE '%protocol%'
+                  OR LOWER(dr_description) LIKE '%chemotherapy%'
+                  OR LOWER(dr_description) LIKE '%agent%'
+              )
+            ORDER BY ABS(DATE_DIFF('day', CAST(dr_date AS DATE), CAST(TIMESTAMP '{chemo_date}' AS DATE)))
+            LIMIT 1
+            """
+
+            results = query_athena(query, f"Finding chemotherapy document for {chemo_date}", suppress_output=True)
+
+            if results:
+                doc_id = results[0].get('dr_id')
+                logger.info(f"Found chemotherapy document {doc_id} for chemo on {chemo_date}")
+                return f"DocumentReference/{doc_id}"
+            else:
+                logger.debug(f"No chemotherapy document found for {chemo_date}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error querying chemotherapy documents for {chemo_date}: {e}")
             return None
 
     def _build_patient_document_inventory(self) -> Dict:
@@ -1744,9 +1822,31 @@ OUTPUT FORMAT (JSON):
                 logger.error(f"Error querying v_binary_files for {fhir_target}: {e}")
                 return None
         elif resource_type == 'Binary':
-            # For direct Binary references, use as-is
+            # For direct Binary references, query v_binary_files to get actual content_type
+            # (Alternative documents from escalation come as "Binary/xyz" but we still need content_type)
             binary_id = fhir_target
-            content_type = "application/pdf"
+            try:
+                query = f"""
+                SELECT content_type
+                FROM fhir_prd_db.v_binary_files
+                WHERE patient_fhir_id = '{self.athena_patient_id}'
+                  AND binary_id = '{binary_id}'
+                LIMIT 1
+                """
+
+                results = query_athena(query, f"Finding content_type for {binary_id}", suppress_output=True)
+
+                if results and results[0].get('content_type'):
+                    content_type = results[0]['content_type']
+                    logger.info(f"Found content_type {content_type} for {binary_id}")
+                else:
+                    # Fallback to application/pdf if not found
+                    content_type = "application/pdf"
+                    logger.warning(f"No content_type found for {binary_id} in v_binary_files, defaulting to application/pdf")
+
+            except Exception as e:
+                logger.error(f"Error querying content_type for {binary_id}: {e}")
+                content_type = "application/pdf"  # Fallback
         else:
             logger.warning(f"Unknown resource type: {resource_type}")
             return None
@@ -1793,9 +1893,25 @@ OUTPUT FORMAT (JSON):
                 'min_keywords': 2
             },
             'missing_radiation_details': {
-                'required_keywords': ['radiation', 'dose', 'gy', 'cgy', 'treatment', 'field'],
+                'required_keywords': [
+                    # Core radiation terms
+                    'radiation', 'radiotherapy', 'radiosurgery', 'xrt', 'rt',
+                    # Dose terms
+                    'dose', 'gy', 'cgy', 'gray', 'dosage', 'fraction', 'fractions', 'fractionation',
+                    # Treatment types
+                    'imrt', 'sbrt', 'srs', 'cyberknife', 'gamma knife', 'proton',
+                    # Anatomical patterns
+                    'focal', 'craniospinal', 'csi', 'whole brain', 'wbrt', 'ventricular',
+                    'spine', 'boost', 'local', 'field',
+                    # Treatment planning
+                    'treatment', 'therapy', 'plan', 'planning', 'simulation', 'sim',
+                    # Delivery terms
+                    'delivery', 'beam', 'beams', 'port', 'fields',
+                    # Common abbreviations
+                    'tx', 'rx'
+                ],
                 'forbidden_keywords': [],
-                'min_keywords': 3
+                'min_keywords': 2  # Lowered from 3 to 2 given expanded list
             },
             'vague_imaging_conclusion': {
                 'required_keywords': ['imaging', 'mri', 'ct', 'scan', 'brain', 'tumor', 'mass'],
@@ -1837,6 +1953,7 @@ OUTPUT FORMAT (JSON):
             'missing_eor': ['extent_of_resection', 'surgeon_assessment'],
             'missing_radiation_details': [
                 'date_at_radiation_start',
+                'date_at_radiation_stop',  # Required for tracking re-irradiation episodes
                 'total_dose_cgy',
                 'radiation_type'
             ],
@@ -1871,7 +1988,7 @@ OUTPUT FORMAT (JSON):
 
         # Field-specific guidance for re-extraction
         field_guidance = {
-            'extent_of_resection': 'Look for phrases like "gross total resection", "subtotal resection", "biopsy only" in operative note',
+            'extent_of_resection': 'Look for phrases like "gross total resection", "subtotal resection", "biopsy only" in operative note AND post-operative imaging (MRI within 72 hours)',
             'surgeon_assessment': 'Extract verbatim text from surgeon describing the resection outcome (usually in procedure description or impression)',
             'date_at_radiation_start': 'Find the first date radiation was delivered (format: YYYY-MM-DD). May be in "Treatment Start" or "Course Start" section',
             'date_at_radiation_stop': 'Find the last date radiation was delivered (format: YYYY-MM-DD). May be calculated from start date + duration',
