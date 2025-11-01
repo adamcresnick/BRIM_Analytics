@@ -1086,6 +1086,62 @@ class PatientTimelineAbstractor:
                         **doc
                     })
 
+        elif gap_type == 'missing_chemotherapy_details':
+            # TEMPORAL + TYPE APPROACH: Document type prioritization for chemotherapy protocol info
+            # Rationale: Protocol enrollment and agent details most complete in treatment summaries
+
+            # Priority 1: Medication administration notes (direct chemotherapy documentation)
+            medication_notes = inventory.get('medication_notes', [])
+            print(f"       🔍 Priority 1: Adding ALL {len(medication_notes)} medication_notes (no keyword filter)")
+            for doc in medication_notes:
+                candidates.append({
+                    'priority': 1,
+                    'source_type': 'medication_note',
+                    **doc
+                })
+
+            # Priority 2: Oncology consultation notes (protocol discussions)
+            consult_notes = inventory.get('consult_notes', [])
+            print(f"       🔍 Priority 2: Adding ALL {len(consult_notes)} consult_notes (no keyword filter)")
+            for doc in consult_notes:
+                candidates.append({
+                    'priority': 2,
+                    'source_type': 'consult_note',
+                    **doc
+                })
+
+            # Priority 3: Progress notes (treatment discussions, modifications)
+            progress_notes = inventory.get('progress_notes', [])
+            print(f"       🔍 Priority 3: Adding ALL {len(progress_notes)} progress_notes (no keyword filter)")
+            for doc in progress_notes:
+                candidates.append({
+                    'priority': 3,
+                    'source_type': 'progress_note',
+                    **doc
+                })
+
+            # Priority 4: Discharge summaries (comprehensive treatment history)
+            discharge_summaries = inventory.get('discharge_summaries', [])
+            print(f"       🔍 Priority 4: Adding ALL {len(discharge_summaries)} discharge_summaries (no keyword filter)")
+            for doc in discharge_summaries:
+                candidates.append({
+                    'priority': 4,
+                    'source_type': 'discharge_summary',
+                    **doc
+                })
+
+            # Priority 5: Treatment/care plans (protocol enrollment forms)
+            treatment_plans = inventory.get('treatment_plans', [])
+            print(f"       🔍 Priority 5: Adding ALL {len(treatment_plans)} treatment_plans (no keyword filter)")
+            for doc in treatment_plans:
+                candidates.append({
+                    'priority': 5,
+                    'source_type': 'treatment_plan',
+                    **doc
+                })
+
+            print(f"       📊 Total {len(candidates)} candidates before temporal filtering")
+
         # Calculate temporal distance from event
         if event_date:
             from dateutil.parser import parse
@@ -1420,6 +1476,8 @@ REMINDER: Return ONLY valid JSON matching the exact schema above. No other text.
             return self._generate_operative_note_prompt(gap)
         elif gap_type in ['missing_radiation_dose', 'missing_radiation_details']:
             return self._generate_radiation_summary_prompt(gap)
+        elif gap_type == 'missing_chemotherapy_details':
+            return self._generate_chemotherapy_prompt(gap)
         else:
             # Default generic prompt
             return self._generate_generic_prompt(gap)
@@ -1754,6 +1812,31 @@ CRITICAL VALIDATION:
 
         return prompt
 
+    def _generate_chemotherapy_prompt(self, gap: Dict) -> str:
+        """Generate chemotherapy extraction prompt"""
+
+        prompt = f"""Extract chemotherapy protocol and treatment information from this clinical document.
+
+OUTPUT FORMAT - RETURN ONLY THIS JSON:
+{{
+  "protocol_name": "e.g., COG ACNS0126, SJMB12, or null",
+  "on_protocol_status": "enrolled, treated_as_per_protocol, treated_like_protocol, or off_protocol",
+  "agent_names": ["Drug1", "Drug2"] or [],
+  "start_date": "YYYY-MM-DD or null",
+  "end_date": "YYYY-MM-DD or null",
+  "change_in_therapy_reason": "progression, toxicity, patient_preference, or null",
+  "extraction_confidence": "HIGH, MEDIUM, or LOW"
+}}
+
+INSTRUCTIONS:
+- protocol_name: Look for "per protocol", "COG", "ACNS", "SJMB", study numbers
+- on_protocol_status: Distinguish enrolled vs. treated "as per" or "like" protocol
+- agent_names: List ALL chemotherapy drugs mentioned
+- change_in_therapy_reason: Extract if therapy was modified and why
+- Set confidence LOW if information is incomplete
+"""
+        return prompt
+
     def _generate_generic_prompt(self, gap: Dict) -> str:
         """Generate generic extraction prompt"""
 
@@ -1917,6 +2000,20 @@ OUTPUT FORMAT (JSON):
                 'required_keywords': ['imaging', 'mri', 'ct', 'scan', 'brain', 'tumor', 'mass'],
                 'forbidden_keywords': [],
                 'min_keywords': 2
+            },
+            'missing_chemotherapy_details': {
+                'required_keywords': [
+                    # Protocol terms
+                    'protocol', 'trial', 'study', 'enrolled', 'enrollment', 'consent', 'cog', 'acns', 'sjmb', 'pog',
+                    # Chemotherapy terms
+                    'chemotherapy', 'chemo', 'agent', 'drug', 'cycle', 'course', 'regimen', 'infusion',
+                    # Common agent names
+                    'temozolomide', 'vincristine', 'carboplatin', 'cisplatin', 'etoposide', 'cyclophosphamide', 'lomustine',
+                    # Change indicators
+                    'changed', 'modified', 'discontinued', 'stopped', 'held', 'dose reduction', 'escalation', 'toxicity', 'progression'
+                ],
+                'forbidden_keywords': [],
+                'min_keywords': 2
             }
         }
 
@@ -1957,7 +2054,14 @@ OUTPUT FORMAT (JSON):
                 'total_dose_cgy',
                 'radiation_type'
             ],
-            'vague_imaging_conclusion': ['lesions', 'rano_assessment']
+            'vague_imaging_conclusion': ['lesions', 'rano_assessment'],
+            'missing_chemotherapy_details': [
+                'protocol_name',           # e.g., "COG ACNS0126", "SJMB12"
+                'on_protocol_status',      # "enrolled", "treated_as_per_protocol", etc.
+                'agent_names'              # List of drug names
+                # start_date and end_date optional - may come from structured data
+                # change_in_therapy_reason optional - null if no change
+            ]
         }
 
         required = required_fields.get(gap_type, [])
@@ -1995,7 +2099,13 @@ OUTPUT FORMAT (JSON):
             'total_dose_cgy': 'Find total cumulative dose in cGy or Gy (convert: 1 Gy = 100 cGy). Look for phrases like "total dose", "cumulative dose"',
             'radiation_type': 'Determine if focal (tumor only), craniospinal (brain+spine), whole_ventricular, or focal_with_boost',
             'lesions': 'Extract array of tumor lesions with measurements. Use [] if no tumor present',
-            'rano_assessment': 'Assess response using RANO criteria based on size change and new lesions'
+            'rano_assessment': 'Assess response using RANO criteria based on size change and new lesions',
+            'protocol_name': 'Look for protocol name or study number (e.g., "COG ACNS0126", "SJMB12", "per protocol"). Check headers, treatment sections, enrollment forms',
+            'on_protocol_status': 'Determine if patient is "enrolled" (formally consented to study), "treated_as_per_protocol" (following study treatment plan), "treated_like_protocol" (similar but not enrolled), or "off_protocol"',
+            'agent_names': 'Extract ALL chemotherapy drug names mentioned (e.g., Temozolomide, Vincristine, Carboplatin). Return as array. Look in medication lists, treatment plans, infusion records',
+            'start_date': 'Find first date of chemotherapy administration for THIS treatment episode (format: YYYY-MM-DD)',
+            'end_date': 'Find last date of chemotherapy for THIS treatment episode (format: YYYY-MM-DD). May be listed as "completion date" or calculated from cycles',
+            'change_in_therapy_reason': 'If therapy was modified, find reason: "progression" (disease not responding), "toxicity" (side effects), "patient_preference" (family request), or null if no change'
         }
 
         # Build specific instructions for missing fields
