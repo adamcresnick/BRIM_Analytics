@@ -64,8 +64,14 @@ except ImportError as e:
     logger.warning(f"Could not import agents: {e}")
     AGENTS_AVAILABLE = False
 
-# WHO 2021 MOLECULAR CLASSIFICATIONS (from earlier work this evening)
+# WHO 2021 CLASSIFICATION CACHE PATH
+# Cache file stores all WHO 2021 classifications to avoid expensive re-computation
+WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
+
+# WHO 2021 MOLECULAR CLASSIFICATIONS (DEPRECATED - migrated to cache file)
 # Source: WHO_2021_INTEGRATED_DIAGNOSES_9_PATIENTS.md
+# NOTE: This hardcoded dictionary is kept for backward compatibility only.
+# New classifications are loaded from and saved to who_2021_classification_cache.json
 WHO_2021_CLASSIFICATIONS = {
     'eDe7IanglsmBppe3htvO-QdYT26-v54aUqFAeTPQSJ6w3': {
         'who_2021_diagnosis': 'Diffuse midline glioma, H3 K27-altered, CNS WHO grade 4',
@@ -288,7 +294,7 @@ class PatientTimelineAbstractor:
     8. Generates final JSON artifact
     """
 
-    def __init__(self, patient_id: str, output_dir: Path, max_extractions: Optional[int] = None):
+    def __init__(self, patient_id: str, output_dir: Path, max_extractions: Optional[int] = None, force_reclassify: bool = False):
         self.patient_id = patient_id
         self.athena_patient_id = patient_id.replace('Patient/', '')
         self.output_dir = output_dir
@@ -296,15 +302,17 @@ class PatientTimelineAbstractor:
 
         # Max extractions limit for testing
         self.max_extractions = max_extractions
+        self.force_reclassify = force_reclassify
 
-        # Load WHO 2021 classification for this patient
-        self.who_2021_classification = WHO_2021_CLASSIFICATIONS.get(self.athena_patient_id, {})
+        # Load WHO 2021 classification for this patient (from cache)
+        self.who_2021_classification = self._load_who_classification()
 
         # Data structures
         self.timeline_events = []
         self.extraction_gaps = []
         self.binary_extractions = []  # MedGemma results
         self.protocol_validations = []
+        self.completeness_assessment = {}  # Phase 4.5 assessment
 
         # Initialize agents for Phase 4
         self.medgemma_agent = None
@@ -325,6 +333,373 @@ class PatientTimelineAbstractor:
         logger.info(f"Initialized abstractor for {patient_id}")
         if self.who_2021_classification.get('who_2021_diagnosis'):
             logger.info(f"  WHO 2021: {self.who_2021_classification['who_2021_diagnosis']}")
+
+    def _load_who_classification(self) -> Dict[str, Any]:
+        """
+        Load WHO 2021 classification from cache, or generate if not cached.
+
+        Returns:
+            Dict with WHO 2021 classification fields
+        """
+        # Check if cache file exists
+        if not WHO_2021_CACHE_PATH.exists():
+            logger.warning(f"WHO classification cache not found at {WHO_2021_CACHE_PATH}")
+            logger.info("Creating new cache file from hardcoded dictionary")
+            self._initialize_cache_from_hardcoded()
+
+        # Load cache
+        try:
+            with open(WHO_2021_CACHE_PATH, 'r') as f:
+                cache_data = json.load(f)
+
+            classifications = cache_data.get('classifications', {})
+
+            # Check if patient has cached classification
+            if self.athena_patient_id in classifications and not self.force_reclassify:
+                logger.info(f"✅ Loaded WHO classification from cache for {self.athena_patient_id}")
+                cached = classifications[self.athena_patient_id]
+                logger.info(f"   Diagnosis: {cached.get('who_2021_diagnosis', 'Unknown')}")
+                logger.info(f"   Classification date: {cached.get('classification_date', 'Unknown')}")
+                logger.info(f"   Method: {cached.get('classification_method', 'Unknown')}")
+                return cached
+
+            # Need to generate classification
+            if self.force_reclassify:
+                logger.info(f"🔄 --force-reclassify flag set, regenerating WHO classification for {self.athena_patient_id}")
+            else:
+                logger.info(f"⚠️  No cached WHO classification found for {self.athena_patient_id}")
+                logger.info("   Will attempt to generate classification from pathology data")
+
+            # Generate new classification
+            new_classification = self._generate_who_classification()
+
+            # Save to cache
+            self._save_who_classification(new_classification)
+
+            return new_classification
+
+        except Exception as e:
+            logger.error(f"Error loading WHO classification cache: {e}")
+            # Fallback to hardcoded dictionary
+            fallback = WHO_2021_CLASSIFICATIONS.get(self.athena_patient_id, {})
+            if fallback:
+                logger.warning(f"Using fallback hardcoded classification")
+            return fallback
+
+    def _initialize_cache_from_hardcoded(self):
+        """Initialize cache file from hardcoded WHO_2021_CLASSIFICATIONS dictionary"""
+        cache_data = {
+            "_metadata": {
+                "description": "WHO 2021 CNS Tumor Classification Cache for RADIANT PCA",
+                "schema_version": "1.0",
+                "last_updated": datetime.now().strftime('%Y-%m-%d'),
+                "source": "Initialized from hardcoded WHO_2021_CLASSIFICATIONS dictionary",
+                "workflow_prompt": "WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md",
+                "notes": "Classifications are cached to avoid re-running expensive LLM-based pathology analysis. Use --force-reclassify flag to regenerate."
+            },
+            "classifications": {}
+        }
+
+        # Migrate hardcoded classifications to cache format
+        for patient_id, classification in WHO_2021_CLASSIFICATIONS.items():
+            cache_data["classifications"][patient_id] = {
+                **classification,
+                "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                "classification_method": "migrated_from_hardcoded",
+                "confidence": "high"
+            }
+
+        # Ensure cache directory exists
+        WHO_2021_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write cache file
+        with open(WHO_2021_CACHE_PATH, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+
+        logger.info(f"✅ Initialized WHO classification cache with {len(cache_data['classifications'])} patients")
+
+    def _save_who_classification(self, classification: Dict[str, Any]):
+        """
+        Save WHO 2021 classification to cache
+
+        Args:
+            classification: WHO classification dict to save
+        """
+        try:
+            # Load existing cache
+            if WHO_2021_CACHE_PATH.exists():
+                with open(WHO_2021_CACHE_PATH, 'r') as f:
+                    cache_data = json.load(f)
+            else:
+                # Create new cache structure
+                cache_data = {
+                    "_metadata": {
+                        "description": "WHO 2021 CNS Tumor Classification Cache for RADIANT PCA",
+                        "schema_version": "1.0",
+                        "last_updated": datetime.now().strftime('%Y-%m-%d'),
+                        "workflow_prompt": "WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md"
+                    },
+                    "classifications": {}
+                }
+
+            # Update classification
+            cache_data["classifications"][self.athena_patient_id] = classification
+            cache_data["_metadata"]["last_updated"] = datetime.now().strftime('%Y-%m-%d')
+
+            # Ensure cache directory exists
+            WHO_2021_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+            # Write updated cache
+            with open(WHO_2021_CACHE_PATH, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+
+            logger.info(f"✅ Saved WHO classification to cache for {self.athena_patient_id}")
+
+        except Exception as e:
+            logger.error(f"Error saving WHO classification to cache: {e}")
+
+    def _generate_who_classification(self) -> Dict[str, Any]:
+        """
+        Generate WHO 2021 classification using MedGemma and v_pathology_diagnostics
+
+        This implements the WHO_2021_DIAGNOSTIC_AGENT_PROMPT workflow:
+        1. Query v_pathology_diagnostics for patient's pathology data
+        2. Prioritize Priority 1-2 documents (final pathology + molecular reports)
+        3. Use MedGemma with WHO 2021 classification prompt
+        4. Parse structured response
+
+        Returns:
+            Dict with WHO 2021 classification fields
+        """
+        logger.info(f"Generating WHO 2021 classification for {self.athena_patient_id}")
+
+        # Check if MedGemma agent is available
+        if not self.medgemma_agent:
+            logger.warning("⚠️  MedGemma agent not available, cannot generate WHO classification")
+            return {
+                "who_2021_diagnosis": "Classification not available (MedGemma not initialized)",
+                "molecular_subtype": "Unknown",
+                "grade": None,
+                "key_markers": "Cannot generate without MedGemma",
+                "clinical_significance": "Requires MedGemma for analysis",
+                "expected_prognosis": "Cannot determine",
+                "recommended_protocols": {
+                    "radiation": "Cannot determine",
+                    "chemotherapy": "Cannot determine",
+                    "surveillance": "Cannot determine"
+                },
+                "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                "classification_method": "failed_no_medgemma",
+                "confidence": "unavailable"
+            }
+
+        # Query v_pathology_diagnostics for patient's pathology data
+        try:
+            query = f"""
+            SELECT
+                patient_fhir_id,
+                linked_procedure_name,
+                linked_procedure_datetime,
+                days_from_surgery,
+                extraction_priority,
+                document_category,
+                diagnostic_source,
+                diagnostic_name,
+                component_name,
+                result_value,
+                diagnostic_category
+            FROM v_pathology_diagnostics
+            WHERE patient_fhir_id = '{self.athena_patient_id}'
+            ORDER BY
+                linked_procedure_datetime DESC,
+                extraction_priority ASC,
+                days_from_surgery ASC
+            """
+
+            pathology_data = query_athena(query, "Querying pathology data for WHO classification", suppress_output=True)
+
+            if not pathology_data:
+                logger.warning(f"No pathology data found for {self.athena_patient_id}")
+                return {
+                    "who_2021_diagnosis": "No pathology data available",
+                    "molecular_subtype": "Unknown",
+                    "grade": None,
+                    "key_markers": "No pathology data in v_pathology_diagnostics",
+                    "clinical_significance": "Patient not found in pathology view",
+                    "expected_prognosis": "Cannot determine",
+                    "recommended_protocols": {
+                        "radiation": "Cannot determine",
+                        "chemotherapy": "Cannot determine",
+                        "surveillance": "Cannot determine"
+                    },
+                    "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                    "classification_method": "failed_no_data",
+                    "confidence": "no_data"
+                }
+
+            logger.info(f"   Found {len(pathology_data)} pathology records")
+
+            # Load WHO 2021 diagnostic agent prompt
+            prompt_path = Path(__file__).parent.parent.parent / 'WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md'
+            if not prompt_path.exists():
+                logger.error(f"WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md not found at {prompt_path}")
+                raise FileNotFoundError(f"WHO diagnostic prompt not found")
+
+            with open(prompt_path, 'r') as f:
+                who_prompt = f.read()
+
+            # Format pathology data for prompt
+            pathology_summary = self._format_pathology_for_who_prompt(pathology_data)
+
+            # Construct full prompt
+            full_prompt = f"""{who_prompt}
+
+========================================================================================
+PATIENT PATHOLOGY DATA FOR CLASSIFICATION
+========================================================================================
+
+{pathology_summary}
+
+========================================================================================
+YOUR TASK
+========================================================================================
+
+Generate a WHO 2021 CNS tumor classification for this patient following the structured
+workflow in the prompt above. Return your response as a JSON object with these fields:
+
+{{
+    "who_2021_diagnosis": "Complete WHO 2021 diagnosis string",
+    "molecular_subtype": "Key molecular subtype/modifier",
+    "grade": 1-4 or null,
+    "key_markers": "Comma-separated list of key molecular markers",
+    "clinical_significance": "Brief clinical significance statement",
+    "expected_prognosis": "Prognosis summary",
+    "recommended_protocols": {{
+        "radiation": "Radiation recommendation",
+        "chemotherapy": "Chemotherapy recommendation",
+        "surveillance": "Surveillance recommendation"
+    }},
+    "confidence": "high/moderate/low/insufficient"
+}}
+
+Return ONLY the JSON object, no additional text.
+"""
+
+            # Call MedGemma
+            logger.info("   Calling MedGemma for WHO classification...")
+            result = self.medgemma_agent.extract(full_prompt, format_json=True)
+
+            # Parse response
+            try:
+                classification = json.loads(result.extracted_text)
+                classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
+                classification["classification_method"] = "medgemma_automated"
+
+                logger.info(f"   ✅ Generated WHO classification: {classification.get('who_2021_diagnosis', 'Unknown')}")
+                return classification
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse MedGemma response as JSON: {e}")
+                logger.error(f"Response: {result.extracted_text[:500]}")
+                raise
+
+        except Exception as e:
+            logger.error(f"Error generating WHO classification: {e}")
+            return {
+                "who_2021_diagnosis": f"Classification failed: {str(e)}",
+                "molecular_subtype": "Unknown",
+                "grade": None,
+                "key_markers": "Classification generation failed",
+                "clinical_significance": str(e),
+                "expected_prognosis": "Cannot determine",
+                "recommended_protocols": {
+                    "radiation": "Cannot determine",
+                    "chemotherapy": "Cannot determine",
+                    "surveillance": "Cannot determine"
+                },
+                "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                "classification_method": "failed_error",
+                "confidence": "error",
+                "error": str(e)
+            }
+
+    def _format_pathology_for_who_prompt(self, pathology_data: List[Dict[str, str]]) -> str:
+        """
+        Format pathology data into structured text for WHO classification prompt
+
+        Args:
+            pathology_data: List of pathology records from v_pathology_diagnostics
+
+        Returns:
+            Formatted string for prompt
+        """
+        output = []
+
+        # Group by surgery episode
+        episodes = {}
+        for record in pathology_data:
+            surgery_date = record.get('linked_procedure_datetime', 'Unknown')
+            if surgery_date not in episodes:
+                episodes[surgery_date] = {
+                    'procedure': record.get('linked_procedure_name', 'Unknown'),
+                    'records': []
+                }
+            episodes[surgery_date]['records'].append(record)
+
+        output.append(f"Patient ID: {self.athena_patient_id}")
+        output.append(f"Total pathology records: {len(pathology_data)}")
+        output.append(f"Number of surgery episodes: {len(episodes)}")
+        output.append("")
+
+        # Format each episode
+        for surgery_date, episode_data in sorted(episodes.items(), reverse=True):
+            output.append(f"{'='*80}")
+            output.append(f"SURGERY EPISODE: {surgery_date}")
+            output.append(f"Procedure: {episode_data['procedure']}")
+            output.append(f"Total records: {len(episode_data['records'])}")
+            output.append(f"{'='*80}")
+            output.append("")
+
+            # Count by priority
+            priority_counts = {}
+            for record in episode_data['records']:
+                priority = record.get('extraction_priority', 'NULL')
+                priority_counts[priority] = priority_counts.get(priority, 0) + 1
+
+            output.append("Document Priority Distribution:")
+            for priority in sorted(priority_counts.keys()):
+                output.append(f"  Priority {priority}: {priority_counts[priority]} documents")
+            output.append("")
+
+            # Show Priority 1-2 documents (most important for classification)
+            priority_records = [r for r in episode_data['records']
+                              if r.get('extraction_priority') in ['1', '2']]
+
+            if priority_records:
+                output.append(f"HIGH-PRIORITY DOCUMENTS (Priority 1-2): {len(priority_records)} records")
+                output.append("-"*80)
+
+                for i, record in enumerate(priority_records[:20], 1):  # Limit to first 20
+                    output.append(f"\nRecord {i}:")
+                    output.append(f"  Category: {record.get('document_category', 'Unknown')}")
+                    output.append(f"  Priority: {record.get('extraction_priority', 'Unknown')}")
+                    output.append(f"  Days from surgery: {record.get('days_from_surgery', 'Unknown')}")
+                    output.append(f"  Diagnostic name: {record.get('diagnostic_name', 'Unknown')}")
+                    output.append(f"  Component: {record.get('component_name', 'Unknown')}")
+                    result_value = record.get('result_value', '')
+                    if result_value:
+                        # Truncate long values
+                        if len(result_value) > 500:
+                            result_value = result_value[:500] + "... [truncated]"
+                        output.append(f"  Result: {result_value}")
+                    output.append("")
+
+                if len(priority_records) > 20:
+                    output.append(f"\n[{len(priority_records) - 20} additional priority 1-2 records not shown]")
+
+            output.append("")
+
+        return "\n".join(output)
 
     def run(self) -> Dict[str, Any]:
         """Execute full iterative timeline abstraction workflow"""
@@ -358,6 +733,12 @@ class PatientTimelineAbstractor:
         print("PHASE 4: PRIORITIZED BINARY EXTRACTION WITH MEDGEMMA")
         print("-"*80)
         self._phase4_extract_from_binaries()
+        print()
+
+        # PHASE 4.5: Orchestrator assessment of extraction completeness
+        print("PHASE 4.5: ORCHESTRATOR ASSESSMENT OF EXTRACTION COMPLETENESS")
+        print("-"*80)
+        self._phase4_5_assess_extraction_completeness()
         print()
 
         # PHASE 5: Protocol validation
@@ -429,7 +810,7 @@ class PatientTimelineAbstractor:
                     patient_fhir_id,
                     imaging_date,
                     imaging_modality,
-                    report_conclusion,
+                    result_information as report_conclusion,
                     result_diagnostic_report_id,
                     diagnostic_report_id
                 FROM fhir_prd_db.v_imaging
@@ -716,7 +1097,7 @@ class PatientTimelineAbstractor:
                 diagnostic_report_id = imaging.get('diagnostic_report_id') or imaging.get('result_diagnostic_report_id')
 
                 gaps.append({
-                    'gap_type': 'vague_imaging_conclusion',
+                    'gap_type': 'imaging_conclusion',
                     'priority': 'MEDIUM',
                     'event_date': imaging.get('event_date'),
                     'imaging_modality': imaging.get('imaging_modality'),
@@ -727,7 +1108,7 @@ class PatientTimelineAbstractor:
                 })
 
         # Gap type 4: Chemotherapy without protocol details
-        chemotherapy_events = [e for e in self.timeline_events if e['event_type'] == 'chemotherapy']
+        chemotherapy_events = [e for e in self.timeline_events if e.get('event_type', '').startswith('chemotherapy')]
         for chemo in chemotherapy_events:
             # Check if we're missing ANY critical chemotherapy fields
             missing_fields = []
@@ -936,8 +1317,12 @@ class PatientTimelineAbstractor:
 
             for doc in results:
                 doc_type = doc.get('dr_type_text', '').lower()
+                doc_desc = doc.get('dr_description', '').lower()
 
-                if 'operative' in doc_type or 'op note' in doc_type:
+                # Operative records: Include dr_type 'operative', 'op note', 'outside records'
+                # Also check description for surgical keywords
+                if ('operative' in doc_type or 'op note' in doc_type or 'outside' in doc_type or
+                    'surgical' in doc_desc or 'operative' in doc_desc or 'surgery' in doc_desc):
                     inventory['operative_records'].append(doc)
                 elif 'discharge' in doc_type:
                     inventory['discharge_summaries'].append(doc)
@@ -1074,7 +1459,7 @@ class PatientTimelineAbstractor:
 
             print(f"       📊 Total {len(candidates)} candidates before temporal filtering")
 
-        elif gap_type == 'vague_imaging_conclusion':
+        elif gap_type == 'imaging_conclusion':
             # For imaging, primary is already the imaging report
             # Look for clinical notes interpreting the imaging
             for doc in inventory.get('progress_notes', []):
@@ -1187,7 +1572,7 @@ class PatientTimelineAbstractor:
         print(f"       📄 Found {len(candidates)} alternative document(s) to try")
 
         # Try each alternative
-        max_alternatives = 5  # Limit to prevent infinite loops
+        max_alternatives = 50  # Increased from 5 to allow more thorough document search
         for i, candidate in enumerate(candidates[:max_alternatives]):
             print(f"       [{i+1}/{min(len(candidates), max_alternatives)}] Trying {candidate['source_type']} from {candidate.get('dr_date', 'unknown date')} ({candidate.get('days_from_event', '?')} days from event)")
 
@@ -1333,9 +1718,18 @@ class PatientTimelineAbstractor:
             try:
                 medgemma_target = gap.get('medgemma_target', '')
                 if not medgemma_target or medgemma_target == 'MISSING_REFERENCE':
-                    print(f"    ⚠️  No medgemma_target - skipping")
-                    failed_count += 1
-                    continue
+                    print(f"    ⚠️  No medgemma_target - trying alternative documents...")
+                    # ESCALATION: No primary target, go straight to alternative documents
+                    alternative_success = self._try_alternative_documents(gap, [])
+                    if alternative_success:
+                        print(f"    ✅ Alternative document extraction successful!")
+                        extracted_count += 1
+                        continue  # Move to next gap
+                    else:
+                        print(f"    ❌ No suitable alternative documents found")
+                        gap['status'] = 'NO_DOCUMENTS_AVAILABLE'
+                        failed_count += 1
+                        continue
 
                 extracted_text = self._fetch_binary_document(medgemma_target)
                 if not extracted_text:
@@ -1470,7 +1864,7 @@ REMINDER: Return ONLY valid JSON matching the exact schema above. No other text.
         """Route to specialized prompt generator based on gap type"""
         gap_type = gap.get('gap_type')
 
-        if gap_type == 'vague_imaging_conclusion':
+        if gap_type == 'imaging_conclusion':
             return self._generate_imaging_prompt(gap)
         elif gap_type == 'missing_eor':
             return self._generate_operative_note_prompt(gap)
@@ -1952,6 +2346,36 @@ OUTPUT FORMAT (JSON):
             logger.error(f"Error fetching binary {binary_id}: {e}")
             return None
 
+    def _get_patient_chemotherapy_keywords(self) -> List[str]:
+        """
+        Generate patient-specific chemotherapy keywords based on schema-extracted drug names
+
+        Returns:
+            List of chemotherapy keywords including patient's actual drug names
+        """
+        keywords = [
+            # Protocol terms
+            'protocol', 'trial', 'study', 'enrolled', 'enrollment', 'consent', 'cog', 'acns', 'sjmb', 'pog',
+            # Chemotherapy terms
+            'chemotherapy', 'chemo', 'agent', 'drug', 'cycle', 'course', 'regimen', 'infusion',
+            # Change indicators
+            'changed', 'modified', 'discontinued', 'stopped', 'held', 'dose reduction', 'escalation', 'toxicity', 'progression'
+        ]
+
+        # Add patient-specific drug names from schema-extracted chemotherapy data
+        for event in self.timeline_events:
+            if event.get('event_type', '').startswith('chemotherapy'):
+                drug_names = event.get('episode_drug_names', '')
+                if drug_names:
+                    # Split on common delimiters and clean
+                    for drug in drug_names.replace(',', ';').replace('/', ';').split(';'):
+                        drug = drug.strip().lower()
+                        if drug and len(drug) > 3:  # Skip very short strings
+                            keywords.append(drug)
+
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(keywords))
+
     def _validate_document_content(self, extracted_text: str, gap_type: str) -> Tuple[bool, str]:
         """
         Validate that document content matches expected gap type (Agent 1 validation)
@@ -1973,7 +2397,7 @@ OUTPUT FORMAT (JSON):
             'missing_eor': {
                 'required_keywords': ['surgery', 'operative', 'procedure', 'resection', 'excision'],
                 'forbidden_keywords': ['radiation', 'chemotherapy'],
-                'min_keywords': 2
+                'min_keywords': 1
             },
             'missing_radiation_details': {
                 'required_keywords': [
@@ -1994,26 +2418,17 @@ OUTPUT FORMAT (JSON):
                     'tx', 'rx'
                 ],
                 'forbidden_keywords': [],
-                'min_keywords': 2  # Lowered from 3 to 2 given expanded list
+                'min_keywords': 1  # Lowered to 1 to maximize document capture
             },
-            'vague_imaging_conclusion': {
+            'imaging_conclusion': {
                 'required_keywords': ['imaging', 'mri', 'ct', 'scan', 'brain', 'tumor', 'mass'],
                 'forbidden_keywords': [],
-                'min_keywords': 2
+                'min_keywords': 1
             },
             'missing_chemotherapy_details': {
-                'required_keywords': [
-                    # Protocol terms
-                    'protocol', 'trial', 'study', 'enrolled', 'enrollment', 'consent', 'cog', 'acns', 'sjmb', 'pog',
-                    # Chemotherapy terms
-                    'chemotherapy', 'chemo', 'agent', 'drug', 'cycle', 'course', 'regimen', 'infusion',
-                    # Common agent names
-                    'temozolomide', 'vincristine', 'carboplatin', 'cisplatin', 'etoposide', 'cyclophosphamide', 'lomustine',
-                    # Change indicators
-                    'changed', 'modified', 'discontinued', 'stopped', 'held', 'dose reduction', 'escalation', 'toxicity', 'progression'
-                ],
+                'required_keywords': self._get_patient_chemotherapy_keywords(),
                 'forbidden_keywords': [],
-                'min_keywords': 2
+                'min_keywords': 1
             }
         }
 
@@ -2054,7 +2469,7 @@ OUTPUT FORMAT (JSON):
                 'total_dose_cgy',
                 'radiation_type'
             ],
-            'vague_imaging_conclusion': ['lesions', 'rano_assessment'],
+            'imaging_conclusion': ['lesions', 'rano_assessment'],
             'missing_chemotherapy_details': [
                 'protocol_name',           # e.g., "COG ACNS0126", "SJMB12"
                 'on_protocol_status',      # "enrolled", "treated_as_per_protocol", etc.
@@ -2067,8 +2482,22 @@ OUTPUT FORMAT (JSON):
         required = required_fields.get(gap_type, [])
         missing = []
 
+        # Define alternative field names for validation
+        field_alternatives = {
+            'total_dose_cgy': ['total_dose_cgy', 'radiation_focal_or_boost_dose', 'completed_radiation_focal_or_boost_dose', 'completed_craniospinal_or_whole_ventricular_radiation_dose']
+        }
+
         for field in required:
-            if field not in extraction_data or extraction_data[field] is None or extraction_data[field] == "":
+            # Check if field exists, or if any alternative exists
+            alternatives = field_alternatives.get(field, [field])
+            field_found = False
+
+            for alt_field in alternatives:
+                if alt_field in extraction_data and extraction_data[alt_field] is not None and extraction_data[alt_field] != "":
+                    field_found = True
+                    break
+
+            if not field_found:
                 missing.append(field)
 
         is_valid = len(missing) == 0
@@ -2162,17 +2591,113 @@ INSTRUCTIONS:
         for event in self.timeline_events:
             if event.get('event_date') == event_date:
                 # Add medgemma_extraction field to event
-                if gap_type == 'vague_imaging_conclusion' and event.get('event_type') == 'imaging':
+                if gap_type == 'imaging_conclusion' and event.get('event_type') == 'imaging':
+                    # Merge imaging-specific fields
+                    event['report_conclusion'] = extraction_data.get('radiologist_impression', '')
                     event['medgemma_extraction'] = extraction_data
+                    logger.info(f"Merged imaging conclusion for {event_date}: {event.get('report_conclusion', '')[:100]}")
                     break
                 elif gap_type == 'missing_eor' and event.get('event_type') == 'surgery':
+                    # Merge EOR-specific fields
                     event['extent_of_resection'] = extraction_data.get('extent_of_resection')
+                    event['tumor_site'] = extraction_data.get('tumor_site')
                     event['medgemma_extraction'] = extraction_data
+                    logger.info(f"Merged EOR for {event_date}: {event.get('extent_of_resection')}")
                     break
-                elif gap_type == 'missing_radiation_dose' and event.get('event_type') == 'radiation_start':
-                    event['total_dose_cgy'] = extraction_data.get('total_dose_cgy')
+                elif gap_type in ['missing_radiation_dose', 'missing_radiation_details'] and 'radiation' in event.get('event_type', ''):
+                    # Merge radiation-specific fields - handle both start and end events
+                    # Try multiple field name variants (different prompts may return different field names)
+                    event['total_dose_cgy'] = (
+                        extraction_data.get('total_dose_cgy') or
+                        extraction_data.get('radiation_focal_or_boost_dose') or
+                        extraction_data.get('completed_radiation_focal_or_boost_dose') or
+                        extraction_data.get('completed_craniospinal_or_whole_ventricular_radiation_dose')
+                    )
+                    event['radiation_type'] = extraction_data.get('radiation_type')
+                    event['radiation_fields'] = extraction_data.get('radiation_fields')
+                    event['date_at_radiation_start'] = extraction_data.get('date_at_radiation_start')
+                    event['date_at_radiation_stop'] = extraction_data.get('date_at_radiation_stop')
                     event['medgemma_extraction'] = extraction_data
+                    logger.info(f"Merged radiation details for {event_date}: {event.get('total_dose_cgy')} cGy")
                     break
+                elif gap_type == 'missing_chemotherapy_details' and 'chemotherapy' in event.get('event_type', ''):
+                    # Merge chemotherapy-specific fields
+                    event['chemotherapy_agents'] = extraction_data.get('chemotherapy_agents')
+                    event['chemotherapy_protocol'] = extraction_data.get('chemotherapy_protocol')
+                    event['chemotherapy_intent'] = extraction_data.get('chemotherapy_intent')
+                    event['medgemma_extraction'] = extraction_data
+                    logger.info(f"Merged chemotherapy details for {event_date}: {event.get('chemotherapy_agents')}")
+                    break
+
+    def _phase4_5_assess_extraction_completeness(self):
+        """
+        Orchestrator assessment of extraction completeness
+        Validates that critical fields were successfully populated
+        """
+        assessment = {
+            'surgery': {'total': 0, 'missing_eor': 0, 'complete': 0},
+            'radiation': {'total': 0, 'missing_dose': 0, 'complete': 0},
+            'imaging': {'total': 0, 'missing_conclusion': 0, 'complete': 0},
+            'chemotherapy': {'total': 0, 'missing_agents': 0, 'complete': 0}
+        }
+
+        # Assess surgery events
+        for event in self.timeline_events:
+            if event.get('event_type') == 'surgery':
+                assessment['surgery']['total'] += 1
+                if not event.get('extent_of_resection'):
+                    assessment['surgery']['missing_eor'] += 1
+                else:
+                    assessment['surgery']['complete'] += 1
+
+            # Assess radiation events
+            elif event.get('event_type') == 'radiation_start':
+                assessment['radiation']['total'] += 1
+                if not event.get('total_dose_cgy'):
+                    assessment['radiation']['missing_dose'] += 1
+                else:
+                    assessment['radiation']['complete'] += 1
+
+            # Assess imaging events
+            elif event.get('event_type') == 'imaging':
+                assessment['imaging']['total'] += 1
+                if not event.get('report_conclusion'):
+                    assessment['imaging']['missing_conclusion'] += 1
+                else:
+                    assessment['imaging']['complete'] += 1
+
+            # Assess chemotherapy events
+            elif event.get('event_type') == 'chemotherapy_start':
+                assessment['chemotherapy']['total'] += 1
+                if not event.get('chemotherapy_agents') and not event.get('episode_drug_names'):
+                    assessment['chemotherapy']['missing_agents'] += 1
+                else:
+                    assessment['chemotherapy']['complete'] += 1
+
+        # Report assessment
+        print("  DATA COMPLETENESS ASSESSMENT:")
+        print()
+
+        for category, stats in assessment.items():
+            if stats['total'] > 0:
+                completeness_pct = (stats['complete'] / stats['total']) * 100
+                print(f"    {category.upper()}:")
+                print(f"      Total events: {stats['total']}")
+                print(f"      Complete: {stats['complete']} ({completeness_pct:.1f}%)")
+
+                # Show specific missing fields
+                for field, count in stats.items():
+                    if field not in ['total', 'complete'] and count > 0:
+                        print(f"      {field}: {count} events")
+
+                if completeness_pct < 100:
+                    print(f"      ⚠️  INCOMPLETE - {100-completeness_pct:.1f}% missing critical data")
+                else:
+                    print(f"      ✅ COMPLETE")
+                print()
+
+        # Store assessment for artifact
+        self.completeness_assessment = assessment
 
     def _phase5_protocol_validation(self):
         """Phase 5: Validate treatments against WHO 2021 protocols"""
@@ -2239,7 +2764,8 @@ INSTRUCTIONS:
                 'total_timeline_events': len(self.timeline_events),
                 'extraction_gaps_identified': len(self.extraction_gaps),
                 'binary_extractions_performed': len(self.binary_extractions),
-                'protocol_validations': len(self.protocol_validations)
+                'protocol_validations': len(self.protocol_validations),
+                'completeness_assessment': self.completeness_assessment
             },
             'timeline_events': self.timeline_events,
             'extraction_gaps': self.extraction_gaps,
@@ -2280,6 +2806,11 @@ def main():
         default=None,
         help='Maximum number of binary extractions to perform (for testing)'
     )
+    parser.add_argument(
+        '--force-reclassify',
+        action='store_true',
+        help='Force re-generation of WHO 2021 classification even if cached'
+    )
 
     args = parser.parse_args()
 
@@ -2294,7 +2825,12 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Run abstraction
-    abstractor = PatientTimelineAbstractor(args.patient_id, output_dir, max_extractions=args.max_extractions)
+    abstractor = PatientTimelineAbstractor(
+        args.patient_id,
+        output_dir,
+        max_extractions=args.max_extractions,
+        force_reclassify=args.force_reclassify
+    )
     artifact = abstractor.run()
 
     print()

@@ -1,12 +1,23 @@
 """
-Binary File Agent - Streams and extracts text from S3-stored binary files (PDF/HTML)
+Binary File Agent - Streams and extracts text from S3-stored binary files
 
 This agent:
 1. Queries v_binary_files to get binary file metadata and IDs
 2. Constructs S3 paths from binary IDs
 3. Streams binary content from S3 (no local storage)
-4. Extracts text from PDF/HTML
+4. Extracts text from PDF/HTML/images (using AWS Textract OCR for images)
 5. Returns structured text with metadata for MedGemmaAgent extraction
+
+Supported formats (prioritized):
+- Priority 1: text/html, text/plain, text/rtf, text/xml, application/xml (fast, free)
+- Priority 2: application/pdf (fast, free)
+- Priority 3: image/tiff, image/jpeg, image/png (slow, AWS Textract cost ~$1.50/1000 pages)
+
+NULL content_type handling:
+- If content_type is NULL but dr_type_text contains clinical keywords
+  (operative, surgery, pathology, imaging, radiation, discharge, etc.),
+  the agent will attempt Textract OCR extraction as a fallback.
+- This captures scanned documents from outside hospitals that lack proper metadata.
 """
 
 import boto3
@@ -19,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import fitz  # PyMuPDF - more robust than PyPDF2
 from bs4 import BeautifulSoup
+from PIL import Image
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -84,14 +96,17 @@ class BinaryFileAgent:
         self.region_name = region_name
         self.aws_profile = aws_profile  # Store for token refresh
 
-        # Initialize S3 client
+        # Initialize S3 and Textract clients
         if aws_profile:
             session = boto3.Session(profile_name=aws_profile, region_name=region_name)
             self.s3_client = session.client('s3')
+            self.textract_client = session.client('textract')
         else:
             self.s3_client = boto3.client('s3', region_name=region_name)
+            self.textract_client = boto3.client('textract', region_name=region_name)
 
         logger.info(f"BinaryFileAgent initialized: s3://{s3_bucket}/{s3_prefix}")
+        logger.info(f"  ✅ AWS Textract enabled for TIFF/image extraction")
 
     def construct_s3_path(self, binary_id: str) -> Tuple[str, str]:
         """
@@ -336,6 +351,68 @@ class BinaryFileAgent:
             logger.error(error_msg)
             return "", error_msg
 
+    def extract_text_from_image(self, image_content: bytes, image_format: str = "TIFF") -> Tuple[str, Optional[str]]:
+        """
+        Extract text from image using AWS Textract OCR
+
+        Supports TIFF, JPEG, PNG scanned documents (e.g., outside hospital operative notes,
+        radiation therapy summaries, pathology reports) that require OCR to extract text.
+
+        Process:
+        1. For TIFF: Convert to PNG (Textract doesn't support TIFF directly)
+        2. For JPEG/PNG: Use directly (Textract natively supports these)
+        3. Send to AWS Textract detect_document_text API
+        4. Extract text from LINE blocks
+
+        Args:
+            image_content: Image file as bytes
+            image_format: Image format (TIFF, JPEG, PNG) for logging
+
+        Returns:
+            Tuple of (extracted_text, error_message)
+        """
+        try:
+            # Determine if we need to convert format
+            image_bytes = image_content
+
+            if image_format.upper() in ["TIFF", "TIF"]:
+                logger.info("Converting TIFF to PNG for Textract...")
+                # Open TIFF with PIL and convert to PNG
+                image = Image.open(io.BytesIO(image_content))
+                logger.info(f"  TIFF: {image.size} pixels, mode: {image.mode}")
+
+                png_buffer = io.BytesIO()
+                image.save(png_buffer, format='PNG')
+                image_bytes = png_buffer.getvalue()
+                logger.info(f"  Converted to PNG: {len(image_bytes):,} bytes")
+            else:
+                # JPEG/PNG can be used directly with Textract
+                logger.info(f"Using {image_format} directly with Textract (native support)...")
+                logger.info(f"  Image size: {len(image_bytes):,} bytes")
+
+            # Call AWS Textract
+            logger.info("Calling AWS Textract detect_document_text...")
+            textract_response = self.textract_client.detect_document_text(
+                Document={'Bytes': image_bytes}
+            )
+
+            # Extract text from LINE blocks
+            blocks = textract_response.get('Blocks', [])
+            lines = [block.get('Text', '') for block in blocks if block['BlockType'] == 'LINE']
+            full_text = '\n'.join(lines)
+
+            logger.info(f"  ✅ Textract extracted {len(lines)} lines ({len(full_text)} chars)")
+
+            if len(full_text) == 0:
+                return "", f"Textract returned no text from {image_format} image"
+
+            return full_text, None
+
+        except Exception as e:
+            error_msg = f"{image_format}/Textract extraction error: {str(e)}"
+            logger.error(error_msg)
+            return "", error_msg
+
     def extract_binary_content(
         self,
         metadata: BinaryFileMetadata
@@ -367,16 +444,49 @@ class BinaryFileAgent:
             )
 
         # Extract text based on content type
+        # Priority: HTML/PDF/text (fast, free) > images (slow, AWS Textract cost)
         extracted_text = ""
         error_msg = None
 
-        if metadata.content_type == "application/pdf":
+        # Determine content type (with fallback for NULL based on dr_type_text)
+        content_type = metadata.content_type
+
+        # FALLBACK: If content_type is NULL but dr_type_text suggests clinical document, try Textract
+        if not content_type or content_type == "":
+            dr_type = (metadata.dr_type_text or "").lower()
+            if any(keyword in dr_type for keyword in [
+                'operative', 'surgery', 'pathology', 'imaging', 'radiology',
+                'discharge', 'progress', 'consultation', 'treatment', 'radiation',
+                'outside', 'external'
+            ]):
+                logger.info(f"  NULL content_type but dr_type_text='{metadata.dr_type_text}' - trying Textract OCR")
+                content_type = "image/unknown"  # Try as image
+
+        if content_type == "application/pdf":
             extracted_text, error_msg = self.extract_text_from_pdf(binary_content)
-        elif metadata.content_type in ["text/html", "text/plain", "text/rtf", "text/xml", "application/xml"]:
+        elif content_type in ["text/html", "text/plain", "text/rtf", "text/xml", "application/xml"]:
             # Use HTML parser for all text-based formats (works for XML too)
             extracted_text, error_msg = self.extract_text_from_html(binary_content)
+        elif content_type in ["image/tiff", "image/tif"]:
+            # Use AWS Textract OCR for TIFF scanned documents
+            logger.info("  Using AWS Textract for TIFF OCR (scanned document)")
+            extracted_text, error_msg = self.extract_text_from_image(binary_content, "TIFF")
+        elif content_type in ["image/jpeg", "image/jpg"]:
+            # Use AWS Textract OCR for JPEG scanned documents (native support)
+            logger.info("  Using AWS Textract for JPEG OCR (scanned document)")
+            extracted_text, error_msg = self.extract_text_from_image(binary_content, "JPEG")
+        elif content_type in ["image/png"]:
+            # Use AWS Textract OCR for PNG scanned documents (native support)
+            logger.info("  Using AWS Textract for PNG OCR (scanned document)")
+            extracted_text, error_msg = self.extract_text_from_image(binary_content, "PNG")
+        elif content_type == "image/unknown":
+            # NULL content_type but clinical dr_type_text - try Textract
+            logger.info("  Trying AWS Textract for unknown image type (NULL content_type)")
+            extracted_text, error_msg = self.extract_text_from_image(binary_content, "UNKNOWN")
         else:
-            error_msg = f"Unsupported content type: {metadata.content_type}"
+            error_msg = f"Unsupported content type: {content_type or 'NULL'}"
+            if metadata.dr_type_text:
+                error_msg += f" (dr_type_text: {metadata.dr_type_text})"
             logger.warning(error_msg)
 
         success = len(extracted_text) > 0 and error_msg is None
