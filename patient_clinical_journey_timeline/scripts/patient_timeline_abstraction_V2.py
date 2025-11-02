@@ -72,120 +72,21 @@ WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classifi
 # Source: WHO_2021_INTEGRATED_DIAGNOSES_9_PATIENTS.md
 # NOTE: This hardcoded dictionary is kept for backward compatibility only.
 # New classifications are loaded from and saved to who_2021_classification_cache.json
-WHO_2021_CLASSIFICATIONS = {
-    'eDe7IanglsmBppe3htvO-QdYT26-v54aUqFAeTPQSJ6w3': {
-        'who_2021_diagnosis': 'Diffuse midline glioma, H3 K27-altered, CNS WHO grade 4',
-        'molecular_subtype': 'H3 K27M+',
-        'grade': 4,
-        'key_markers': 'H3F3A K27M (IHC+), IDH1-R132H-, ATRX loss',
-        'clinical_significance': 'CRITICAL: Uniformly fatal, median survival 9-11 months',
-        'expected_prognosis': 'POOR: Expect progression within 6-12 months post-treatment',
-        'recommended_protocols': {
-            'radiation': '54 Gy focal radiation to pontine lesion',
-            'chemotherapy': 'Concurrent temozolomide or clinical trial',
-            'surveillance': 'MRI every 2-3 months'
-        }
-    },
-    'eFkHu0Dr07HPadEPDpvudcQOsKqv2vvCvdg-a-r-8SVY3': {
-        'who_2021_diagnosis': 'Diffuse midline glioma, H3 K27-altered, CNS WHO grade 4',
-        'molecular_subtype': 'H3 K27M+ (TIER 1A)',
-        'grade': 4,
-        'key_markers': 'H3F3A c.83A>T p.Lys28Met, TP53 c.524G>A p.Arg175His',
-        'clinical_significance': 'CRITICAL: Uniformly fatal',
-        'expected_prognosis': 'POOR',
-        'recommended_protocols': {
-            'radiation': '54 Gy focal radiation',
-            'chemotherapy': 'Consider clinical trials',
-            'surveillance': 'MRI every 2-3 months'
-        }
-    },
-    'eIkYtPKrgCyQIt1zJXMux2cWyHHSSFeZg6zKSznsH7WM3': {
-        'who_2021_diagnosis': 'Diffuse midline glioma, H3 K27-altered, CNS WHO grade 4',
-        'molecular_subtype': 'H3 K27M+ (molecular upgrade from grade 3 histology)',
-        'grade': 4,
-        'key_markers': 'H3F3A K27M (IHC+), PIK3R1 del, ATRX c.5494G>A, PPM1D c.1270G>T',
-        'clinical_significance': 'CRITICAL: Molecular upgrade despite grade 3 histology',
-        'expected_prognosis': 'POOR despite lower histologic grade',
-        'recommended_protocols': {
-            'radiation': '54 Gy focal radiation',
-            'chemotherapy': 'Concurrent temozolomide',
-            'surveillance': 'MRI every 2-3 months'
-        }
-    },
-    'eXdEVvOs091o4-RCug2.5hA3': {
-        'who_2021_diagnosis': 'Diffuse midline glioma, H3 K27-altered, CNS WHO grade 4',
-        'molecular_subtype': 'H3 K27M+, TP53 mutant, PDGFRA amplified',
-        'grade': 4,
-        'key_markers': 'H3F3A K27M, TP53 c.817C>T, PTPN11 c.1510A>G, PDGFRA amp',
-        'clinical_significance': 'CRITICAL: PDGFRA amplification potentially targetable',
-        'expected_prognosis': 'POOR',
-        'recommended_protocols': {
-            'radiation': '54 Gy focal radiation',
-            'chemotherapy': 'Consider PDGFRA-targeted therapy',
-            'surveillance': 'MRI every 2-3 months'
-        }
-    },
-    'eUFS4hKO-grXh72WvK-5l0TFbD0sV2SMysYY5JpxOR-A3': {
-        'who_2021_diagnosis': 'Diffuse hemispheric glioma, H3 G34-mutant, CNS WHO grade 4',
-        'molecular_subtype': 'H3 G34R+ (newly recognized WHO 2021 entity)',
-        'grade': 4,
-        'key_markers': 'H3F3A c.103G>A p.Gly35Arg, TP53 c.586C>T, ATRX frameshift, NUDT15 c.415C>T',
-        'clinical_significance': 'HIGH RISK: H3 G34-mutant hemispheric glioma',
-        'expected_prognosis': 'POOR (similar to H3 K27M)',
-        'recommended_protocols': {
-            'radiation': '60 Gy focal radiation (hemispheric location)',
-            'chemotherapy': 'Temozolomide-based regimen',
-            'surveillance': 'MRI every 2-3 months'
-        },
-        'special_note': 'NUDT15 variant affects thiopurine metabolism (chemo dosing)'
-    },
-    'e8jPD8zawpt.KIpA97WuwdDCHyK.qEO5mX-6tEB7krPU3': {
-        'who_2021_diagnosis': 'Pineoblastoma, CNS WHO grade 4',
-        'molecular_subtype': 'MYC/FOXR2-activated (provisional)',
-        'grade': 4,
-        'key_markers': 'MYCN amplification, TP53 c.722C>T, NF1 loss/LOH, KRAS G13D, MED12 c.130G>A',
-        'clinical_significance': 'CRITICAL: High-risk embryonal tumor',
-        'expected_prognosis': 'POOR: Grade 4 embryonal tumor',
-        'recommended_protocols': {
-            'radiation': '54 Gy craniospinal + posterior fossa boost',
-            'chemotherapy': 'High-dose platinum-based (cisplatin/cyclophosphamide/etoposide)',
-            'surveillance': 'MRI brain/spine every 3 months, CSF cytology'
-        },
-        'special_note': 'Embryonal tumor - CSF staging essential'
-    },
-    'eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83': {
-        'who_2021_diagnosis': 'Astrocytoma, IDH-mutant, CNS WHO grade 3',
-        'molecular_subtype': 'Adult-type, Lynch syndrome (MSH6 germline mutation)',
-        'grade': 3,
-        'key_markers': 'IDH1 c.395G>A p.Arg132His, ATRX c.1252C>T, DNMT3A c.2645G>A, MSH6 c.3863_3865dupAAT (germline), MET fusion',
-        'clinical_significance': 'MODERATE: IDH-mutant favorable, but Lynch syndrome requires surveillance',
-        'expected_prognosis': 'INTERMEDIATE: Median survival 3-5 years for grade 3 IDH-mutant',
-        'recommended_protocols': {
-            'radiation': '54 Gy focal radiation (if high-grade features)',
-            'chemotherapy': 'Temozolomide-based regimen',
-            'surveillance': 'MRI every 3-4 months, monitor for CDKN2A/B deletion (would upgrade to grade 4)'
-        },
-        'special_note': 'Lynch syndrome: genetic counseling required, surveillance for other cancers'
-    },
-    'eiZ8gIQ.xVzYybDaR2sW5E0z9yI5BQjDeWulBFer5T4g3': {
-        'who_2021_diagnosis': 'Pending - insufficient data',
-        'molecular_subtype': 'Unknown',
-        'grade': None,
-        'key_markers': 'Data extraction incomplete',
-        'clinical_significance': 'UNKNOWN',
-        'expected_prognosis': 'UNKNOWN',
-        'recommended_protocols': {}
-    },
-    'ekrJf9m27ER1umcVah.rRqC.9hDY9ch91PfbuGjUHko03': {
-        'who_2021_diagnosis': 'No data available',
-        'molecular_subtype': 'Not in v_pathology_diagnostics',
-        'grade': None,
-        'key_markers': 'No pathology data found',
-        'clinical_significance': 'UNKNOWN',
-        'expected_prognosis': 'UNKNOWN',
-        'recommended_protocols': {}
-    }
-}
+# DEPRECATED: Hardcoded WHO_2021_CLASSIFICATIONS dictionary removed in favor of dynamic classification
+#
+# The system now uses a multi-tier dynamic classification approach:
+#   - Tier 1: Structured data from v_pathology_diagnostics
+#   - Tier 2: Binary pathology documents if Tier 1 confidence is low/insufficient
+#   - Reference: WHO Classification of Tumours of the CNS, 5th Edition (2021) PDF
+#
+# This ensures classifications are:
+#   1. Not patient-specific (applicable to any patient)
+#   2. Based on actual available data (structured + binary)
+#   3. Referencing authoritative WHO 2021 standards
+#   4. Cacheable for performance (see who_2021_classification_cache.json)
+#
+# Implementation: See _generate_who_classification() method (lines 461-642)
+# Enhancement: See _enhance_classification_with_binary_pathology() method (lines 722-892)
 
 
 def check_aws_sso_token(profile_name: str = 'radiant-prod') -> bool:
@@ -304,9 +205,6 @@ class PatientTimelineAbstractor:
         self.max_extractions = max_extractions
         self.force_reclassify = force_reclassify
 
-        # Load WHO 2021 classification for this patient (from cache)
-        self.who_2021_classification = self._load_who_classification()
-
         # Data structures
         self.timeline_events = []
         self.extraction_gaps = []
@@ -314,7 +212,7 @@ class PatientTimelineAbstractor:
         self.protocol_validations = []
         self.completeness_assessment = {}  # Phase 4.5 assessment
 
-        # Initialize agents for Phase 4
+        # Initialize agents for Phase 4 (BEFORE WHO classification)
         self.medgemma_agent = None
         self.binary_agent = None
 
@@ -330,6 +228,9 @@ class PatientTimelineAbstractor:
         else:
             logger.warning("⚠️  Phase 4 (binary extraction) will be skipped - Ollama not available")
 
+        # Load WHO 2021 classification AFTER agents are initialized (needed for dynamic classification)
+        self.who_2021_classification = self._load_who_classification()
+
         logger.info(f"Initialized abstractor for {patient_id}")
         if self.who_2021_classification.get('who_2021_diagnosis'):
             logger.info(f"  WHO 2021: {self.who_2021_classification['who_2021_diagnosis']}")
@@ -344,8 +245,8 @@ class PatientTimelineAbstractor:
         # Check if cache file exists
         if not WHO_2021_CACHE_PATH.exists():
             logger.warning(f"WHO classification cache not found at {WHO_2021_CACHE_PATH}")
-            logger.info("Creating new cache file from hardcoded dictionary")
-            self._initialize_cache_from_hardcoded()
+            logger.info("Creating empty cache file (will populate with dynamic classifications)")
+            self._initialize_empty_cache()
 
         # Load cache
         try:
@@ -380,43 +281,42 @@ class PatientTimelineAbstractor:
 
         except Exception as e:
             logger.error(f"Error loading WHO classification cache: {e}")
-            # Fallback to hardcoded dictionary
-            fallback = WHO_2021_CLASSIFICATIONS.get(self.athena_patient_id, {})
-            if fallback:
-                logger.warning(f"Using fallback hardcoded classification")
-            return fallback
+            logger.error("   Cannot generate classification, returning empty result")
+            return {
+                "who_2021_diagnosis": f"Classification failed: {str(e)}",
+                "molecular_subtype": "Unknown",
+                "grade": None,
+                "key_markers": "Error loading cache",
+                "clinical_significance": "Cache error",
+                "expected_prognosis": "Cannot determine",
+                "recommended_protocols": {},
+                "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                "classification_method": "failed_cache_error"
+            }
 
-    def _initialize_cache_from_hardcoded(self):
-        """Initialize cache file from hardcoded WHO_2021_CLASSIFICATIONS dictionary"""
+    def _initialize_empty_cache(self):
+        """Initialize empty cache file for dynamic WHO 2021 classifications"""
         cache_data = {
             "_metadata": {
                 "description": "WHO 2021 CNS Tumor Classification Cache for RADIANT PCA",
-                "schema_version": "1.0",
+                "schema_version": "2.0",
                 "last_updated": datetime.now().strftime('%Y-%m-%d'),
-                "source": "Initialized from hardcoded WHO_2021_CLASSIFICATIONS dictionary",
+                "source": "Dynamic multi-tier classification (Tier 1: structured data, Tier 2: binary pathology)",
                 "workflow_prompt": "WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md",
-                "notes": "Classifications are cached to avoid re-running expensive LLM-based pathology analysis. Use --force-reclassify flag to regenerate."
+                "reference_document": "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/References/WHO_2021s.pdf",
+                "notes": "Classifications are dynamically generated from available data and cached for performance. Use --force-reclassify flag to regenerate."
             },
             "classifications": {}
         }
 
-        # Migrate hardcoded classifications to cache format
-        for patient_id, classification in WHO_2021_CLASSIFICATIONS.items():
-            cache_data["classifications"][patient_id] = {
-                **classification,
-                "classification_date": datetime.now().strftime('%Y-%m-%d'),
-                "classification_method": "migrated_from_hardcoded",
-                "confidence": "high"
-            }
-
         # Ensure cache directory exists
         WHO_2021_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write cache file
+        # Write empty cache file
         with open(WHO_2021_CACHE_PATH, 'w') as f:
             json.dump(cache_data, f, indent=2)
 
-        logger.info(f"✅ Initialized WHO classification cache with {len(cache_data['classifications'])} patients")
+        logger.info(f"✅ Initialized empty WHO classification cache (will populate dynamically)")
 
     def _save_who_classification(self, classification: Dict[str, Any]):
         """
@@ -587,13 +487,31 @@ Return ONLY the JSON object, no additional text.
 
             # Call MedGemma
             logger.info("   Calling MedGemma for WHO classification...")
-            result = self.medgemma_agent.extract(full_prompt, format_json=True)
+            result = self.medgemma_agent.extract(full_prompt)
 
             # Parse response
             try:
-                classification = json.loads(result.extracted_text)
+                classification = json.loads(result.raw_response)
                 classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
-                classification["classification_method"] = "medgemma_automated"
+                classification["classification_method"] = "medgemma_tier1_structured_data"
+
+                confidence = classification.get('confidence', 'unknown').lower()
+                logger.info(f"   Tier 1 (Structured Data) confidence: {confidence}")
+
+                # Tier 2: If confidence is low/insufficient, try binary pathology documents
+                if confidence in ['low', 'insufficient', 'unknown']:
+                    logger.info(f"   ⚠️  Tier 1 confidence {confidence}, attempting Tier 2 (binary pathology fallback)...")
+
+                    enhanced_classification = self._enhance_classification_with_binary_pathology(
+                        classification,
+                        pathology_summary
+                    )
+
+                    if enhanced_classification:
+                        logger.info(f"   ✅ Generated WHO classification (Tier 2): {enhanced_classification.get('who_2021_diagnosis', 'Unknown')}")
+                        return enhanced_classification
+                    else:
+                        logger.info(f"   ℹ️  Tier 2 did not improve confidence, using Tier 1 result")
 
                 logger.info(f"   ✅ Generated WHO classification: {classification.get('who_2021_diagnosis', 'Unknown')}")
                 return classification
@@ -700,6 +618,263 @@ Return ONLY the JSON object, no additional text.
             output.append("")
 
         return "\n".join(output)
+
+    def _enhance_classification_with_binary_pathology(
+        self,
+        tier1_classification: Dict[str, Any],
+        structured_data_summary: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Enhance WHO classification by extracting text from binary pathology documents
+
+        This is Tier 2 of the classification workflow, used when Tier 1 (structured data)
+        produces low confidence results.
+
+        Args:
+            tier1_classification: Initial classification from structured data
+            structured_data_summary: Formatted pathology summary from Tier 1
+
+        Returns:
+            Enhanced classification dict if successful and confidence improved, else None
+        """
+        try:
+            logger.info("      [Tier 2] Querying v_binary_files for pathology documents...")
+
+            # Query for pathology/molecular documents
+            query = f"""
+            SELECT
+                binary_fhir_id,
+                dr_fhir_id,
+                patient_fhir_id,
+                dr_type_text,
+                content_type,
+                size_bytes,
+                linked_procedures_sorted,
+                document_datetime,
+                extraction_priority
+            FROM v_binary_files
+            WHERE patient_fhir_id = '{self.athena_patient_id}'
+              AND extraction_priority IN (1, 2)
+              AND (
+                LOWER(dr_type_text) LIKE '%pathology%'
+                OR LOWER(dr_type_text) LIKE '%molecular%'
+                OR LOWER(dr_type_text) LIKE '%biopsy%'
+                OR LOWER(dr_type_text) LIKE '%histology%'
+              )
+            ORDER BY
+                extraction_priority ASC,
+                document_datetime DESC
+            LIMIT 3
+            """
+
+            binary_docs = query_athena(query, "Tier 2: Querying pathology binary documents", suppress_output=True)
+
+            if not binary_docs:
+                logger.info("      [Tier 2] No binary pathology documents found")
+                return None
+
+            logger.info(f"      [Tier 2] Found {len(binary_docs)} binary pathology documents")
+
+            # Extract text from documents
+            extracted_texts = []
+            for doc in binary_docs:
+                binary_id = doc['binary_fhir_id']
+                dr_type = doc['dr_type_text']
+                content_type = doc['content_type']
+
+                logger.info(f"      [Tier 2] Extracting from {dr_type} ({content_type})...")
+
+                # Fetch and extract text from binary document
+                binary_text = self._extract_text_from_binary_document(binary_id, content_type)
+
+                if binary_text:
+                    extracted_texts.append({
+                        'source': dr_type,
+                        'content_type': content_type,
+                        'text': binary_text[:5000]  # Limit to 5000 chars per document
+                    })
+                    logger.info(f"      [Tier 2]    ✅ Extracted {len(binary_text)} characters")
+                else:
+                    logger.info(f"      [Tier 2]    ⚠️  No text extracted")
+
+            if not extracted_texts:
+                logger.info("      [Tier 2] No text extracted from binary documents")
+                return None
+
+            logger.info(f"      [Tier 2] Extracted text from {len(extracted_texts)} documents")
+
+            # Construct enhanced prompt with both structured and binary data
+            prompt_path = Path(__file__).parent.parent.parent / 'WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md'
+            with open(prompt_path, 'r') as f:
+                who_prompt = f.read()
+
+            # Format binary extractions
+            binary_summary = "\n\n".join([
+                f"BINARY DOCUMENT: {doc['source']} ({doc['content_type']})\n"
+                f"{'='*80}\n"
+                f"{doc['text']}\n"
+                for doc in extracted_texts
+            ])
+
+            enhanced_prompt = f"""{who_prompt}
+
+========================================================================================
+TIER 2 ENHANCED CLASSIFICATION (Structured + Binary Pathology Data)
+========================================================================================
+
+TIER 1 RESULT (from structured data):
+  WHO Diagnosis: {tier1_classification.get('who_2021_diagnosis', 'Unknown')}
+  Confidence: {tier1_classification.get('confidence', 'Unknown')}
+  Key Markers: {tier1_classification.get('key_markers', 'None')}
+
+STRUCTURED DATA FROM v_pathology_diagnostics:
+{structured_data_summary}
+
+ADDITIONAL BINARY PATHOLOGY DOCUMENTS:
+{binary_summary}
+
+========================================================================================
+YOUR TASK
+========================================================================================
+
+Re-evaluate the WHO 2021 classification using BOTH the structured data and the binary
+document text. The binary documents may contain additional molecular details, histology
+descriptions, or diagnostic conclusions not captured in structured fields.
+
+Return your response as a JSON object with these fields:
+
+{{
+    "who_2021_diagnosis": "Complete WHO 2021 diagnosis string",
+    "molecular_subtype": "Key molecular subtype/modifier",
+    "grade": 1-4 or null,
+    "key_markers": "Comma-separated list of key molecular markers",
+    "clinical_significance": "Brief clinical significance statement",
+    "expected_prognosis": "Prognosis summary",
+    "recommended_protocols": {{
+        "radiation": "Radiation recommendation",
+        "chemotherapy": "Chemotherapy recommendation",
+        "surveillance": "Surveillance recommendation"
+    }},
+    "confidence": "high/moderate/low/insufficient"
+}}
+
+Return ONLY the JSON object, no additional text.
+"""
+
+            # Call MedGemma with enhanced data
+            logger.info("      [Tier 2] Calling MedGemma with enhanced data...")
+            result = self.medgemma_agent.extract(enhanced_prompt)
+
+            # Parse response
+            enhanced_classification = json.loads(result.raw_response)
+            enhanced_classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
+            enhanced_classification["classification_method"] = "medgemma_tier2_structured_plus_binary"
+
+            tier2_confidence = enhanced_classification.get('confidence', 'unknown').lower()
+            tier1_confidence = tier1_classification.get('confidence', 'unknown').lower()
+
+            logger.info(f"      [Tier 2] Enhanced classification confidence: {tier2_confidence}")
+
+            # Only return enhanced classification if confidence improved
+            confidence_order = {'insufficient': 0, 'low': 1, 'moderate': 2, 'high': 3, 'unknown': 0}
+            tier1_score = confidence_order.get(tier1_confidence, 0)
+            tier2_score = confidence_order.get(tier2_confidence, 0)
+
+            if tier2_score > tier1_score:
+                logger.info(f"      [Tier 2] ✅ Confidence improved from {tier1_confidence} to {tier2_confidence}")
+                return enhanced_classification
+            else:
+                logger.info(f"      [Tier 2] ℹ️  Confidence did not improve ({tier1_confidence} → {tier2_confidence})")
+                return None
+
+        except Exception as e:
+            logger.error(f"      [Tier 2] Error during binary pathology enhancement: {e}")
+            return None
+
+    def _extract_text_from_binary_document(self, binary_id: str, content_type: str) -> Optional[str]:
+        """
+        Extract text from a binary document using appropriate method based on content type
+
+        Args:
+            binary_id: FHIR Binary resource ID
+            content_type: MIME type of the document
+
+        Returns:
+            Extracted text or None if extraction failed
+        """
+        try:
+            # Fetch binary document
+            binary_data = self._fetch_binary_document(binary_id)
+            if not binary_data:
+                return None
+
+            # Determine extraction method based on content type
+            if content_type == 'application/pdf':
+                # Use Binary File Agent for PDF extraction
+                return self._extract_from_pdf(binary_data)
+
+            elif content_type in ['image/tiff', 'image/jpeg', 'image/png']:
+                # Use AWS Textract for images
+                return self._extract_from_image_textract(binary_data)
+
+            elif content_type in ['text/plain', 'text/html']:
+                # Direct text extraction
+                return binary_data.decode('utf-8', errors='ignore')
+
+            else:
+                logger.warning(f"Unsupported content type for text extraction: {content_type}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error extracting text from binary {binary_id}: {e}")
+            return None
+
+    def _extract_from_pdf(self, pdf_bytes: bytes) -> Optional[str]:
+        """Extract text from PDF using Binary File Agent"""
+        # TODO: Implement PDF extraction using Binary File Agent
+        # For now, return None (will be implemented later)
+        logger.info("         PDF extraction not yet implemented")
+        return None
+
+    def _extract_from_image_textract(self, image_bytes: bytes) -> Optional[str]:
+        """Extract text from image using AWS Textract"""
+        try:
+            # Check if image needs conversion (TIFF to PNG)
+            if self._is_tiff(image_bytes):
+                logger.info("         Converting TIFF to PNG for Textract...")
+                from PIL import Image
+                import io
+
+                tiff_image = Image.open(io.BytesIO(image_bytes))
+                png_buffer = io.BytesIO()
+                tiff_image.save(png_buffer, format='PNG')
+                image_bytes = png_buffer.getvalue()
+
+            # Call AWS Textract
+            import boto3
+            session = boto3.Session(profile_name='radiant-prod', region_name='us-east-1')
+            textract_client = session.client('textract')
+
+            response = textract_client.detect_document_text(
+                Document={'Bytes': image_bytes}
+            )
+
+            # Extract text from blocks
+            lines = []
+            for block in response.get('Blocks', []):
+                if block['BlockType'] == 'LINE':
+                    lines.append(block.get('Text', ''))
+
+            return '\n'.join(lines)
+
+        except Exception as e:
+            logger.error(f"Textract extraction error: {e}")
+            return None
+
+    def _is_tiff(self, image_bytes: bytes) -> bool:
+        """Check if image bytes are TIFF format"""
+        # TIFF magic numbers: II (little-endian) or MM (big-endian)
+        return (image_bytes[:2] == b'II' or image_bytes[:2] == b'MM')
 
     def run(self) -> Dict[str, Any]:
         """Execute full iterative timeline abstraction workflow"""
