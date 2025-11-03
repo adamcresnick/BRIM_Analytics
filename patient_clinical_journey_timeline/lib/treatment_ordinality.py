@@ -235,7 +235,8 @@ class TreatmentOrdinalityProcessor:
         # Find key milestone events
         first_surgery = None
         first_progression = None
-        for event in sorted(self.timeline_events, key=lambda x: x.get('event_date', '')):
+        # Null-safe sorting: None values go to end
+        for event in sorted(self.timeline_events, key=lambda x: (x.get('event_date') is None, x.get('event_date', ''))):
             if event.get('event_type') == 'surgery' and not first_surgery:
                 first_surgery = event
             if event.get('diagnosis_interpretation') == 'progression' and not first_progression:
