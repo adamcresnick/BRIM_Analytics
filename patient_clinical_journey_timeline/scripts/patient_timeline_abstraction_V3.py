@@ -64,6 +64,15 @@ except ImportError as e:
     logger.warning(f"Could not import agents: {e}")
     AGENTS_AVAILABLE = False
 
+# V4.1: Import tumor location and institution tracking
+try:
+    from lib.tumor_location_extractor import TumorLocationExtractor
+    from lib.institution_tracker import InstitutionTracker
+    V41_FEATURES_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import V4.1 features: {e}")
+    V41_FEATURES_AVAILABLE = False
+
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
@@ -241,6 +250,19 @@ class PatientTimelineAbstractor:
                 self.binary_agent = None
         else:
             logger.warning("⚠️  Phase 4 (binary extraction) will be skipped - Ollama not available")
+
+        # V4.1: Initialize location and institution extractors
+        self.location_extractor = None
+        self.institution_tracker = None
+        if V41_FEATURES_AVAILABLE:
+            try:
+                self.location_extractor = TumorLocationExtractor()
+                self.institution_tracker = InstitutionTracker(primary_institution="Children's Hospital of Philadelphia")
+                logger.info("✅ V4.1 features initialized (location + institution tracking)")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize V4.1 features: {e}")
+                self.location_extractor = None
+                self.institution_tracker = None
 
         # Load WHO 2021 classification AFTER agents are initialized (needed for dynamic classification)
         self.who_2021_classification = self._load_who_classification()
