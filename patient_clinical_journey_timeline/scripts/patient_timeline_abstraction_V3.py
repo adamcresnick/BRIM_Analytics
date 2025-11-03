@@ -3535,10 +3535,8 @@ INSTRUCTIONS:
                     if existing_eor_feature and isinstance(existing_eor_feature, dict):
                         # MULTI-SOURCE SCENARIO: We have EOR from another source already
                         # Add this as a second source
-                        feature = FeatureObject(
-                            value=existing_eor_feature['value'],
-                            sources=existing_eor_feature.get('sources', [])
-                        )
+                        # Use from_dict() to properly reconstruct SourceRecord objects
+                        feature = FeatureObject.from_dict(existing_eor_feature)
                         feature.add_source(
                             source_type=source_type,
                             extracted_value=extracted_eor,
