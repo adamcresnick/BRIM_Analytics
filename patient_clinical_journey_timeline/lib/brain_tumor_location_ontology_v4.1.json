@@ -1,0 +1,589 @@
+{
+  "tumor_location": [
+    {
+      "cbtn_code": 1,
+      "cbtn_label": "Frontal Lobe",
+      "ontology_nodes": [
+        {"id": "UBERON:0001870", "label": "frontal lobe"}
+      ],
+      "preferred_synonyms": [
+        "frontal lobe",
+        "frontal cortex",
+        "prefrontal cortex",
+        "orbitofrontal region",
+        "frontal pole",
+        "dorsolateral prefrontal cortex",
+        "dlpfc",
+        "precentral gyrus",
+        "frontal gyri"
+      ],
+      "notes": "Includes superior, middle, and inferior frontal gyri as well as dorsolateral/orbitofrontal regions and precentral gyrus involvement."
+    },
+    {
+      "cbtn_code": 2,
+      "cbtn_label": "Temporal Lobe",
+      "ontology_nodes": [
+        {"id": "UBERON:0001871", "label": "temporal lobe"}
+      ],
+      "preferred_synonyms": [
+        "temporal lobe",
+        "temporal cortex",
+        "medial temporal lobe",
+        "temporal pole",
+        "temporal region",
+        "mesial temporal lobe",
+        "temporal horn",
+        "temporal gyri"
+      ],
+      "notes": "Covers superior, middle, inferior temporal gyri, medial temporal structures, and temporal horn involvement."
+    },
+    {
+      "cbtn_code": 3,
+      "cbtn_label": "Parietal Lobe",
+      "ontology_nodes": [
+        {"id": "UBERON:0001872", "label": "parietal lobe"}
+      ],
+      "preferred_synonyms": [
+        "parietal lobe",
+        "parietal cortex",
+        "parietal region",
+        "postcentral region",
+        "postcentral gyrus",
+        "parietal lobule"
+      ],
+      "notes": "Includes superior and inferior parietal lobules and postcentral gyrus."
+    },
+    {
+      "cbtn_code": 4,
+      "cbtn_label": "Occipital Lobe",
+      "ontology_nodes": [
+        {"id": "UBERON:0001873", "label": "occipital lobe"}
+      ],
+      "preferred_synonyms": [
+        "occipital lobe",
+        "occipital cortex",
+        "occipital region",
+        "visual cortex",
+        "calcarine cortex",
+        "occipital pole",
+        "calcarine sulcus",
+        "cuneus",
+        "lingual gyrus",
+        "striate cortex",
+        "extrastriate cortex",
+        "occipital horn"
+      ],
+      "notes": "Includes primary and association visual cortices (calcarine sulcus, occipital pole)."
+    },
+    {
+      "cbtn_code": 5,
+      "cbtn_label": "Thalamus",
+      "ontology_nodes": [
+        {"id": "UBERON:0001897", "label": "thalamus"}
+      ],
+      "preferred_synonyms": [
+        "thalamus",
+        "thalamic",
+        "lateral thalamus",
+        "medial thalamus",
+        "thalamic nuclei",
+        "pulvinar",
+        "mediodorsal nucleus",
+        "lateral geniculate nucleus",
+        "medial geniculate nucleus"
+      ],
+      "notes": "Central relay nuclei including anterior, medial, and lateral thalamic groups."
+    },
+    {
+      "cbtn_code": 6,
+      "cbtn_label": "Ventricles",
+      "ontology_nodes": [
+        {"id": "UBERON:0001956", "label": "lateral ventricle of brain"},
+        {"id": "UBERON:0001957", "label": "third ventricle of brain"},
+        {"id": "UBERON:0001958", "label": "fourth ventricle of brain"}
+      ],
+      "preferred_synonyms": [
+        "ventricle",
+        "intraventricular",
+        "lateral ventricle",
+        "third ventricle",
+        "fourth ventricle",
+        "ventricular system",
+        "ependymal",
+        "foramen of monro",
+        "atrium of lateral ventricle",
+        "ventricular atrium",
+        "trigone",
+        "occipital horn",
+        "temporal horn",
+        "cerebral aqueduct",
+        "ventricular roof"
+      ],
+      "notes": "Covers ventricular system; record specific ventricle (lateral/third/fourth) in metadata when available."
+    },
+    {
+      "cbtn_code": 7,
+      "cbtn_label": "Suprasellar/Hypothalamic/Pituitary",
+      "ontology_nodes": [
+        {"id": "UBERON:0002315", "label": "suprasellar region"},
+        {"id": "UBERON:0001898", "label": "hypothalamus"},
+        {"id": "UBERON:0000007", "label": "pituitary gland"}
+      ],
+      "preferred_synonyms": [
+        "suprasellar",
+        "hypothalamic",
+        "pituitary",
+        "infundibulum",
+        "pituitary stalk",
+        "sellar",
+        "suprasellar cistern",
+        "hypothalamic region",
+        "tuber cinereum",
+        "parasellar",
+        "hypophyseal"
+      ],
+      "notes": "Composite region; capture specific substructure (hypothalamus, pituitary, infundibulum) when mentioned."
+    },
+    {
+      "cbtn_code": 8,
+      "cbtn_label": "Cerebellum/Posterior Fossa",
+      "ontology_nodes": [
+        {"id": "UBERON:0002037", "label": "cerebellum"},
+        {"id": "UBERON:0002303", "label": "posterior cranial fossa"}
+      ],
+      "preferred_synonyms": [
+        "cerebellum",
+        "posterior fossa",
+        "cerebellar vermis",
+        "cerebellar hemisphere",
+        "cerebellopontine angle",
+        "cerebellar tonsil",
+        "cpa region",
+        "flocculus",
+        "nodulus",
+        "fastigium",
+        "cerebellar peduncle",
+        "foramen magnum",
+        "vermian",
+        "posterior fossa cistern"
+      ],
+      "notes": "Includes midline vermis, cerebellar hemispheres, cerebellopontine angle (CPA) lesions, and tonsillar region."
+    },
+    {
+      "cbtn_code": 9,
+      "cbtn_label": "Brain Stem-Medulla",
+      "ontology_nodes": [
+        {"id": "UBERON:0001899", "label": "medulla oblongata"}
+      ],
+      "preferred_synonyms": [
+        "medulla",
+        "medulla oblongata",
+        "lower brainstem",
+        "bulbar",
+        "medullary",
+        "medullary pyramid",
+        "medullary olive",
+        "obex",
+        "bulbo-spinal"
+      ],
+      "notes": "Inferior brainstem; includes cervicomedullary junction."
+    },
+    {
+      "cbtn_code": 10,
+      "cbtn_label": "Brain Stem- Midbrain/Tectum",
+      "ontology_nodes": [
+        {"id": "UBERON:0001891", "label": "midbrain"},
+        {"id": "UBERON:0002420", "label": "tectum"}
+      ],
+      "preferred_synonyms": [
+        "midbrain",
+        "mesencephalon",
+        "tectal",
+        "quadrigeminal plate",
+        "tectal plate",
+        "periaqueductal region",
+        "cerebral peduncle"
+      ],
+      "notes": "Includes tectal plate lesions and midbrain tegmentum."
+    },
+    {
+      "cbtn_code": 11,
+      "cbtn_label": "Brain Stem- Pons",
+      "ontology_nodes": [
+        {"id": "UBERON:0001893", "label": "pons"}
+      ],
+      "preferred_synonyms": [
+        "pons",
+        "pontine",
+        "basilar pons",
+        "pontine tegmentum",
+        "pontine region",
+        "pontine base",
+        "pontomedullary",
+        "pontomesencephalic"
+      ],
+      "notes": "Mid-brainstem structures including basilar and tegmental regions."
+    },
+    {
+      "cbtn_code": 12,
+      "cbtn_label": "Spinal Cord- Cervical",
+      "ontology_nodes": [
+        {"id": "UBERON:0002274", "label": "cervical spinal cord"}
+      ],
+      "preferred_synonyms": [
+        "cervical spine",
+        "cervical cord",
+        "upper spinal cord",
+        "c1-c7",
+        "c-spine",
+        "cervical canal"
+      ],
+      "notes": "Includes cervicomedullary junction and upper spinal levels."
+    },
+    {
+      "cbtn_code": 13,
+      "cbtn_label": "Spinal Cord- Thoracic",
+      "ontology_nodes": [
+        {"id": "UBERON:0002275", "label": "thoracic spinal cord"}
+      ],
+      "preferred_synonyms": [
+        "thoracic spine",
+        "thoracic cord",
+        "mid spinal cord",
+        "t-spine",
+        "t-spinal cord",
+        "thoracic canal"
+      ],
+      "notes": "Thoracic cord segments T1–T12."
+    },
+    {
+      "cbtn_code": 14,
+      "cbtn_label": "Spinal Cord- Lumbar/Thecal Sac",
+      "ontology_nodes": [
+        {"id": "UBERON:0002276", "label": "lumbar spinal cord"},
+        {"id": "UBERON:0002039", "label": "thecal sac"}
+      ],
+      "preferred_synonyms": [
+        "lumbar spine",
+        "lumbar cord",
+        "cauda equina",
+        "conus medullaris",
+        "thecal sac",
+        "l-spine",
+        "lumbosacral",
+        "sacral canal",
+        "filum terminale"
+      ],
+      "notes": "Includes lumbosacral region, conus medullaris, and cauda equina."
+    },
+    {
+      "cbtn_code": 15,
+      "cbtn_label": "Optic Pathway",
+      "ontology_nodes": [
+        {"id": "UBERON:0002421", "label": "optic pathway"}
+      ],
+      "preferred_synonyms": [
+        "optic pathway",
+        "optic chiasm",
+        "optic tract",
+        "optic nerve",
+        "optic radiation",
+        "optic apparatus",
+        "optic nerve sheath",
+        "chiasmal"
+      ],
+      "notes": "Any component of the visual pathway (nerve, chiasm, tract, radiations)."
+    },
+    {
+      "cbtn_code": 16,
+      "cbtn_label": "Cranial Nerves NOS",
+      "ontology_nodes": [
+        {"id": "UBERON:0001683", "label": "cranial nerve"}
+      ],
+      "preferred_synonyms": [
+        "cranial nerve",
+        "cranial nerve root",
+        "trigeminal nerve",
+        "facial nerve",
+        "vestibulocochlear nerve",
+        "cranial nerves",
+        "cn",
+        "cn iii",
+        "cn iv",
+        "cn v",
+        "cn vi",
+        "cn vii",
+        "cn viii",
+        "cn ix",
+        "cn x",
+        "cn xi",
+        "cn xii",
+        "oculomotor nerve",
+        "trochlear nerve",
+        "trigeminal nerve",
+        "abducens nerve",
+        "facial nerve",
+        "vestibular nerve",
+        "cochlear nerve",
+        "glossopharyngeal nerve",
+        "vagus nerve",
+        "spinal accessory nerve",
+        "hypoglossal nerve",
+        "vestibular schwannoma region"
+      ],
+      "notes": "Use when specific nerve not mentioned; capture CN number in metadata if available."
+    },
+    {
+      "cbtn_code": 17,
+      "cbtn_label": "Other locations NOS",
+      "ontology_nodes": [],
+      "preferred_synonyms": [],
+      "notes": "Retain raw mention for future ontology expansion."
+    },
+    {
+      "cbtn_code": 18,
+      "cbtn_label": "Spine NOS",
+      "ontology_nodes": [
+        {"id": "UBERON:0001021", "label": "spinal column"}
+      ],
+      "preferred_synonyms": [
+        "spine",
+        "vertebral column",
+        "spinal canal",
+        "vertebral canal",
+        "spinal axis"
+      ],
+      "notes": "Use when spinal level unspecified; capture specific segments if mentioned."
+    },
+    {
+      "cbtn_code": 19,
+      "cbtn_label": "Pineal Gland",
+      "ontology_nodes": [
+        {"id": "UBERON:0001911", "label": "pineal gland"}
+      ],
+      "preferred_synonyms": [
+        "pineal gland",
+        "pineal region",
+        "epiphysis"
+      ],
+      "notes": ""
+    },
+    {
+      "cbtn_code": 20,
+      "cbtn_label": "Basal Ganglia",
+      "ontology_nodes": [
+        {"id": "UBERON:0002435", "label": "basal ganglion"}
+      ],
+      "preferred_synonyms": [
+        "basal ganglia",
+        "striatum",
+        "lentiform nucleus",
+        "globus pallidus",
+        "putamen",
+        "caudate",
+        "lenticular nucleus",
+        "neostriatum",
+        "caudate head",
+        "caudate tail",
+        "subthalamic nucleus"
+      ],
+      "notes": "Covers striatal structures."
+    },
+    {
+      "cbtn_code": 21,
+      "cbtn_label": "Hippocampus",
+      "ontology_nodes": [
+        {"id": "UBERON:0001954", "label": "hippocampus"}
+      ],
+      "preferred_synonyms": [
+        "hippocampus",
+        "hippocampal",
+        "dentate gyrus",
+        "ammon's horn",
+        "hippocampal formation",
+        "hippocampal head",
+        "hippocampal body",
+        "hippocampal tail",
+        "parahippocampal gyrus",
+        "uncus",
+        "mesial temporal sclerosis"
+      ],
+      "notes": "Mesial temporal structure including dentate gyrus and cornu ammonis."
+    },
+    {
+      "cbtn_code": 22,
+      "cbtn_label": "Meninges/Dura",
+      "ontology_nodes": [
+        {"id": "UBERON:0001950", "label": "meninx"},
+        {"id": "UBERON:0002384", "label": "dura mater"}
+      ],
+      "preferred_synonyms": [
+        "meninges",
+        "dura",
+        "dural",
+        "leptomeningeal",
+        "arachnoid",
+        "pia",
+        "falx",
+        "falx cerebri",
+        "tentorium",
+        "tentorial",
+        "parasagittal",
+        "calvarial dura",
+        "meningeal"
+      ],
+      "notes": "Capture dural-based lesions; note layer when specified."
+    },
+    {
+      "cbtn_code": 23,
+      "cbtn_label": "Skull",
+      "ontology_nodes": [
+        {"id": "UBERON:0003128", "label": "skull"}
+      ],
+      "preferred_synonyms": [
+        "skull",
+        "calvarium",
+        "cranial bone",
+        "cranial vault",
+        "skull base",
+        "frontal bone",
+        "parietal bone",
+        "temporal bone",
+        "occipital bone"
+      ],
+      "notes": "Osseous lesions."
+    },
+    {
+      "cbtn_code": 24,
+      "cbtn_label": "Unavailable",
+      "ontology_nodes": [],
+      "preferred_synonyms": [],
+      "notes": "Location not documented."
+    },
+    {
+      "cbtn_code": 25,
+      "cbtn_label": "Corpus Callosum",
+      "ontology_nodes": [
+        {"id": "UBERON:0002336", "label": "corpus callosum"}
+      ],
+      "preferred_synonyms": [
+        "corpus callosum",
+        "callosal",
+        "genu of corpus callosum",
+        "body of corpus callosum",
+        "splenium of corpus callosum",
+        "genu",
+        "splenium",
+        "rostrum of corpus callosum",
+        "interhemispheric commissure"
+      ],
+      "notes": "Major white matter tract connecting cerebral hemispheres. Often involved in butterfly glioblastomas."
+    },
+    {
+      "cbtn_code": 26,
+      "cbtn_label": "Aqueduct of Sylvius",
+      "ontology_nodes": [
+        {"id": "UBERON:0002290", "label": "cerebral aqueduct"}
+      ],
+      "preferred_synonyms": [
+        "aqueduct of sylvius",
+        "cerebral aqueduct",
+        "sylvian aqueduct",
+        "aqueductal",
+        "periaqueductal",
+        "aqueduct stenosis"
+      ],
+      "notes": "Narrow channel connecting third and fourth ventricles. Stenosis causes hydrocephalus. Already partially covered in CBTN code 6 (ventricles) but deserves specific code for tectal gliomas."
+    },
+    {
+      "cbtn_code": 27,
+      "cbtn_label": "Cavernous Sinus",
+      "ontology_nodes": [
+        {"id": "UBERON:0003712", "label": "cavernous sinus"}
+      ],
+      "preferred_synonyms": [
+        "cavernous sinus",
+        "parasellar",
+        "parasellar region",
+        "cavernous",
+        "lateral sellar"
+      ],
+      "notes": "Venous sinus lateral to sella turcica. Contains cranial nerves III, IV, V1, V2, VI. Often invaded by pituitary adenomas or meningiomas."
+    },
+    {
+      "cbtn_code": 28,
+      "cbtn_label": "Cisterna Magna",
+      "ontology_nodes": [
+        {"id": "UBERON:0004682", "label": "cisterna magna"}
+      ],
+      "preferred_synonyms": [
+        "cisterna magna",
+        "cerebellomedullary cistern",
+        "posterior cistern",
+        "cistern"
+      ],
+      "notes": "CSF cistern between cerebellum and medulla. Anatomical landmark for posterior fossa tumors."
+    },
+    {
+      "cbtn_code": 29,
+      "cbtn_label": "Cerebral Spinal Axis (Disseminated)",
+      "ontology_nodes": [
+        {"id": "UBERON:0001017", "label": "central nervous system"}
+      ],
+      "preferred_synonyms": [
+        "cerebral spinal access",
+        "cerebrospinal axis",
+        "cns disseminated",
+        "leptomeningeal dissemination",
+        "drop metastases",
+        "spinal drop mets",
+        "neuraxis dissemination"
+      ],
+      "notes": "Use when tumor has disseminated throughout CNS. Common in medulloblastoma, germinoma, ependymoma. Record specific sites separately."
+    },
+    {
+      "cbtn_code": 30,
+      "cbtn_label": "Convexity",
+      "ontology_nodes": [
+        {"id": "UBERON:0002737", "label": "cerebral hemisphere"}
+      ],
+      "preferred_synonyms": [
+        "convexity",
+        "cerebral convexity",
+        "hemispheric convexity",
+        "cortical surface",
+        "superficial cortex"
+      ],
+      "notes": "Outer curved surface of cerebral hemispheres. Common site for extraaxial lesions (meningiomas). Distinguish from lobe-specific involvement."
+    },
+    {
+      "cbtn_code": 31,
+      "cbtn_label": "Dorsal Exophytic Brainstem",
+      "ontology_nodes": [
+        {"id": "UBERON:0002308", "label": "brainstem"}
+      ],
+      "preferred_synonyms": [
+        "dorsal exophytic brainstem",
+        "dorsal exophytic",
+        "exophytic brainstem",
+        "dorsally exophytic",
+        "fourth ventricular exophytic"
+      ],
+      "notes": "Brainstem gliomas with exophytic growth into fourth ventricle. Better prognosis than infiltrative diffuse midline glioma. Potentially resectable."
+    },
+    {
+      "cbtn_code": 32,
+      "cbtn_label": "Brainstem NOS",
+      "ontology_nodes": [
+        {"id": "UBERON:0002308", "label": "brainstem"}
+      ],
+      "preferred_synonyms": [
+        "brainstem",
+        "brain stem",
+        "brainstem nos",
+        "infratentorial brain stem"
+      ],
+      "notes": "Use when brainstem involved but specific region (pons/midbrain/medulla) not specified. Prefer specific codes (9, 10, 11) when possible."
+    }
+  ]
+}
