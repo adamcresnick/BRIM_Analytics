@@ -92,7 +92,7 @@ class WHOReferenceTriage:
         age = stage1_findings.get('patient_age_at_diagnosis')
         markers = {m.get('marker_name'): m for m in stage1_findings.get('molecular_markers', [])}
         histology = stage1_findings.get('histology_findings', [])
-        location = stage1_findings.get('tumor_location', '').lower()
+        location = (stage1_findings.get('tumor_location') or '').lower()
 
         logger.info(f"🔍 WHO Triage: age={age}, markers={list(markers.keys())}, location={location}")
 
