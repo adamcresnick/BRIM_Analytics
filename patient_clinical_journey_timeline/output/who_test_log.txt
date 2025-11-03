@@ -1,0 +1,118 @@
+2025-11-02 12:11:23,417 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:11:23,872 - botocore.tokens - INFO - SSO Token refresh succeeded
+2025-11-02 12:11:24,757 - __main__ - INFO - AWS SSO token for 'radiant-prod' is valid
+2025-11-02 12:11:24,767 - __main__ - INFO - ✅ Loaded WHO classification from cache for eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83
+2025-11-02 12:11:24,767 - __main__ - INFO -    Diagnosis: Astrocytoma, IDH-mutant, CNS WHO grade 3
+2025-11-02 12:11:24,767 - __main__ - INFO -    Classification date: 2025-10-30
+2025-11-02 12:11:24,767 - __main__ - INFO -    Method: manual_analysis
+2025-11-02 12:11:24,803 - __main__ - INFO - ✅ MedGemma (gemma2:27b) is available via Ollama
+2025-11-02 12:11:25,220 - agents.binary_file_agent - INFO - BinaryFileAgent initialized: s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/
+2025-11-02 12:11:25,220 - agents.binary_file_agent - INFO -   ✅ AWS Textract enabled for TIFF/image extraction
+2025-11-02 12:11:25,220 - __main__ - INFO - ✅ MedGemma and BinaryFile agents initialized
+2025-11-02 12:11:25,220 - __main__ - INFO - Initialized abstractor for eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83
+2025-11-02 12:11:25,220 - __main__ - INFO -   WHO 2021: Astrocytoma, IDH-mutant, CNS WHO grade 3
+================================================================================
+PATIENT TIMELINE ABSTRACTION: eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83
+================================================================================
+WHO 2021 Diagnosis: Astrocytoma, IDH-mutant, CNS WHO grade 3
+================================================================================
+
+PHASE 1: LOAD STRUCTURED DATA FROM ATHENA VIEWS
+--------------------------------------------------------------------------------
+  Loading pathology...2025-11-02 12:11:25,470 - botocore.tokens - INFO - Loading cached SSO token for radiant
+ ✅ 21675 records
+  Loading procedures...2025-11-02 12:12:13,595 - botocore.tokens - INFO - Loading cached SSO token for radiant
+ ✅ 3 records
+  Loading chemotherapy...2025-11-02 12:12:23,346 - botocore.tokens - INFO - Loading cached SSO token for radiant
+ ✅ 26 records
+  Loading radiation...2025-11-02 12:16:08,533 - botocore.tokens - INFO - Loading cached SSO token for radiant
+ ✅ 2 records
+  Loading imaging...2025-11-02 12:17:10,163 - botocore.tokens - INFO - Loading cached SSO token for radiant
+ ✅ 15 records
+  Loading visits...2025-11-02 12:17:16,791 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:17:21,396 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:17:28,159 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:17:39,799 - __main__ - INFO - Found radiation document et.iSybe2pXj6PQe3t6Z0AVnS86AHXFYtuJ0vkFCrUnY3 for radiation on 2018-04-25
+2025-11-02 12:17:39,935 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:17:51,528 - __main__ - INFO - Found radiation document eAg2mRxH6ymfWdd2pdpgJUCTouqTKsjjAFFtJ0bs2mbK8at.ZJmmLpNdfLRHIB4GG8nPURppuHWPGe-ACFmLk3en3T8gKvc3pqVmkBVIcM-83 for radiation on 2018-08-24
+2025-11-02 12:17:51,666 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:17:55,902 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:00,248 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:05,569 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:09,688 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:13,893 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:17,107 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:20,515 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:23,678 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:27,960 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:31,020 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:34,098 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:38,273 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:42,554 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:45,699 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:49,835 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:55,177 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:18:58,303 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:02,462 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:06,749 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:09,830 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:12,968 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:17,093 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:21,216 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:25,433 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:28,518 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:31,616 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:35,694 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:38,876 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:41,998 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:45,050 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:48,116 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:51,177 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:55,281 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:19:59,460 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:02,616 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:06,761 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:10,939 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:14,056 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:17,058 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:21,186 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:29,979 - __main__ - INFO - Document inventory: 1598 total documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   operative_records: 40 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   discharge_summaries: 25 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   progress_notes: 354 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   imaging_reports: 35 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   pathology_reports: 2 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   consultation_notes: 173 documents
+2025-11-02 12:20:29,979 - __main__ - INFO -   other: 969 documents
+2025-11-02 12:20:30,125 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:39,491 - __main__ - INFO - Found content_type text/html for Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz.F672M3
+2025-11-02 12:20:39,491 - agents.binary_file_agent - INFO - Extracting content from Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz.F672M3 (text/html)
+2025-11-02 12:20:39,491 - agents.binary_file_agent - INFO - Streaming from s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz_F672M3
+2025-11-02 12:20:39,496 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:20:40,242 - agents.binary_file_agent - INFO - Successfully extracted 9.0KB from FHIR Binary resource
+2025-11-02 12:20:40,245 - agents.medgemma_agent - INFO - MedGemma extraction attempt 1/3
+2025-11-02 12:20:40,245 - agents.medgemma_agent - INFO - MedGemma prompt length: 5535 chars | preview: CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text or clinical note formatting. ONLY return the JSON object.  You are a medical AI extra
+2025-11-02 12:21:04,234 - agents.medgemma_agent - INFO - Ollama responded in 24.0s | response preview: {   "extent_of_resection": "UNCLEAR",   "percent_resection": null,   "surgeon_assessment": "On removing it, we saw it was filled with tumor.",   "residual_tumor": "yes",   "extraction_confidence": "LO
+2025-11-02 12:21:04,235 - __main__ - INFO - Merged EOR for : UNCLEAR
+2025-11-02 12:21:04,391 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:21:10,723 - __main__ - INFO - Found content_type text/html for Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz.F672M3
+2025-11-02 12:21:10,724 - agents.binary_file_agent - INFO - Extracting content from Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz.F672M3 (text/html)
+2025-11-02 12:21:10,724 - agents.binary_file_agent - INFO - Streaming from s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/eUT4Ihz24X8loyhQhM3WpSnCuZse02Lin-TIlz_F672M3
+2025-11-02 12:21:10,934 - agents.binary_file_agent - INFO - Successfully extracted 9.0KB from FHIR Binary resource
+2025-11-02 12:21:10,938 - agents.medgemma_agent - INFO - MedGemma extraction attempt 1/3
+2025-11-02 12:21:10,938 - agents.medgemma_agent - INFO - MedGemma prompt length: 5547 chars | preview: CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text or clinical note formatting. ONLY return the JSON object.  You are a medical AI extra
+2025-11-02 12:21:25,708 - agents.medgemma_agent - INFO - Ollama responded in 14.8s | response preview: {   "extent_of_resection": "UNCLEAR",   "percent_resection": null,   "surgeon_assessment": "On removing it, we saw it was filled with tumor. We placed a new valve, and then it drained well distally.",
+2025-11-02 12:21:25,709 - __main__ - INFO - Merged EOR for : UNCLEAR
+2025-11-02 12:21:26,165 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:21:33,588 - __main__ - INFO - Found content_type text/rtf for Binary/fGdV5qxurD.yEUgAXzd8dlYPlALt.Z3cV5S-SpJY5Hr44
+2025-11-02 12:21:33,588 - agents.binary_file_agent - INFO - Extracting content from Binary/fGdV5qxurD.yEUgAXzd8dlYPlALt.Z3cV5S-SpJY5Hr44 (text/rtf)
+2025-11-02 12:21:33,588 - agents.binary_file_agent - INFO - Streaming from s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/fGdV5qxurD_yEUgAXzd8dlYPlALt_Z3cV5S-SpJY5Hr44
+2025-11-02 12:21:33,787 - agents.binary_file_agent - ERROR - Error streaming from S3: An error occurred (404) when calling the HeadObject operation: Not Found
+2025-11-02 12:21:33,787 - __main__ - WARNING - Error extracting text from Binary/fGdV5qxurD.yEUgAXzd8dlYPlALt.Z3cV5S-SpJY5Hr44: Failed to stream from S3
+2025-11-02 12:21:33,931 - botocore.tokens - INFO - Loading cached SSO token for radiant
+2025-11-02 12:21:41,283 - __main__ - INFO - Found content_type text/rtf for Binary/fXLuketL2LH-2JH38J7G9LhxKVuiZ75V-sQePIRMYOl84
+2025-11-02 12:21:41,283 - agents.binary_file_agent - INFO - Extracting content from Binary/fXLuketL2LH-2JH38J7G9LhxKVuiZ75V-sQePIRMYOl84 (text/rtf)
+2025-11-02 12:21:41,283 - agents.binary_file_agent - INFO - Streaming from s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/fXLuketL2LH-2JH38J7G9LhxKVuiZ75V-sQePIRMYOl84
+2025-11-02 12:21:41,395 - agents.binary_file_agent - ERROR - Error streaming from S3: An error occurred (404) when calling the HeadObject operation: Not Found
+2025-11-02 12:21:41,395 - __main__ - WARNING - Error extracting text from Binary/fXLuketL2LH-2JH38J7G9LhxKVuiZ75V-sQePIRMYOl84: Failed to stream from S3
+2025-11-02 12:21:41,564 - botocore.tokens - INFO - Loading cached SSO token for radiant

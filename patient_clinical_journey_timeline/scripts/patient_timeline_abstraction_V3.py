@@ -2052,6 +2052,7 @@ Return ONLY the JSON object, no additional text.
 
         if gap_type == 'missing_eor':
             # TEMPORAL + TYPE APPROACH: No keyword filtering for surgery gaps
+            # UPDATED PRIORITY: Post-op imaging moved to Priority #2 for objective volumetric assessment
 
             # Priority 1: Operative records (ALL - temporal filtering will narrow)
             operative_records = inventory.get('operative_records', [])
@@ -2063,33 +2064,34 @@ Return ONLY the JSON object, no additional text.
                     **doc
                 })
 
-            # Priority 2: Discharge summaries (ALL - temporal filtering will narrow)
-            discharge_summaries = inventory.get('discharge_summaries', [])
-            print(f"       🔍 Priority 2: Adding ALL {len(discharge_summaries)} discharge_summaries (no keyword filter)")
-            for doc in discharge_summaries:
+            # Priority 2: Post-op imaging reports (MOVED UP from Priority 4)
+            # Check structured schema (v_imaging.report_conclusion) first, then fallback to binary
+            imaging_reports = inventory.get('imaging_reports', [])
+            print(f"       🔍 Priority 2: Adding ALL {len(imaging_reports)} imaging_reports (objective EOR assessment)")
+            for doc in imaging_reports:
                 candidates.append({
                     'priority': 2,
+                    'source_type': 'postop_imaging',
+                    **doc
+                })
+
+            # Priority 3: Discharge summaries (ALL - temporal filtering will narrow)
+            discharge_summaries = inventory.get('discharge_summaries', [])
+            print(f"       🔍 Priority 3: Adding ALL {len(discharge_summaries)} discharge_summaries (no keyword filter)")
+            for doc in discharge_summaries:
+                candidates.append({
+                    'priority': 3,
                     'source_type': 'discharge_summary',
                     **doc
                 })
 
-            # Priority 3: Progress notes (ALL - temporal filtering will narrow)
+            # Priority 4: Progress notes (ALL - temporal filtering will narrow)
             progress_notes = inventory.get('progress_notes', [])
-            print(f"       🔍 Priority 3: Adding ALL {len(progress_notes)} progress_notes (no keyword filter)")
+            print(f"       🔍 Priority 4: Adding ALL {len(progress_notes)} progress_notes (no keyword filter)")
             for doc in progress_notes:
                 candidates.append({
-                    'priority': 3,
-                    'source_type': 'progress_note',
-                    **doc
-                })
-
-            # Priority 4: Post-op imaging reports (ALL - temporal filtering will narrow)
-            imaging_reports = inventory.get('imaging_reports', [])
-            print(f"       🔍 Priority 4: Adding ALL {len(imaging_reports)} imaging_reports (no keyword filter)")
-            for doc in imaging_reports:
-                candidates.append({
                     'priority': 4,
-                    'source_type': 'postop_imaging',
+                    'source_type': 'progress_note',
                     **doc
                 })
 
@@ -2719,10 +2721,18 @@ FIELD-SPECIFIC INSTRUCTIONS:
 
 3. **surgeon_assessment**: Extract the surgeon's EXACT words describing the resection. Look for phrases in the "Procedure Description" or "Impression" sections.
 
-4. **residual_tumor**: Based on surgeon's assessment or postoperative imaging description:
-   - "yes" = surgeon mentions residual tumor or visible tumor remaining
-   - "no" = surgeon states gross total resection or no visible residual
+4. **residual_tumor**: Based on surgeon's assessment OR post-operative imaging (MRI) description:
+   - "yes" = surgeon mentions residual tumor, visible tumor remaining, OR post-op imaging shows residual enhancement
+   - "no" = surgeon states gross total resection, no visible residual, OR post-op imaging shows no residual enhancement
    - "unclear" = not mentioned or ambiguous
+
+   POST-OPERATIVE IMAGING TERMINOLOGY (if document is imaging report):
+   - "Minimal residual enhancement" → residual_tumor = "yes", likely NTR or STR
+   - "No residual enhancement" → residual_tumor = "no", likely GTR or NTR
+   - "Complete resection cavity" → residual_tumor = "no", likely GTR
+   - "Residual tumor" / "persistent enhancement" → residual_tumor = "yes"
+   - "Decreased tumor burden" → residual_tumor likely "yes" (compare to pre-op)
+   - "Volumetric analysis: X% reduction" → Use to estimate percent_resection
 
 INTERPRETATION GUIDE FOR AMBIGUOUS LANGUAGE:
 - "Complete resection" → GTR
@@ -3262,14 +3272,75 @@ INSTRUCTIONS:
         """
         Integrate MedGemma extraction results into timeline events
 
+        CRITICAL FIX: Handles date mismatches by creating NEW events when extracted dates
+        don't match gap event_date (e.g., TIFF from external institution with different dates)
+
         Args:
             gap: The gap that was filled
             extraction_data: The extracted data from MedGemma
         """
-        # Find the corresponding timeline event and enrich it
         event_date = gap.get('event_date')
         gap_type = gap.get('gap_type')
 
+        # Special handling for radiation: Check for date mismatch
+        if gap_type in ['missing_radiation_dose', 'missing_radiation_details']:
+            extracted_start = extraction_data.get('date_at_radiation_start')
+            extracted_stop = extraction_data.get('date_at_radiation_stop')
+
+            # DATE MISMATCH DETECTION: If extracted dates don't match gap event_date,
+            # this is a NEW radiation course (e.g., from external institution TIFF)
+            if extracted_start and extracted_start != event_date:
+                logger.warning(f"⚠️  DATE MISMATCH: Gap event_date={event_date}, but extracted date_at_radiation_start={extracted_start}")
+                logger.warning(f"   Creating NEW radiation event for {extracted_start} (likely external institution)")
+
+                # Create NEW radiation_start event
+                new_event = {
+                    'event_type': 'radiation_start',
+                    'event_date': extracted_start,
+                    'stage': 4,
+                    'source': 'medgemma_extracted_from_binary',
+                    'description': f"Radiation started (external institution): {extraction_data.get('total_dose_cgy', 'unknown')} cGy",
+                    'total_dose_cgy': (
+                        extraction_data.get('total_dose_cgy') or
+                        extraction_data.get('radiation_focal_or_boost_dose') or
+                        extraction_data.get('completed_radiation_focal_or_boost_dose') or
+                        extraction_data.get('completed_craniospinal_or_whole_ventricular_radiation_dose')
+                    ),
+                    'radiation_type': extraction_data.get('radiation_type'),
+                    'radiation_fields': extraction_data.get('radiation_fields'),
+                    'episode_start_date': extracted_start,
+                    'episode_end_date': extracted_stop,
+                    'medgemma_extraction': extraction_data,
+                    'event_sequence': len(self.timeline_events) + 1
+                }
+                self.timeline_events.append(new_event)
+                logger.info(f"✅ Created NEW radiation_start event for {extracted_start}")
+
+                # Create NEW radiation_end event if stop date available
+                if extracted_stop:
+                    new_end_event = {
+                        'event_type': 'radiation_end',
+                        'event_date': extracted_stop,
+                        'stage': 4,
+                        'source': 'medgemma_extracted_from_binary',
+                        'description': f"Radiation completed (external institution): {new_event['total_dose_cgy']} cGy",
+                        'total_dose_cgy': new_event['total_dose_cgy'],
+                        'event_sequence': len(self.timeline_events) + 1
+                    }
+                    self.timeline_events.append(new_end_event)
+                    logger.info(f"✅ Created NEW radiation_end event for {extracted_stop}")
+
+                # Re-sort timeline by date
+                self.timeline_events.sort(key=lambda x: (x.get('event_date') is None, x.get('event_date', '')))
+
+                # Update sequence numbers
+                for i, event in enumerate(self.timeline_events, 1):
+                    event['event_sequence'] = i
+
+                return  # Done - created new events, don't merge into existing
+
+        # NORMAL PATH: Find matching event and merge data
+        event_merged = False
         for event in self.timeline_events:
             if event.get('event_date') == event_date:
                 # Add medgemma_extraction field to event
@@ -3278,6 +3349,7 @@ INSTRUCTIONS:
                     event['report_conclusion'] = extraction_data.get('radiologist_impression', '')
                     event['medgemma_extraction'] = extraction_data
                     logger.info(f"Merged imaging conclusion for {event_date}: {event.get('report_conclusion', '')[:100]}")
+                    event_merged = True
                     break
                 elif gap_type == 'missing_eor' and event.get('event_type') == 'surgery':
                     # Merge EOR-specific fields
@@ -3285,6 +3357,7 @@ INSTRUCTIONS:
                     event['tumor_site'] = extraction_data.get('tumor_site')
                     event['medgemma_extraction'] = extraction_data
                     logger.info(f"Merged EOR for {event_date}: {event.get('extent_of_resection')}")
+                    event_merged = True
                     break
                 elif gap_type in ['missing_radiation_dose', 'missing_radiation_details'] and 'radiation' in event.get('event_type', ''):
                     # Merge radiation-specific fields - handle both start and end events
@@ -3301,6 +3374,7 @@ INSTRUCTIONS:
                     event['date_at_radiation_stop'] = extraction_data.get('date_at_radiation_stop')
                     event['medgemma_extraction'] = extraction_data
                     logger.info(f"Merged radiation details for {event_date}: {event.get('total_dose_cgy')} cGy")
+                    event_merged = True
                     break
                 elif gap_type == 'missing_chemotherapy_details' and 'chemotherapy' in event.get('event_type', ''):
                     # Merge chemotherapy-specific fields
@@ -3309,7 +3383,11 @@ INSTRUCTIONS:
                     event['chemotherapy_intent'] = extraction_data.get('chemotherapy_intent')
                     event['medgemma_extraction'] = extraction_data
                     logger.info(f"Merged chemotherapy details for {event_date}: {event.get('chemotherapy_agents')}")
+                    event_merged = True
                     break
+
+        if not event_merged:
+            logger.warning(f"⚠️  No matching event found for gap_type={gap_type}, event_date={event_date}")
 
     def _phase4_5_assess_extraction_completeness(self):
         """

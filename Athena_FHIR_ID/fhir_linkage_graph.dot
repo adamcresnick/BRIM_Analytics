@@ -1,0 +1,132 @@
+digraph FHIR_Crosswalk {
+    rankdir=LR;
+    graph [splines=true, overlap=false, fontname="Helvetica"];
+    node [shape=record, style="rounded,filled", fillcolor=lightgoldenrodyellow, fontname="Helvetica"];
+    edge [fontname="Helvetica", fontsize=10];
+
+    // Define Parent FHIR Resources
+    patient [fillcolor=lightblue];
+    encounter [fillcolor=lightblue];
+    observation [fillcolor=lightblue];
+    procedure [fillcolor=lightblue];
+    medication_request [fillcolor=lightblue];
+    diagnostic_report [fillcolor=lightblue];
+    condition [fillcolor=lightblue];
+    allergy_intolerance [fillcolor=lightblue];
+    appointment [fillcolor=lightblue];
+    care_plan [fillcolor=lightblue];
+    immunization [fillcolor=lightblue];
+    service_request [fillcolor=lightblue];
+    specimen [fillcolor=lightblue];
+
+    // --- Patient --- 
+
+    // --- AllergyIntolerance ---
+    allergy_intolerance -> patient [label="patient_reference"];
+    allergy_intolerance -> encounter [label="encounter_reference"];
+    subgraph cluster_allergy_intolerance {
+        label = "allergy_intolerance children";
+        style=dotted;
+        allergy_intolerance_category;
+        allergy_intolerance_reaction;
+        allergy_intolerance_category -> allergy_intolerance [label="allergy_intolerance_id", style=dashed, arrowhead=oinv];
+        allergy_intolerance_reaction -> allergy_intolerance [label="allergy_intolerance_id", style=dashed, arrowhead=oinv];
+    }
+
+    // --- Appointment ---
+    subgraph cluster_appointment {
+        label = "appointment children";
+        style=dotted;
+        appointment_participant;
+        appointment_reason_reference;
+        appointment_participant -> appointment [label="appointment_id", style=dashed, arrowhead=oinv];
+        appointment_reason_reference -> appointment [label="appointment_id", style=dashed, arrowhead=oinv];
+        appointment_participant -> patient [label="participant_actor_reference"];
+        appointment_reason_reference -> condition [label="reason_reference_reference"];
+    }
+
+    // --- CarePlan ---
+    care_plan -> patient [label="subject_reference"];
+    care_plan -> encounter [label="encounter_reference"];
+    subgraph cluster_care_plan {
+        label = "care_plan children";
+        style=dotted;
+        care_plan_activity;
+        care_plan_activity -> care_plan [label="care_plan_id", style=dashed, arrowhead=oinv];
+        care_plan_activity -> medication_request [label="activity_reference_reference"];
+    }
+
+    // --- Condition ---
+    condition -> patient [label="subject_reference"];
+    condition -> encounter [label="encounter_reference"];
+
+    // --- DiagnosticReport ---
+    diagnostic_report -> patient [label="subject_reference"];
+    diagnostic_report -> encounter [label="encounter_reference"];
+    subgraph cluster_diagnostic_report {
+        label = "diagnostic_report children";
+        style=dotted;
+        diagnostic_report_result;
+        diagnostic_report_specimen;
+        diagnostic_report_result -> diagnostic_report [label="diagnostic_report_id", style=dashed, arrowhead=oinv];
+        diagnostic_report_specimen -> diagnostic_report [label="diagnostic_report_id", style=dashed, arrowhead=oinv];
+        diagnostic_report_result -> observation [label="result_reference"];
+        diagnostic_report_specimen -> specimen [label="specimen_reference"];
+    }
+
+    // --- Encounter ---
+    encounter -> patient [label="subject_reference"];
+    subgraph cluster_encounter {
+        label = "encounter children";
+        style=dotted;
+        encounter_diagnosis;
+        encounter_diagnosis -> encounter [label="encounter_id", style=dashed, arrowhead=oinv];
+        encounter_diagnosis -> condition [label="diagnosis_condition_reference"];
+    }
+
+    // --- Immunization ---
+    immunization -> patient [label="patient_reference"];
+    immunization -> encounter [label="encounter_reference"];
+
+    // --- MedicationRequest ---
+    medication_request -> patient [label="subject_reference"];
+    medication_request -> encounter [label="encounter_reference"];
+    medication_request -> medication [label="medication_reference_reference"];
+
+    // --- Observation ---
+    observation -> patient [label="subject_reference"];
+    observation -> encounter [label="encounter_reference"];
+    observation -> specimen [label="specimen_reference"];
+    subgraph cluster_observation {
+        label = "observation children";
+        style=dotted;
+        observation_component;
+        observation_component -> observation [label="observation_id", style=dashed, arrowhead=oinv];
+    }
+
+    // --- Procedure ---
+    procedure -> patient [label="subject_reference"];
+    procedure -> encounter [label="encounter_reference"];
+    subgraph cluster_procedure {
+        label = "procedure children";
+        style=dotted;
+        procedure_report;
+        procedure_report -> procedure [label="procedure_id", style=dashed, arrowhead=oinv];
+        procedure_report -> diagnostic_report [label="report_reference"];
+    }
+
+    // --- ServiceRequest ---
+    service_request -> patient [label="subject_reference"];
+    service_request -> encounter [label="encounter_reference"];
+    subgraph cluster_service_request {
+        label = "service_request children";
+        style=dotted;
+        service_request_specimen;
+        service_request_specimen -> service_request [label="service_request_id", style=dashed, arrowhead=oinv];
+        service_request_specimen -> specimen [label="specimen_reference"];
+    }
+
+    // --- Specimen ---
+    specimen -> patient [label="subject_reference"];
+
+}
