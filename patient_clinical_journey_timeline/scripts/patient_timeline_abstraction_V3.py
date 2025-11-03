@@ -1553,6 +1553,22 @@ Return ONLY the JSON object, no additional text.
                 row_count=len(self.structured_data[source_name])
             )
 
+        # V4.1: Extract institution from procedures and imaging (Steps 3 & 4)
+        if self.institution_tracker:
+            # Extract institution from procedures
+            for proc_dict in self.structured_data.get('procedures', []):
+                institution_feature = self.institution_tracker.extract_from_procedure(proc_dict)
+                if institution_feature:
+                    proc_dict['v41_institution'] = institution_feature.to_dict()
+
+            # Extract institution from imaging
+            for img_dict in self.structured_data.get('imaging', []):
+                institution_feature = self.institution_tracker.extract_from_imaging(img_dict)
+                if institution_feature:
+                    img_dict['v41_institution'] = institution_feature.to_dict()
+
+            logger.info("✅ V4.1: Institution tracking added to structured data")
+
         print(f"  ✅ Loaded structured data from 6 views:")
         for source, data in self.structured_data.items():
             print(f"     {source}: {len(data)} records")
