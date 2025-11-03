@@ -1627,7 +1627,14 @@ Return ONLY the JSON object, no additional text.
         print("  Stage 2: Procedures (surgeries)")
         surgery_count = 0
         for record in self.structured_data.get('procedures', []):
-            events.append({
+            # V4.1 STEP 7: Create clinical_features dict for surgery events
+            clinical_features = {}
+            if record.get('v41_institution'):
+                clinical_features['institution'] = record['v41_institution']
+            if record.get('v41_tumor_location'):
+                clinical_features['tumor_location'] = record['v41_tumor_location']
+
+            event = {
                 'event_type': 'surgery',
                 'event_date': record.get('proc_performed_date_time', '').split()[0] if record.get('proc_performed_date_time') else '',
                 'stage': 2,
@@ -1635,7 +1642,12 @@ Return ONLY the JSON object, no additional text.
                 'description': record.get('proc_code_text'),
                 'surgery_type': record.get('surgery_type'),
                 'proc_performed_datetime': record.get('proc_performed_date_time')
-            })
+            }
+            # Add clinical_features if not empty
+            if clinical_features:
+                event['clinical_features'] = clinical_features
+
+            events.append(event)
             surgery_count += 1
         print(f"    ✅ Added {surgery_count} surgical procedures")
 
@@ -1718,7 +1730,14 @@ Return ONLY the JSON object, no additional text.
         print("  Stage 5: Imaging studies")
         imaging_count = 0
         for record in self.structured_data.get('imaging', []):
-            events.append({
+            # V4.1 STEP 7: Create clinical_features dict for imaging events
+            clinical_features = {}
+            if record.get('v41_institution'):
+                clinical_features['institution'] = record['v41_institution']
+            if record.get('v41_tumor_location'):
+                clinical_features['tumor_location'] = record['v41_tumor_location']
+
+            event = {
                 'event_type': 'imaging',
                 'event_date': record.get('imaging_date'),
                 'stage': 5,
@@ -1728,7 +1747,12 @@ Return ONLY the JSON object, no additional text.
                 'report_conclusion': record.get('report_conclusion'),
                 'result_diagnostic_report_id': record.get('result_diagnostic_report_id'),
                 'diagnostic_report_id': record.get('diagnostic_report_id')
-            })
+            }
+            # Add clinical_features if not empty
+            if clinical_features:
+                event['clinical_features'] = clinical_features
+
+            events.append(event)
             imaging_count += 1
         print(f"    ✅ Added {imaging_count} imaging studies")
 
@@ -2535,6 +2559,48 @@ Return ONLY the JSON object, no additional text.
                     continue
             else:
                 print(f"    ✅ Document validated: {validation_reason}")
+
+            # V4.1 STEP 5: Extract tumor location from imaging reports
+            if self.location_extractor and extracted_text and gap['gap_type'] == 'imaging_conclusion':
+                try:
+                    diagnostic_report_id = gap.get('diagnostic_report_id')
+                    location_feature = self.location_extractor.extract_location_from_text(
+                        text=extracted_text,
+                        source_type="imaging",
+                        source_id=diagnostic_report_id,
+                        progression_status=None  # Could be enhanced with temporal logic
+                    )
+                    if location_feature:
+                        logger.info(f"📍 Extracted location from imaging report: {location_feature.locations}")
+                        # Store location with imaging event
+                        for img in self.timeline_events:
+                            if img.get('event_type') == 'imaging' and img.get('diagnostic_report_id') == diagnostic_report_id:
+                                if 'v41_tumor_location' not in img:
+                                    img['v41_tumor_location'] = location_feature.to_dict()
+                                break
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not extract location from imaging report: {e}")
+
+            # V4.1 STEP 6: Extract tumor location from operative notes
+            if self.location_extractor and extracted_text and gap['gap_type'] == 'missing_eor':
+                try:
+                    event_date = gap.get('event_date')
+                    location_feature = self.location_extractor.extract_location_from_text(
+                        text=extracted_text,
+                        source_type="operative_note",
+                        source_id=gap.get('medgemma_target'),
+                        progression_status=None  # Could be enhanced with temporal logic
+                    )
+                    if location_feature:
+                        logger.info(f"📍 Extracted location from operative note: {location_feature.locations}")
+                        # Store location with surgery event
+                        for event in self.timeline_events:
+                            if event.get('event_type') == 'surgery' and event.get('event_date') == event_date:
+                                if 'v41_tumor_location' not in event:
+                                    event['v41_tumor_location'] = location_feature.to_dict()
+                                break
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not extract location from operative note: {e}")
 
             # STEP 3: Call MedGemma (Agent 2)
             try:
