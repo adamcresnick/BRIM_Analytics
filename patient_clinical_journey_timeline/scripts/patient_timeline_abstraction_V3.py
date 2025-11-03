@@ -2525,6 +2525,73 @@ REMINDER: Return ONLY valid JSON matching the exact schema above. No other text.
 
                 print(f"    ✅ MedGemma extraction complete (confidence: {result.extracted_data.get('extraction_confidence', 'UNKNOWN')})")
 
+                # CRITICAL: Check for date mismatches BEFORE validation (for TIFF external institution data)
+                # This must happen early so incomplete extractions still create new events
+                if gap['gap_type'] in ['missing_radiation_dose', 'missing_radiation_details']:
+                    extracted_start = result.extracted_data.get('date_at_radiation_start')
+                    extracted_stop = result.extracted_data.get('date_at_radiation_stop')
+                    event_date = gap.get('event_date')
+
+                    if extracted_start and extracted_start != event_date:
+                        logger.warning(f"⚠️  DATE MISMATCH: Gap event_date={event_date}, but extracted date_at_radiation_start={extracted_start}")
+                        logger.warning(f"   Creating NEW radiation event for {extracted_start} (likely external institution)")
+
+                        # Create NEW radiation_start event (even if data incomplete)
+                        new_event = {
+                            'event_type': 'radiation_start',
+                            'event_date': extracted_start,
+                            'stage': 4,
+                            'source': 'medgemma_extracted_from_binary',
+                            'description': f"Radiation started (external institution)",
+                            'total_dose_cgy': (
+                                result.extracted_data.get('total_dose_cgy') or
+                                result.extracted_data.get('radiation_focal_or_boost_dose') or
+                                result.extracted_data.get('completed_radiation_focal_or_boost_dose') or
+                                result.extracted_data.get('completed_craniospinal_or_whole_ventricular_radiation_dose')
+                            ),
+                            'radiation_type': result.extracted_data.get('radiation_type'),
+                            'radiation_fields': result.extracted_data.get('radiation_fields'),
+                            'episode_start_date': extracted_start,
+                            'episode_end_date': extracted_stop,
+                            'medgemma_extraction': result.extracted_data,
+                            'event_sequence': len(self.timeline_events) + 1
+                        }
+                        self.timeline_events.append(new_event)
+                        logger.info(f"✅ Created NEW radiation_start event for {extracted_start}")
+
+                        # Create NEW radiation_end event if stop date available
+                        if extracted_stop:
+                            new_end_event = {
+                                'event_type': 'radiation_end',
+                                'event_date': extracted_stop,
+                                'stage': 4,
+                                'source': 'medgemma_extracted_from_binary',
+                                'description': f"Radiation completed (external institution)",
+                                'total_dose_cgy': new_event['total_dose_cgy'],
+                                'event_sequence': len(self.timeline_events) + 1
+                            }
+                            self.timeline_events.append(new_end_event)
+                            logger.info(f"✅ Created NEW radiation_end event for {extracted_stop}")
+
+                        # Re-sort timeline by date
+                        self.timeline_events.sort(key=lambda x: (x.get('event_date') is None, x.get('event_date', '')))
+
+                        # Update sequence numbers
+                        for i, event in enumerate(self.timeline_events, 1):
+                            event['event_sequence'] = i
+
+                        # Mark gap as resolved and skip validation
+                        gap['status'] = 'RESOLVED_DATE_MISMATCH'
+                        gap['extraction_result'] = result.extracted_data
+                        gap['note'] = f"Date mismatch detected: created new event for {extracted_start}"
+                        self.binary_extractions.append({
+                            'gap': gap,
+                            'extraction_result': result.extracted_data,
+                            'extraction_confidence': result.extracted_data.get('extraction_confidence', 'UNKNOWN')
+                        })
+                        extracted_count += 1
+                        continue  # Skip validation - already handled
+
                 # STEP 4: AGENT 1 VALIDATION - Validate extraction result
                 is_valid_result, missing_fields = self._validate_extraction_result(result.extracted_data, gap['gap_type'])
 
@@ -3333,62 +3400,8 @@ INSTRUCTIONS:
         event_date = gap.get('event_date')
         gap_type = gap.get('gap_type')
 
-        # Special handling for radiation: Check for date mismatch
-        if gap_type in ['missing_radiation_dose', 'missing_radiation_details']:
-            extracted_start = extraction_data.get('date_at_radiation_start')
-            extracted_stop = extraction_data.get('date_at_radiation_stop')
-
-            # DATE MISMATCH DETECTION: If extracted dates don't match gap event_date,
-            # this is a NEW radiation course (e.g., from external institution TIFF)
-            if extracted_start and extracted_start != event_date:
-                logger.warning(f"⚠️  DATE MISMATCH: Gap event_date={event_date}, but extracted date_at_radiation_start={extracted_start}")
-                logger.warning(f"   Creating NEW radiation event for {extracted_start} (likely external institution)")
-
-                # Create NEW radiation_start event
-                new_event = {
-                    'event_type': 'radiation_start',
-                    'event_date': extracted_start,
-                    'stage': 4,
-                    'source': 'medgemma_extracted_from_binary',
-                    'description': f"Radiation started (external institution): {extraction_data.get('total_dose_cgy', 'unknown')} cGy",
-                    'total_dose_cgy': (
-                        extraction_data.get('total_dose_cgy') or
-                        extraction_data.get('radiation_focal_or_boost_dose') or
-                        extraction_data.get('completed_radiation_focal_or_boost_dose') or
-                        extraction_data.get('completed_craniospinal_or_whole_ventricular_radiation_dose')
-                    ),
-                    'radiation_type': extraction_data.get('radiation_type'),
-                    'radiation_fields': extraction_data.get('radiation_fields'),
-                    'episode_start_date': extracted_start,
-                    'episode_end_date': extracted_stop,
-                    'medgemma_extraction': extraction_data,
-                    'event_sequence': len(self.timeline_events) + 1
-                }
-                self.timeline_events.append(new_event)
-                logger.info(f"✅ Created NEW radiation_start event for {extracted_start}")
-
-                # Create NEW radiation_end event if stop date available
-                if extracted_stop:
-                    new_end_event = {
-                        'event_type': 'radiation_end',
-                        'event_date': extracted_stop,
-                        'stage': 4,
-                        'source': 'medgemma_extracted_from_binary',
-                        'description': f"Radiation completed (external institution): {new_event['total_dose_cgy']} cGy",
-                        'total_dose_cgy': new_event['total_dose_cgy'],
-                        'event_sequence': len(self.timeline_events) + 1
-                    }
-                    self.timeline_events.append(new_end_event)
-                    logger.info(f"✅ Created NEW radiation_end event for {extracted_stop}")
-
-                # Re-sort timeline by date
-                self.timeline_events.sort(key=lambda x: (x.get('event_date') is None, x.get('event_date', '')))
-
-                # Update sequence numbers
-                for i, event in enumerate(self.timeline_events, 1):
-                    event['event_sequence'] = i
-
-                return  # Done - created new events, don't merge into existing
+        # NOTE: Date mismatch detection now happens earlier in Phase 4 (before validation)
+        # This function only handles NORMAL merging of data into existing events
 
         # NORMAL PATH: Find matching event and merge data
         event_merged = False
