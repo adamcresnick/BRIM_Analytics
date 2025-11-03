@@ -689,6 +689,8 @@ Extract ALL molecular markers, histology findings, and diagnoses into this JSON 
         This applies WHO CNS5 diagnostic criteria using the full WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md
         which includes episodic context for multi-surgery longitudinal tracking.
 
+        V4 ENHANCEMENT: Uses two-stage selective WHO reference retrieval (5-10x context savings)
+
         Args:
             extracted_findings: Dict from Stage 1 with molecular_markers, histology_findings, etc.
 
@@ -703,14 +705,25 @@ Extract ALL molecular markers, histology findings, and diagnoses into this JSON 
         with open(WHO_2021_DIAGNOSTIC_AGENT_PROMPT_PATH, 'r') as f:
             diagnostic_agent_prompt = f.read()
 
-        # Load WHO 2021 reference (classification tables and criteria)
+        # V4: Use selective WHO reference retrieval based on patient triage
         if not WHO_2021_REFERENCE_PATH.exists():
             logger.error(f"WHO reference not found at {WHO_2021_REFERENCE_PATH}")
             return {"confidence": "insufficient", "error": "WHO reference not found"}
 
-        with open(WHO_2021_REFERENCE_PATH, 'r') as f:
-            # Load first 20,000 chars (classification tables, diagnostic criteria, grading logic)
-            who_reference = f.read()[:20000]
+        # Import WHO triage module
+        from lib.who_reference_triage import WHOReferenceTriage
+
+        # Initialize triage and identify relevant section
+        triage = WHOReferenceTriage(WHO_2021_REFERENCE_PATH)
+        section_key = triage.identify_relevant_section(extracted_findings)
+
+        # Load only preamble + relevant section (5-10x less context)
+        who_reference = triage.load_selective_reference(section_key)
+
+        # Log context savings
+        savings = triage.estimate_context_savings(section_key)
+        logger.info(f"   📖 WHO Triage: {section_key} → {savings['selective_total_lines']} lines "
+                   f"(saved {savings['savings_percentage']}% vs full reference)")
 
         # Format findings for mapping
         findings_json = json.dumps(extracted_findings, indent=2)
@@ -1213,6 +1226,10 @@ Return ONLY the JSON object, no additional text.
         self._phase2_construct_initial_timeline()
         print()
 
+        # PHASE 2.5: Assign treatment ordinality (V4 Enhancement)
+        self._phase2_5_assign_treatment_ordinality()
+        print()
+
         # PHASE 3: Identify extraction gaps
         print("PHASE 3: IDENTIFY GAPS REQUIRING BINARY EXTRACTION")
         print("-"*80)
@@ -1712,6 +1729,40 @@ Return ONLY the JSON object, no additional text.
         print(f"     Stage 4: {radiation_episode_count} radiation episodes")
         print(f"     Stage 5: {imaging_count} imaging studies")
         print(f"     Stage 6: {pathology_count} pathology records")
+
+    def _phase2_5_assign_treatment_ordinality(self):
+        """
+        Phase 2.5: Assign treatment ordinality labels (V4 ENHANCEMENT)
+
+        This post-processes the timeline to assign:
+          - Surgery ordinality (surgery #1, #2, #3)
+          - Chemotherapy lines (1st-line, 2nd-line, 3rd-line)
+          - Radiation courses (course #1, #2, #3)
+          - Timing context (upfront, adjuvant, salvage)
+
+        Enables queries like: "What was the first-line chemotherapy?"
+        """
+        print("\n" + "="*80)
+        print("PHASE 2.5: ASSIGN TREATMENT ORDINALITY (V4 Enhancement)")
+        print("="*80)
+
+        # Import treatment ordinality module
+        from lib.treatment_ordinality import TreatmentOrdinalityProcessor
+
+        # Initialize processor with current timeline
+        processor = TreatmentOrdinalityProcessor(self.timeline_events)
+
+        # Assign all ordinality labels
+        processor.assign_all_ordinality()
+
+        # Generate and log summary
+        summary = processor.get_treatment_summary()
+        print(f"\n  ✅ Treatment ordinality assigned:")
+        print(f"     Total surgeries: {summary['total_surgeries']}")
+        print(f"     Chemotherapy lines: {summary['total_chemo_lines']}")
+        print(f"     Radiation courses: {summary['total_radiation_courses']}")
+        print(f"     Timing context: {summary['upfront_treatments']} upfront, "
+              f"{summary['adjuvant_treatments']} adjuvant, {summary['salvage_treatments']} salvage")
 
     def _phase3_identify_extraction_gaps(self):
         """Phase 3: Identify gaps in structured data requiring binary extraction"""
