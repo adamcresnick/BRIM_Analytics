@@ -3416,11 +3416,102 @@ INSTRUCTIONS:
                     event_merged = True
                     break
                 elif gap_type == 'missing_eor' and event.get('event_type') == 'surgery':
-                    # Merge EOR-specific fields
-                    event['extent_of_resection'] = extraction_data.get('extent_of_resection')
+                    # V4 ENHANCEMENT: Multi-source EOR tracking with adjudication
+                    from lib.feature_object import FeatureObject
+                    from lib.eor_orchestrator import EOROrchestrator
+
+                    # Determine source type from gap metadata
+                    source_type = gap.get('extraction_source', 'operative_record')  # From alternative doc tracking
+                    extracted_eor = extraction_data.get('extent_of_resection')
+                    confidence = extraction_data.get('extraction_confidence', 'UNKNOWN')
+
+                    # Check if we already have EOR data (from previous extraction)
+                    existing_eor_feature = event.get('extent_of_resection_v4')
+
+                    if existing_eor_feature and isinstance(existing_eor_feature, dict):
+                        # MULTI-SOURCE SCENARIO: We have EOR from another source already
+                        # Add this as a second source
+                        feature = FeatureObject(
+                            value=existing_eor_feature['value'],
+                            sources=existing_eor_feature.get('sources', [])
+                        )
+                        feature.add_source(
+                            source_type=source_type,
+                            extracted_value=extracted_eor,
+                            extraction_method='medgemma_llm',
+                            confidence=confidence,
+                            source_id=gap.get('medgemma_target'),
+                            raw_text=extraction_data.get('surgeon_assessment', '')[:200]
+                        )
+
+                        # Check for conflict and adjudicate if needed
+                        if feature.has_conflict():
+                            orchestrator = EOROrchestrator()
+
+                            # Extract EOR values and confidences from sources
+                            sources_by_type = {}
+                            for src in feature.sources:
+                                sources_by_type[src.source_type] = {
+                                    'eor': src.extracted_value,
+                                    'confidence': src.confidence
+                                }
+
+                            operative_note_data = sources_by_type.get('operative_record', {})
+                            postop_imaging_data = sources_by_type.get('postop_imaging', {})
+
+                            if operative_note_data and postop_imaging_data:
+                                # Use orchestrator to adjudicate
+                                adjudicated_eor = orchestrator.adjudicate_eor(
+                                    operative_note_eor=operative_note_data.get('eor'),
+                                    operative_note_confidence=operative_note_data.get('confidence'),
+                                    postop_imaging_eor=postop_imaging_data.get('eor'),
+                                    postop_imaging_confidence=postop_imaging_data.get('confidence'),
+                                    patient_age=self.patient_demographics.get('age'),
+                                    tumor_location=extraction_data.get('tumor_site')
+                                )
+
+                                feature.adjudicate(
+                                    final_value=adjudicated_eor['final_eor'],
+                                    method=adjudicated_eor['method'],
+                                    rationale=adjudicated_eor['rationale'],
+                                    adjudicated_by='eor_orchestrator_v1',
+                                    requires_manual_review=adjudicated_eor['requires_manual_review']
+                                )
+                                logger.info(f"🔀 EOR Adjudication for {event_date}: {adjudicated_eor['final_eor']} (method: {adjudicated_eor['method']})")
+
+                        # Store V4 FeatureObject format
+                        event['extent_of_resection_v4'] = {
+                            'value': feature.value,
+                            'sources': [s.__dict__ for s in feature.sources],
+                            'adjudication': feature.adjudication.__dict__ if feature.adjudication else None
+                        }
+                        # Keep V3 backward compatibility
+                        event['extent_of_resection'] = feature.value
+                    else:
+                        # SINGLE-SOURCE SCENARIO: First EOR extraction for this surgery
+                        feature = FeatureObject.from_single_source(
+                            value=extracted_eor,
+                            source_type=source_type,
+                            extracted_value=extracted_eor,
+                            extraction_method='medgemma_llm',
+                            confidence=confidence,
+                            source_id=gap.get('medgemma_target'),
+                            raw_text=extraction_data.get('surgeon_assessment', '')[:200]
+                        )
+
+                        # Store V4 FeatureObject format
+                        event['extent_of_resection_v4'] = {
+                            'value': feature.value,
+                            'sources': [s.__dict__ for s in feature.sources],
+                            'adjudication': None
+                        }
+                        # Keep V3 backward compatibility
+                        event['extent_of_resection'] = extracted_eor
+
+                    # Always update other fields
                     event['tumor_site'] = extraction_data.get('tumor_site')
                     event['medgemma_extraction'] = extraction_data
-                    logger.info(f"Merged EOR for {event_date}: {event.get('extent_of_resection')}")
+                    logger.info(f"Merged EOR for {event_date}: {event.get('extent_of_resection')} (sources: {len(event['extent_of_resection_v4']['sources'])})")
                     event_merged = True
                     break
                 elif gap_type in ['missing_radiation_dose', 'missing_radiation_details'] and 'radiation' in event.get('event_type', ''):
