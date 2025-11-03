@@ -3479,12 +3479,8 @@ INSTRUCTIONS:
                                 )
                                 logger.info(f"🔀 EOR Adjudication for {event_date}: {adjudicated_eor['final_eor']} (method: {adjudicated_eor['method']})")
 
-                        # Store V4 FeatureObject format
-                        event['extent_of_resection_v4'] = {
-                            'value': feature.value,
-                            'sources': [s.__dict__ for s in feature.sources],
-                            'adjudication': feature.adjudication.__dict__ if feature.adjudication else None
-                        }
+                        # Store V4 FeatureObject format using to_dict() for proper serialization
+                        event['extent_of_resection_v4'] = feature.to_dict()
                         # Keep V3 backward compatibility
                         event['extent_of_resection'] = feature.value
                     else:
@@ -3499,12 +3495,8 @@ INSTRUCTIONS:
                             raw_text=extraction_data.get('surgeon_assessment', '')[:200]
                         )
 
-                        # Store V4 FeatureObject format
-                        event['extent_of_resection_v4'] = {
-                            'value': feature.value,
-                            'sources': [s.__dict__ for s in feature.sources],
-                            'adjudication': None
-                        }
+                        # Store V4 FeatureObject format using to_dict() for proper serialization
+                        event['extent_of_resection_v4'] = feature.to_dict()
                         # Keep V3 backward compatibility
                         event['extent_of_resection'] = extracted_eor
 
