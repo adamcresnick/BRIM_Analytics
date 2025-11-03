@@ -686,8 +686,8 @@ Extract ALL molecular markers, histology findings, and diagnoses into this JSON 
         """
         STAGE 2: Map extracted findings to WHO 2021 CNS tumor classification
 
-        This is a focused mapping task that applies WHO CNS5 diagnostic criteria to
-        the structured findings from Stage 1.
+        This applies WHO CNS5 diagnostic criteria using the full WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md
+        which includes episodic context for multi-surgery longitudinal tracking.
 
         Args:
             extracted_findings: Dict from Stage 1 with molecular_markers, histology_findings, etc.
@@ -695,7 +695,15 @@ Extract ALL molecular markers, histology findings, and diagnoses into this JSON 
         Returns:
             Dict with WHO 2021 classification
         """
-        # Load WHO 2021 reference (focused on classification logic)
+        # Load WHO 2021 Diagnostic Agent Prompt (full episodic context preserved)
+        if not WHO_2021_DIAGNOSTIC_AGENT_PROMPT_PATH.exists():
+            logger.error(f"WHO Diagnostic Agent Prompt not found at {WHO_2021_DIAGNOSTIC_AGENT_PROMPT_PATH}")
+            return {"confidence": "insufficient", "error": "WHO Diagnostic Agent Prompt not found"}
+
+        with open(WHO_2021_DIAGNOSTIC_AGENT_PROMPT_PATH, 'r') as f:
+            diagnostic_agent_prompt = f.read()
+
+        # Load WHO 2021 reference (classification tables and criteria)
         if not WHO_2021_REFERENCE_PATH.exists():
             logger.error(f"WHO reference not found at {WHO_2021_REFERENCE_PATH}")
             return {"confidence": "insufficient", "error": "WHO reference not found"}
@@ -707,31 +715,26 @@ Extract ALL molecular markers, histology findings, and diagnoses into this JSON 
         # Format findings for mapping
         findings_json = json.dumps(extracted_findings, indent=2)
 
-        mapping_prompt = f"""You are a pediatric neuro-oncology expert specializing in WHO 2021 CNS tumor classification.
+        mapping_prompt = f"""{diagnostic_agent_prompt}
 
-**WHO 2021 CNS TUMOR CLASSIFICATION REFERENCE:**
+================================================================================
+WHO 2021 CNS TUMOR CLASSIFICATION REFERENCE
+================================================================================
+
 {who_reference}
 
-**EXTRACTED PATIENT FINDINGS (from Stage 1):**
+================================================================================
+EXTRACTED PATIENT FINDINGS (from Stage 1)
+================================================================================
+
 {findings_json}
 
-**YOUR TASK:**
-Using the WHO 2021 reference above, map the patient's extracted findings to the correct WHO 2021 CNS tumor classification.
+================================================================================
+YOUR TASK
+================================================================================
 
-**CRITICAL RULES:**
-1. **Molecular markers DEFINE the diagnosis** in WHO CNS5 (not just histology)
-2. **Grading overrides:** CDKN2A/B homozygous deletion OR TERT mutation → automatically grade 4
-3. **Pediatric nomenclature:** Avoid "glioblastoma" in pediatric cases, use age-appropriate terms
-4. **IDH status:** IDH-mutant vs IDH-wildtype fundamentally changes classification
-5. **H3 alterations:** H3 K27-altered → Diffuse midline glioma grade 4
-6. **1p/19q codeletion:** Oligodendroglioma, IDH-mutant and 1p/19q-codeleted
-7. **If incomplete molecular data:** Use "NOS" (Not Otherwise Specified) suffix
-
-**APPLY WHO 2021 DIAGNOSTIC LOGIC:**
-- Check molecular markers first (IDH, H3, 1p/19q, BRAF, etc.)
-- Apply grading criteria (consider molecular overrides)
-- Use appropriate nomenclature (pediatric vs adult)
-- Determine CNS WHO grade (1, 2, 3, or 4)
+Using the WHO 2021 reference above and following ALL the guidelines in the diagnostic agent prompt,
+map the patient's extracted findings to the correct WHO 2021 CNS tumor classification.
 
 Return this JSON structure:
 
