@@ -3418,6 +3418,145 @@ Return as structured JSON with confidence levels."""
             print("  ⚠️  Ollama/MedGemma not available - skipping binary extraction")
             return
 
+        # V4.2+ Route to batch or sequential extraction
+        if self.use_batch_extraction:
+            return self._phase4_batch_extraction()
+        else:
+            return self._phase4_sequential_extraction()
+
+    def _phase4_batch_extraction(self):
+        """
+        V4.2+ Enhancement #2: Batch extraction - process multiple gaps per document
+        """
+        print("  📦 Using BATCH extraction mode (V4.2+)")
+
+        # Group gaps by document
+        grouped_gaps = self._group_gaps_by_document(self.extraction_gaps)
+
+        print(f"  📊 Grouped {len(self.extraction_gaps)} gaps into {len(grouped_gaps)} document batches")
+
+        batch_stats = {
+            'total_batches': len(grouped_gaps),
+            'successful_batches': 0,
+            'failed_batches': 0,
+            'gaps_filled': 0,
+            'gaps_failed': 0
+        }
+
+        for doc_key, gaps in grouped_gaps.items():
+            print(f"\n  📄 Batch: {doc_key} ({len(gaps)} gaps)")
+
+            # Parse document type from key
+            doc_type = doc_key.split(':')[0]
+
+            # Find document for this batch
+            document_id = self._find_document_for_batch(doc_key, gaps)
+            if not document_id:
+                print(f"    ❌ No document found")
+                batch_stats['failed_batches'] += 1
+                batch_stats['gaps_failed'] += len(gaps)
+                for gap in gaps:
+                    gap['status'] = 'NO_DOCUMENT_FOUND'
+                continue
+
+            print(f"    ✅ Found document: {document_id}")
+
+            # Fetch document content
+            try:
+                extracted_text = self._fetch_binary_document(document_id)
+                if not extracted_text:
+                    print(f"    ❌ Failed to fetch document")
+                    batch_stats['failed_batches'] += 1
+                    batch_stats['gaps_failed'] += len(gaps)
+                    continue
+                print(f"    ✅ Fetched ({len(extracted_text)} chars)")
+            except Exception as e:
+                print(f"    ❌ Error fetching: {e}")
+                batch_stats['failed_batches'] += 1
+                batch_stats['gaps_failed'] += len(gaps)
+                continue
+
+            # Create batch prompt
+            prompt = self._create_batch_extraction_prompt(gaps, doc_type)
+            full_prompt = f"{prompt}\n\nDOCUMENT TEXT:\n{extracted_text}"
+
+            # Call MedGemma once for all gaps in this batch
+            try:
+                result = self.medgemma_agent.extract(full_prompt, temperature=0.1)
+
+                if not result.success:
+                    print(f"    ❌ MedGemma extraction failed: {result.error}")
+                    batch_stats['failed_batches'] += 1
+                    batch_stats['gaps_failed'] += len(gaps)
+                    continue
+
+                print(f"    ✅ Extracted {len(gaps)} fields in 1 call")
+
+                # Validate batch result
+                all_valid, errors_by_gap = self._validate_batch_extraction_result(
+                    result.extracted_data, gaps
+                )
+
+                if all_valid:
+                    print(f"    ✅ All extractions valid")
+                else:
+                    print(f"    ⚠️  Some validations failed: {len(errors_by_gap)} gaps")
+
+                # Integrate results into timeline
+                for gap in gaps:
+                    gap_type = gap['gap_type']
+
+                    # Check if this gap was successfully extracted
+                    if gap_type in errors_by_gap:
+                        print(f"      ❌ {gap_type}: {errors_by_gap[gap_type]}")
+                        gap['status'] = 'VALIDATION_FAILED'
+                        gap['validation_errors'] = errors_by_gap[gap_type]
+                        batch_stats['gaps_failed'] += 1
+                    else:
+                        # Successful extraction - integrate into timeline
+                        self._integrate_extraction_into_timeline(gap, result.extracted_data)
+                        gap['status'] = 'RESOLVED'
+                        gap['extraction_result'] = result.extracted_data
+                        gap['extraction_source'] = 'batch'
+                        batch_stats['gaps_filled'] += 1
+                        print(f"      ✅ {gap_type}")
+
+                self.binary_extractions.append({
+                    'batch_key': doc_key,
+                    'gaps': [g['gap_type'] for g in gaps],
+                    'extraction_result': result.extracted_data,
+                    'source': 'batch_extraction'
+                })
+
+                batch_stats['successful_batches'] += 1
+
+            except Exception as e:
+                print(f"    ❌ Batch extraction error: {e}")
+                batch_stats['failed_batches'] += 1
+                batch_stats['gaps_failed'] += len(gaps)
+
+        # Report batch statistics
+        print(f"\n  📊 Batch Extraction Summary:")
+        print(f"    Batches processed: {batch_stats['total_batches']}")
+        print(f"    Successful: {batch_stats['successful_batches']}")
+        print(f"    Failed: {batch_stats['failed_batches']}")
+        print(f"    Gaps filled: {batch_stats['gaps_filled']}")
+        print(f"    Gaps failed: {batch_stats['gaps_failed']}")
+
+        if batch_stats['total_batches'] > 0:
+            efficiency = (batch_stats['total_batches'] / len(self.extraction_gaps)) * 100
+            print(f"    Efficiency gain: {100 - efficiency:.0f}% fewer API calls")
+
+        # Store batch stats
+        if hasattr(self, 'validation_stats'):
+            self.validation_stats['batch_extraction_stats'] = batch_stats
+
+    def _phase4_sequential_extraction(self):
+        """
+        Phase 4: Sequential extraction (original method)
+        """
+        print("  🔄 Using SEQUENTIAL extraction mode (legacy)")
+
         # Prioritize gaps (HIGHEST → HIGH → MEDIUM)
         priority_map = {'HIGHEST': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
         prioritized_gaps = sorted(
