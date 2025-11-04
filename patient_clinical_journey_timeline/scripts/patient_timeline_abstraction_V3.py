@@ -241,6 +241,9 @@ class PatientTimelineAbstractor:
         self.max_extractions = max_extractions
         self.force_reclassify = force_reclassify
 
+        # V4.2+ Enhancement #2: Batch extraction mode
+        self.use_batch_extraction = True  # Default to batch mode for efficiency
+
         # Data structures
         self.timeline_events = []
         self.extraction_gaps = []
@@ -2742,6 +2745,172 @@ Return ONLY the JSON object, no additional text.
             logger.info(f"📦 No gaps to batch (0 gaps)")
 
         return grouped
+
+    def _create_batch_extraction_prompt(
+        self,
+        gaps: List[Dict[str, Any]],
+        document_type: str
+    ) -> str:
+        """
+        V4.2+ Enhancement #2: Create multi-gap extraction prompt
+
+        Args:
+            gaps: List of gaps to extract from same document
+            document_type: Type of document (operative_note, radiation_summary, imaging_report)
+
+        Returns:
+            Comprehensive extraction prompt for all gaps
+        """
+        if document_type == 'operative_note':
+            return """You are a medical AI extracting surgical information from an operative note.
+
+Extract ALL of the following information (return null if not found):
+
+OUTPUT SCHEMA (JSON):
+{
+  "extent_of_resection": "GTR" | "NTR" | "STR" | "Biopsy" | null,
+  "surgeon_assessment": "description of resection quality" | null,
+  "tumor_location": "specific anatomical location" | null,
+  "laterality": "Left" | "Right" | "Bilateral" | "Midline" | null,
+  "surgical_approach": "description of surgical approach" | null,
+  "complications": "any intraoperative complications" | null,
+  "estimated_blood_loss_ml": <number> | null,
+  "procedure_duration_minutes": <number> | null,
+  "confidence": {
+    "extent_of_resection": "HIGH" | "MEDIUM" | "LOW",
+    "tumor_location": "HIGH" | "MEDIUM" | "LOW",
+    "laterality": "HIGH" | "MEDIUM" | "LOW"
+  }
+}
+
+IMPORTANT: Extract ALL fields from the operative note. Return null for fields not mentioned."""
+
+        elif document_type == 'radiation_summary':
+            return """You are a medical AI extracting radiation therapy information from a radiation summary.
+
+Extract ALL of the following information (return null if not found):
+
+OUTPUT SCHEMA (JSON):
+{
+  "date_at_radiation_start": "YYYY-MM-DD" | null,
+  "date_at_radiation_stop": "YYYY-MM-DD" | null,
+  "total_dose_cgy": <number in centiGray> | null,
+  "radiation_type": "craniospinal" | "focal" | "boost" | "whole_brain" | "other" | null,
+  "radiation_fields": ["field1", "field2"] | null,
+  "fractions": <number of fractions> | null,
+  "technique": "IMRT" | "3D-CRT" | "Protons" | "VMAT" | "Other" | null,
+  "target_volume": "description of treatment volume" | null,
+  "confidence": {
+    "total_dose_cgy": "HIGH" | "MEDIUM" | "LOW",
+    "radiation_type": "HIGH" | "MEDIUM" | "LOW",
+    "dates": "HIGH" | "MEDIUM" | "LOW"
+  }
+}
+
+IMPORTANT: Extract ALL fields from the radiation summary. Return null for fields not mentioned."""
+
+        elif document_type == 'imaging_report':
+            return """You are a medical AI extracting imaging findings from a radiology report.
+
+Extract ALL of the following information (return null if not found):
+
+OUTPUT SCHEMA (JSON):
+{
+  "tumor_location": "anatomical location" | null,
+  "lesions": [
+    {
+      "lesion_id": "target_1" | "target_2" | "non_target_1",
+      "location": "specific anatomical location",
+      "longest_diameter_mm": <number>,
+      "perpendicular_diameter_mm": <number> | null,
+      "measurement_type": "bidimensional" | "unidimensional" | "volumetric"
+    }
+  ] | null,
+  "rano_assessment": "CR" | "PR" | "SD" | "PD" | "improved" | "stable" | "worse" | null,
+  "enhancement_pattern": "description of enhancement" | null,
+  "mass_effect": true | false | null,
+  "edema_present": true | false | null,
+  "confidence": {
+    "tumor_location": "HIGH" | "MEDIUM" | "LOW",
+    "lesions": "HIGH" | "MEDIUM" | "LOW",
+    "rano_assessment": "HIGH" | "MEDIUM" | "LOW"
+  }
+}
+
+IMPORTANT: Extract ALL fields from the imaging report. Use RANO criteria for assessment. Return null for fields not mentioned."""
+
+        else:
+            return f"""Extract all relevant clinical information from this {document_type} document.
+Return as structured JSON with confidence levels."""
+
+    def _find_document_for_batch(
+        self,
+        doc_key: str,
+        gaps: List[Dict[str, Any]]
+    ) -> Optional[str]:
+        """
+        V4.2+ Enhancement #2: Find document for batch extraction using V2 linkage
+
+        Args:
+            doc_key: Document key from grouping (e.g., 'operative_note:encounter:Enc123')
+            gaps: List of gaps in this batch
+
+        Returns:
+            Binary ID or DocumentReference ID
+        """
+        parts = doc_key.split(':', 2)
+        if len(parts) != 3:
+            return None
+
+        doc_type, resource_type, resource_id = parts
+
+        if doc_type == 'operative_note':
+            if resource_type == 'encounter':
+                return self._find_operative_note_binary_v2(encounter_id=resource_id)
+            elif resource_type == 'procedure':
+                return self._find_operative_note_binary_v2(procedure_fhir_id=resource_id)
+            elif resource_type == 'date':
+                return self._find_operative_note_binary_v2(surgery_date=resource_id)
+
+        elif doc_type == 'radiation_summary':
+            if resource_type == 'encounter':
+                return self._find_radiation_document_v2(encounter_id=resource_id)
+            elif resource_type == 'date':
+                return self._find_radiation_document_v2(radiation_date=resource_id)
+
+        elif doc_type == 'imaging_report':
+            # Imaging reports are already unique per diagnostic_report_id
+            return resource_id
+
+        return None
+
+    def _validate_batch_extraction_result(
+        self,
+        result: Dict[str, Any],
+        gaps: List[Dict[str, Any]]
+    ) -> Tuple[bool, Dict[str, List[str]]]:
+        """
+        V4.2+ Enhancement #2: Validate batch extraction result
+
+        Args:
+            result: Batch extraction result from MedGemma
+            gaps: List of gaps that were requested
+
+        Returns:
+            Tuple of (all_valid: bool, errors_by_gap: Dict[gap_type, List[errors]])
+        """
+        errors_by_gap = {}
+        all_valid = True
+
+        for gap in gaps:
+            gap_type = gap['gap_type']
+            is_valid, errors = self._validate_extraction_result(result, gap_type)
+
+            if not is_valid:
+                errors_by_gap[gap_type] = errors
+                all_valid = False
+
+        return all_valid, errors_by_gap
 
     def _find_radiation_document(self, radiation_date: str) -> Optional[str]:
         """
