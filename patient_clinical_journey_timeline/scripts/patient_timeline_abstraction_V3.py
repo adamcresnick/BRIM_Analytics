@@ -73,6 +73,13 @@ except ImportError as e:
     logger.warning(f"Could not import V4.1 features: {e}")
     V41_FEATURES_AVAILABLE = False
 
+# Import custom JSON encoder for safe serialization of dataclasses
+try:
+    from lib.checkpoint_manager import DataclassJSONEncoder
+except ImportError as e:
+    logger.warning(f"Could not import DataclassJSONEncoder: {e}")
+    DataclassJSONEncoder = None  # Fallback to default str encoder
+
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
@@ -3933,7 +3940,8 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
         safe_patient_id = self.patient_id.replace('/', '_')
         output_file = self.output_dir / f"{safe_patient_id}_timeline_artifact.json"
         with open(output_file, 'w') as f:
-            json.dump(artifact, f, indent=2)
+            # Use custom encoder to handle SourceRecord/Adjudication dataclasses
+            json.dump(artifact, f, indent=2, cls=DataclassJSONEncoder if DataclassJSONEncoder else None)
 
         print(f"  ✅ Artifact saved: {output_file}")
 
