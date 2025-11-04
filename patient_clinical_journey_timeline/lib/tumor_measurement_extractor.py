@@ -244,6 +244,14 @@ CRITICAL: Return ONLY valid JSON. No explanatory text before or after. If no mea
 
             # Parse JSON
             result = json.loads(cleaned)
+
+            # V4.2+: Semantic validation (detect document mismatch)
+            valid, semantic_errors = self._validate_semantic_quality(result)
+            if not valid:
+                logger.warning(f"Semantic validation failed: {semantic_errors}")
+                # Return None to reject the extraction (likely document mismatch)
+                return None
+
             return result
 
         except json.JSONDecodeError as e:
@@ -253,6 +261,77 @@ CRITICAL: Return ONLY valid JSON. No explanatory text before or after. If no mea
         except Exception as e:
             logger.error(f"Error parsing LLM response: {e}")
             return None
+
+    def _validate_semantic_quality(self, result: Dict[str, Any]) -> tuple:
+        """
+        Semantic validation to detect document mismatch (Layer 2 validation)
+
+        Detects when wrong document type sent to extractor (e.g., discharge summary
+        sent to tumor measurement extraction prompt).
+
+        Args:
+            result: Parsed LLM extraction result
+
+        Returns:
+            Tuple of (is_valid: bool, errors: List[str])
+        """
+        errors = []
+
+        # Generic document phrases that should NOT appear in tumor locations
+        generic_phrases = [
+            'discharged', 'discharge', 'follow-up appointment', 'follow up appointment',
+            'medications', 'vital signs', 'laboratory', 'admission',
+            'hospital course', 'admitted to', 'social history', 'family history',
+            'physical exam', 'review of systems', 'allergies', 'prescriptions'
+        ]
+
+        # Check measurements array
+        if 'measurements' in result:
+            measurements = result.get('measurements', [])
+
+            # If we have measurements, validate locations
+            for idx, m in enumerate(measurements):
+                location = str(m.get('location', '')).lower()
+
+                # Check for generic document text in location field
+                for phrase in generic_phrases:
+                    if phrase in location:
+                        errors.append(
+                            f"Measurement {idx} location contains generic document text "
+                            f"('{phrase}'): likely document mismatch"
+                        )
+                        break
+
+                # Check if location is suspiciously long (>200 chars = likely full paragraph)
+                if len(location) > 200:
+                    errors.append(
+                        f"Measurement {idx} location is too long ({len(location)} chars): "
+                        f"likely extracted wrong text"
+                    )
+
+                # Check extracted_from_text for generic phrases
+                extracted = str(m.get('extracted_from_text', '')).lower()
+                if len(extracted) > 50:  # Only check if substantial text
+                    generic_count = sum(1 for phrase in generic_phrases if phrase in extracted)
+                    if generic_count >= 2:
+                        errors.append(
+                            f"Measurement {idx} extracted text contains multiple generic "
+                            f"document phrases: likely document mismatch"
+                        )
+
+        # If overall_assessment exists, check for generic language
+        overall = str(result.get('overall_assessment', '')).lower()
+        if overall:
+            for phrase in generic_phrases:
+                if phrase in overall:
+                    errors.append(
+                        f"Overall assessment contains generic document text ('{phrase}'): "
+                        f"likely document mismatch"
+                    )
+                    break
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
 
     def _attempt_fix_measurement(
         self,

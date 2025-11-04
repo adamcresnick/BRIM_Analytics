@@ -293,5 +293,70 @@ class TestTreatmentResponseExtractor(unittest.TestCase):
         self.assertIsNone(result)
 
 
+    def test_semantic_validation_valid_response(self):
+        """Test semantic validation passes for valid response"""
+        extractor = TreatmentResponseExtractor()
+
+        valid_result = {
+            'response_detected': True,
+            'response_category': 'stable',
+            'qualitative_description': 'No significant interval change',
+            'extracted_from_text': 'stable postoperative changes',
+            'extraction_confidence': 'HIGH'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(valid_result)
+        self.assertTrue(is_valid)
+        self.assertEqual(len(errors), 0)
+
+    def test_semantic_validation_detects_operative_note(self):
+        """Test semantic validation detects operative note document"""
+        extractor = TreatmentResponseExtractor()
+
+        # Simulated operative note sent to response extraction
+        invalid_result = {
+            'response_detected': True,
+            'response_category': 'stable',
+            'qualitative_description': 'procedure performed under anesthesia with incision made',
+            'extracted_from_text': 'operative findings included tumor resection',
+            'extraction_confidence': 'MEDIUM'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertGreater(len(errors), 0)
+
+    def test_semantic_validation_detects_long_description(self):
+        """Test semantic validation detects suspiciously long description"""
+        extractor = TreatmentResponseExtractor()
+
+        invalid_result = {
+            'response_detected': True,
+            'response_category': 'stable',
+            'qualitative_description': 'a' * 550,  # 550 character description (too long)
+            'extracted_from_text': 'stable',
+            'extraction_confidence': 'HIGH'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertIn('too long', errors[0])
+
+    def test_semantic_validation_detects_missing_category(self):
+        """Test semantic validation detects missing category when detected=true"""
+        extractor = TreatmentResponseExtractor()
+
+        invalid_result = {
+            'response_detected': True,
+            # Missing response_category!
+            'qualitative_description': 'stable appearance',
+            'extraction_confidence': 'HIGH'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertIn('no category provided', errors[0])
+
+
 if __name__ == '__main__':
     unittest.main()

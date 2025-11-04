@@ -285,6 +285,14 @@ CRITICAL: Return ONLY valid JSON. No explanatory text before or after.
 
             # Parse JSON
             result = json.loads(cleaned)
+
+            # V4.2+: Semantic validation (detect document mismatch)
+            valid, semantic_errors = self._validate_semantic_quality(result)
+            if not valid:
+                logger.warning(f"Semantic validation failed: {semantic_errors}")
+                # Return None to reject the extraction (likely document mismatch)
+                return None
+
             return result
 
         except json.JSONDecodeError as e:
@@ -294,3 +302,63 @@ CRITICAL: Return ONLY valid JSON. No explanatory text before or after.
         except Exception as e:
             logger.error(f"Error parsing LLM response: {e}")
             return None
+
+    def _validate_semantic_quality(self, result: Dict[str, Any]) -> tuple:
+        """
+        Semantic validation to detect document mismatch (Layer 2 validation)
+
+        Detects when wrong document type sent to extractor (e.g., operative note
+        sent to treatment response extraction prompt instead of imaging report).
+
+        Args:
+            result: Parsed LLM extraction result
+
+        Returns:
+            Tuple of (is_valid: bool, errors: List[str])
+        """
+        errors = []
+
+        # Generic document phrases that should NOT appear in response descriptions
+        generic_phrases = [
+            'discharged', 'discharge', 'follow-up appointment', 'follow up appointment',
+            'medications', 'vital signs', 'laboratory', 'admission',
+            'hospital course', 'admitted to', 'social history', 'family history',
+            'physical exam', 'review of systems', 'allergies', 'prescriptions',
+            'procedure performed', 'incision', 'anesthesia', 'operative findings'
+        ]
+
+        # Check qualitative_description for generic phrases
+        qual_desc = str(result.get('qualitative_description', '')).lower()
+        if len(qual_desc) > 30:  # Only check if substantial text
+            generic_count = sum(1 for phrase in generic_phrases if phrase in qual_desc)
+            if generic_count >= 2:
+                errors.append(
+                    f"Qualitative description contains multiple generic document phrases: "
+                    f"likely document mismatch (wrong document type)"
+                )
+
+        # Check if description is suspiciously long (>500 chars = likely full paragraph)
+        if len(qual_desc) > 500:
+            errors.append(
+                f"Qualitative description is too long ({len(qual_desc)} chars): "
+                f"likely extracted wrong text"
+            )
+
+        # Check extracted_from_text for generic phrases
+        extracted = str(result.get('extracted_from_text', '')).lower()
+        if len(extracted) > 50:  # Only check if substantial text
+            generic_count = sum(1 for phrase in generic_phrases if phrase in extracted)
+            if generic_count >= 2:
+                errors.append(
+                    f"Extracted text contains multiple generic document phrases: "
+                    f"likely document mismatch"
+                )
+
+        # Check if response_category is present when response_detected=true
+        if result.get('response_detected') and not result.get('response_category'):
+            errors.append(
+                "Response detected but no category provided: invalid extraction"
+            )
+
+        is_valid = len(errors) == 0
+        return is_valid, errors

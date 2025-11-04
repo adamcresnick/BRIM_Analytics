@@ -362,5 +362,80 @@ class TestExtractedMeasurementIntegration(unittest.TestCase):
         self.assertEqual(parsed[0]['cross_sectional_area_mm2'], 600.0)
 
 
+    def test_semantic_validation_valid_measurements(self):
+        """Test semantic validation passes for valid measurements"""
+        extractor = TumorMeasurementExtractor()
+
+        valid_result = {
+            'measurements': [
+                {
+                    'lesion_id': 'target_1',
+                    'location': 'right frontal lobe',
+                    'measurement_type': 'bidimensional',
+                    'extracted_from_text': 'enhancing mass in right frontal lobe measuring 3.1 x 2.4 cm'
+                }
+            ],
+            'extraction_confidence': 'HIGH'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(valid_result)
+        self.assertTrue(is_valid)
+        self.assertEqual(len(errors), 0)
+
+    def test_semantic_validation_detects_discharge_summary(self):
+        """Test semantic validation detects discharge summary document"""
+        extractor = TumorMeasurementExtractor()
+
+        # Simulated discharge summary sent to measurement extraction
+        invalid_result = {
+            'measurements': [
+                {
+                    'lesion_id': 'target_1',
+                    'location': 'patient was discharged home with medications and follow-up appointment',
+                    'measurement_type': 'qualitative',
+                    'extracted_from_text': 'vital signs stable, patient discharged'
+                }
+            ],
+            'extraction_confidence': 'MEDIUM'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertGreater(len(errors), 0)
+
+    def test_semantic_validation_detects_long_location(self):
+        """Test semantic validation detects suspiciously long location"""
+        extractor = TumorMeasurementExtractor()
+
+        invalid_result = {
+            'measurements': [
+                {
+                    'lesion_id': 'target_1',
+                    'location': 'a' * 250,  # 250 character location (too long)
+                    'measurement_type': 'bidimensional',
+                    'extracted_from_text': 'tumor measuring 3 x 2 cm'
+                }
+            ]
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertIn('too long', errors[0])
+
+    def test_semantic_validation_detects_generic_overall_assessment(self):
+        """Test semantic validation detects generic document text in overall assessment"""
+        extractor = TumorMeasurementExtractor()
+
+        invalid_result = {
+            'measurements': [],
+            'overall_assessment': 'patient discharged with medications and follow-up',
+            'extraction_confidence': 'LOW'
+        }
+
+        is_valid, errors = extractor._validate_semantic_quality(invalid_result)
+        self.assertFalse(is_valid)
+        self.assertGreater(len(errors), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
