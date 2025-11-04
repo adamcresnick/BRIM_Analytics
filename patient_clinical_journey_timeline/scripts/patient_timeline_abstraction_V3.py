@@ -73,6 +73,14 @@ except ImportError as e:
     logger.warning(f"Could not import V4.1 features: {e}")
     V41_FEATURES_AVAILABLE = False
 
+# V4.2: Import tumor measurement extractor
+try:
+    from lib.tumor_measurement_extractor import TumorMeasurementExtractor
+    V42_MEASUREMENT_EXTRACTION_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import V4.2 measurement extractor: {e}")
+    V42_MEASUREMENT_EXTRACTION_AVAILABLE = False
+
 # Import custom JSON encoder for safe serialization of dataclasses
 try:
     from lib.checkpoint_manager import DataclassJSONEncoder
@@ -273,6 +281,16 @@ class PatientTimelineAbstractor:
                 logger.warning(f"⚠️  Could not initialize V4.1 features: {e}")
                 self.location_extractor = None
                 self.institution_tracker = None
+
+        # V4.2: Initialize tumor measurement extractor
+        self.measurement_extractor = None
+        if V42_MEASUREMENT_EXTRACTION_AVAILABLE and self.medgemma_agent:
+            try:
+                self.measurement_extractor = TumorMeasurementExtractor(medgemma_agent=self.medgemma_agent)
+                logger.info("✅ V4.2 measurement extractor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize V4.2 measurement extractor: {e}")
+                self.measurement_extractor = None
 
         # Load WHO 2021 classification AFTER agents are initialized (needed for dynamic classification)
         self.who_2021_classification = self._load_who_classification()
@@ -2906,6 +2924,37 @@ Return ONLY the JSON object, no additional text.
                                 break
                 except Exception as e:
                     logger.warning(f"⚠️  Could not extract location from imaging report: {e}")
+
+            # V4.2 STEP 5.5: Extract tumor measurements from imaging reports
+            if self.measurement_extractor and extracted_text and gap['gap_type'] == 'imaging_conclusion':
+                try:
+                    diagnostic_report_id = gap.get('diagnostic_report_id')
+                    imaging_modality = gap.get('imaging_modality', 'Unknown')
+
+                    logger.info(f"📏 Extracting tumor measurements from imaging report...")
+                    measurements = self.measurement_extractor.extract_measurements(
+                        report_text=extracted_text,
+                        source_id=diagnostic_report_id,
+                        imaging_modality=imaging_modality
+                    )
+
+                    if measurements:
+                        logger.info(f"📏 Extracted {len(measurements)} tumor measurements")
+                        # Convert TumorMeasurement objects to dicts for JSON serialization
+                        measurements_dicts = [m.to_dict() for m in measurements]
+
+                        # Store measurements with imaging event
+                        for img in self.timeline_events:
+                            if img.get('event_type') == 'imaging' and img.get('diagnostic_report_id') == diagnostic_report_id:
+                                if 'tumor_measurements' not in img:
+                                    img['tumor_measurements'] = measurements_dicts
+                                    logger.info(f"   Added {len(measurements)} measurements to imaging event on {img.get('event_date')}")
+                                break
+                    else:
+                        logger.debug("   No measurements extracted from imaging report")
+
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not extract measurements from imaging report: {e}")
 
             # V4.1 STEP 6: Extract tumor location from operative notes
             if self.location_extractor and extracted_text and gap['gap_type'] == 'missing_eor':
