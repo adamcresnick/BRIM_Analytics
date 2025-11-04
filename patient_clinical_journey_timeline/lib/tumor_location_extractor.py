@@ -113,7 +113,7 @@ class TumorLocationExtractor:
 
         self.ontology_path = ontology_path
         self.normalizer = BrainTumorLocationNormalizer(
-            json_path="/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/utils/brain_tumor_location_ontology.json"
+            mapping_path=Path("/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/utils/brain_tumor_location_ontology.json")
         )
 
         # Load extended ontology for new codes 25-32
