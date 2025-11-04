@@ -256,6 +256,10 @@ class PatientTimelineAbstractor:
         # V4.2: Document discovery performance tracking
         self.v2_document_discovery_stats = {}  # V4.2: Track Tier 1 vs Tier 2/3 usage
 
+        # V4.2+ Enhancement #1: Validation tracking
+        self.validation_stats = {}  # Track document type validation, extraction validation
+        self.failed_extractions = []  # Log failed extractions for review
+
         # Initialize agents for Phase 4 (BEFORE WHO classification)
         self.medgemma_agent = None
         self.binary_agent = None
@@ -2333,6 +2337,351 @@ Return ONLY the JSON object, no additional text.
             self.v2_document_discovery_stats['v2_not_found'] = self.v2_document_discovery_stats.get('v2_not_found', 0) + 1
         return None
 
+    def _validate_document_type(
+        self,
+        binary_id: str,
+        expected_type: str
+    ) -> bool:
+        """
+        V4.2+ Enhancement #1 Layer 1: Document Type Validation (Pre-Extraction)
+
+        Verify document matches expected type before sending to MedGemma extraction.
+        Prevents document mismatch errors (e.g., discharge summary sent to operative note prompt).
+
+        Args:
+            binary_id: FHIR Binary resource ID (e.g., "Binary/12345")
+            expected_type: Expected document type key:
+                - 'operative_note': Operative Record, Procedure Note
+                - 'radiation_summary': Radiation Therapy Summary, Radiation Oncology Note
+                - 'imaging_report': Diagnostic Imaging Report, Radiology Report
+                - 'pathology_report': Pathology Report, Surgical Pathology
+
+        Returns:
+            True if document type matches expectation, False otherwise
+        """
+        if not binary_id:
+            logger.warning("⚠️ Cannot validate document type: no binary_id provided")
+            return False
+
+        try:
+            # Query v2_document_reference_enriched for document metadata
+            query = f"""
+                SELECT doc_type_text, document_category, document_confidence
+                FROM fhir_prd_db.v2_document_reference_enriched
+                WHERE binary_id = '{binary_id}'
+                LIMIT 1
+            """
+
+            results = query_athena(
+                query,
+                f"V4.2+ Layer 1: Validating document type for {binary_id}",
+                suppress_output=True
+            )
+
+            if not results or not results[0].get('doc_type_text'):
+                logger.warning(f"⚠️ Could not verify document type for binary {binary_id} (no metadata)")
+                # Track validation failures
+                if hasattr(self, 'validation_stats'):
+                    self.validation_stats['doc_type_validation_no_metadata'] = \
+                        self.validation_stats.get('doc_type_validation_no_metadata', 0) + 1
+                return False  # Fail-safe: reject if we can't verify
+
+            doc_type = results[0]['doc_type_text']
+            doc_category = results[0].get('document_category', '')
+
+            # Fuzzy match for document type (case-insensitive, partial matching)
+            type_matches = {
+                'operative_note': [
+                    'operative record', 'procedure note', 'operative report',
+                    'surgical note', 'surgery note', 'operation note'
+                ],
+                'radiation_summary': [
+                    'radiation therapy summary', 'radiation oncology note',
+                    'radiotherapy summary', 'radiation treatment', 'oncology consult'
+                ],
+                'imaging_report': [
+                    'diagnostic imaging report', 'radiology report',
+                    'imaging report', 'mri report', 'ct report', 'diagnostic report'
+                ],
+                'pathology_report': [
+                    'pathology report', 'surgical pathology', 'path report',
+                    'pathology consultation', 'neuropathology'
+                ]
+            }
+
+            # Get expected patterns
+            expected_patterns = type_matches.get(expected_type, [])
+            if not expected_patterns:
+                logger.warning(f"⚠️ Unknown expected_type: {expected_type}")
+                return False
+
+            # Check if doc_type matches any expected pattern (case-insensitive)
+            doc_type_lower = doc_type.lower()
+            doc_category_lower = doc_category.lower() if doc_category else ''
+
+            matched = any(
+                pattern in doc_type_lower or pattern in doc_category_lower
+                for pattern in expected_patterns
+            )
+
+            if matched:
+                logger.info(f"✅ Document type validated: '{doc_type}' matches expected '{expected_type}'")
+                # Track successful validation
+                if hasattr(self, 'validation_stats'):
+                    self.validation_stats['doc_type_validation_success'] = \
+                        self.validation_stats.get('doc_type_validation_success', 0) + 1
+                return True
+            else:
+                logger.warning(
+                    f"⚠️ Document type mismatch: expected '{expected_type}', "
+                    f"got doc_type='{doc_type}', category='{doc_category}'"
+                )
+                # Track mismatches
+                if hasattr(self, 'validation_stats'):
+                    self.validation_stats['doc_type_validation_mismatch'] = \
+                        self.validation_stats.get('doc_type_validation_mismatch', 0) + 1
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Error validating document type for {binary_id}: {e}")
+            # Track errors
+            if hasattr(self, 'validation_stats'):
+                self.validation_stats['doc_type_validation_error'] = \
+                    self.validation_stats.get('doc_type_validation_error', 0) + 1
+            return False  # Fail-safe: reject on error
+
+    def _validate_extraction_result(
+        self,
+        result: Dict[str, Any],
+        gap_type: str,
+        expected_schema: Optional[Dict[str, type]] = None
+    ) -> Tuple[bool, List[str]]:
+        """
+        V4.2+ Enhancement #1 Layer 2: Extraction Result Validation (Post-Extraction)
+
+        Validate MedGemma extraction result for semantic and structural correctness.
+        Prevents integration of invalid/hallucinated/mismatched data into timeline.
+
+        Args:
+            result: Extracted data from MedGemma
+            gap_type: Type of gap being filled (e.g., 'missing_eor', 'missing_radiation_dose')
+            expected_schema: Optional dict mapping field names to expected types
+
+        Returns:
+            Tuple of (is_valid: bool, errors: List[str])
+        """
+        errors = []
+
+        if not result:
+            errors.append("Extraction result is empty")
+            return False, errors
+
+        # 1. Schema validation (if schema provided)
+        if expected_schema:
+            for field, field_type in expected_schema.items():
+                if field not in result:
+                    errors.append(f"Missing required field: {field}")
+                elif result[field] is not None and not isinstance(result[field], field_type):
+                    errors.append(
+                        f"Field '{field}' has wrong type: "
+                        f"expected {field_type.__name__}, got {type(result[field]).__name__}"
+                    )
+
+        # 2. Gap-type specific semantic validation
+        if gap_type == 'missing_eor':
+            eor_value = result.get('extent_of_resection')
+            valid_eor_values = ['GTR', 'NTR', 'STR', 'Biopsy', None]
+
+            if eor_value not in valid_eor_values:
+                errors.append(f"Invalid extent_of_resection value: '{eor_value}'")
+
+            # Check for nonsensical text (likely document mismatch)
+            if eor_value and len(str(eor_value)) > 50:
+                errors.append(
+                    f"Extent of resection value too long ({len(str(eor_value))} chars), "
+                    f"likely extraction error: {str(eor_value)[:50]}..."
+                )
+
+        elif gap_type == 'missing_radiation_dose':
+            dose = result.get('total_dose_cgy')
+
+            if dose is not None:
+                # Radiation dose sanity checks
+                if not isinstance(dose, (int, float)):
+                    errors.append(f"Invalid dose type: expected number, got {type(dose).__name__}")
+                elif dose < 0 or dose > 10000:  # Typical range: 1800-6000 cGy
+                    errors.append(f"Dose out of reasonable range (0-10000 cGy): {dose} cGy")
+
+        elif gap_type == 'missing_tumor_location':
+            location = result.get('tumor_location')
+
+            if location:
+                # Check if location is plausible (not generic text)
+                generic_phrases = [
+                    'patient was', 'discharged', 'follow-up', 'appointment',
+                    'medication', 'vital signs', 'assessment', 'plan', 'hospital course'
+                ]
+                if any(phrase in location.lower() for phrase in generic_phrases):
+                    errors.append(
+                        f"Tumor location appears to be generic text (document mismatch): "
+                        f"{location[:100]}"
+                    )
+
+                # Check location length
+                if len(location) > 200:
+                    errors.append(
+                        f"Tumor location too long ({len(location)} chars), "
+                        f"likely extracted wrong text: {location[:100]}..."
+                    )
+
+        elif gap_type == 'missing_laterality':
+            laterality = result.get('laterality')
+            valid_laterality = ['Left', 'Right', 'Bilateral', 'Midline', None]
+
+            if laterality and laterality not in valid_laterality:
+                errors.append(f"Invalid laterality value: '{laterality}'")
+
+        # 3. Confidence check
+        confidence = result.get('confidence', 'MEDIUM')
+        if confidence == 'LOW':
+            errors.append(
+                "Extraction confidence is LOW - may indicate document mismatch or unclear text"
+            )
+
+        # Track validation results
+        is_valid = len(errors) == 0
+        if hasattr(self, 'validation_stats'):
+            if is_valid:
+                self.validation_stats['extraction_validation_success'] = \
+                    self.validation_stats.get('extraction_validation_success', 0) + 1
+            else:
+                self.validation_stats['extraction_validation_failed'] = \
+                    self.validation_stats.get('extraction_validation_failed', 0) + 1
+
+        return is_valid, errors
+
+    def _log_failed_extraction(
+        self,
+        gap: Dict[str, Any],
+        binary_id: Optional[str],
+        result: Dict[str, Any],
+        errors: List[str]
+    ) -> None:
+        """
+        V4.2+ Enhancement #1: Log failed extractions for review
+
+        Creates audit trail of extraction failures for quality improvement.
+
+        Args:
+            gap: Gap that was being filled
+            binary_id: Document that was used for extraction
+            result: Extraction result that failed validation
+            errors: List of validation errors
+        """
+        failed_extraction = {
+            'timestamp': datetime.now().isoformat(),
+            'patient_id': self.patient_id,
+            'gap_type': gap.get('gap_type'),
+            'gap_priority': gap.get('priority'),
+            'binary_id': binary_id,
+            'extraction_result': result,
+            'validation_errors': errors,
+            'event_date': gap.get('event_date'),
+            'event_type': gap.get('event_type')
+        }
+
+        if hasattr(self, 'failed_extractions'):
+            self.failed_extractions.append(failed_extraction)
+
+        logger.warning(
+            f"📝 Failed extraction logged: {gap.get('gap_type')} for {gap.get('event_type')} "
+            f"on {gap.get('event_date')} - {len(errors)} errors"
+        )
+
+    def _group_gaps_by_document(
+        self,
+        gaps: List[Dict[str, Any]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        V4.2+ Enhancement #2: Group gaps by target document for batch processing
+
+        Groups gaps that require the same document so we can extract all fields
+        in a single MedGemma call instead of multiple calls.
+
+        Example: If 3 gaps (missing_eor, missing_tumor_location, missing_laterality)
+        all need the same operative note, batch them into one extraction.
+
+        Args:
+            gaps: List of identified gaps from Phase 3
+
+        Returns:
+            Dictionary mapping document_key -> list of gaps that need that document
+        """
+        grouped = {}
+
+        for gap in gaps:
+            medgemma_target = gap.get('medgemma_target')
+            gap_type = gap.get('gap_type')
+
+            # Determine document key based on gap type and target
+            if gap_type in ['missing_eor', 'missing_tumor_location', 'missing_laterality']:
+                # All surgical gaps use operative note for same procedure/encounter
+                encounter_id = gap.get('v2_annotation', {}).get('encounter_id')
+                procedure_id = gap.get('v2_annotation', {}).get('procedure_id')
+                event_date = gap.get('event_date')
+
+                if encounter_id:
+                    doc_key = f"operative_note:encounter:{encounter_id}"
+                elif procedure_id:
+                    doc_key = f"operative_note:procedure:{procedure_id}"
+                elif event_date:
+                    doc_key = f"operative_note:date:{event_date}"
+                else:
+                    doc_key = f"operative_note:individual:{gap_type}"
+
+            elif gap_type == 'missing_radiation_details':
+                # Radiation gaps use radiation summary for same encounter/date
+                encounter_id = gap.get('v2_annotation', {}).get('encounter_id')
+                event_date = gap.get('event_date')
+
+                if encounter_id:
+                    doc_key = f"radiation_summary:encounter:{encounter_id}"
+                elif event_date:
+                    doc_key = f"radiation_summary:date:{event_date}"
+                else:
+                    doc_key = f"radiation_summary:individual:{gap_type}"
+
+            elif gap_type == 'imaging_conclusion':
+                # Imaging gaps use diagnostic report - already unique per imaging event
+                diagnostic_report_id = gap.get('diagnostic_report_id')
+                if diagnostic_report_id:
+                    doc_key = f"imaging_report:{diagnostic_report_id}"
+                else:
+                    doc_key = f"imaging_report:individual:{gap.get('event_date')}"
+
+            else:
+                # Unknown gap type - process individually
+                doc_key = f"individual:{gap_type}:{gap.get('event_date')}"
+
+            # Add gap to grouped dictionary
+            if doc_key not in grouped:
+                grouped[doc_key] = []
+            grouped[doc_key].append(gap)
+
+        # Log batching statistics
+        total_gaps = len(gaps)
+        num_batches = len(grouped)
+        if num_batches > 0:
+            avg_gaps_per_batch = total_gaps / num_batches
+            logger.info(
+                f"📦 Grouped {total_gaps} gaps into {num_batches} document batches "
+                f"(avg {avg_gaps_per_batch:.1f} gaps/batch)"
+            )
+        else:
+            logger.info(f"📦 No gaps to batch (0 gaps)")
+
+        return grouped
+
     def _find_radiation_document(self, radiation_date: str) -> Optional[str]:
         """
         Query v_radiation_documents for radiation treatment documents (LEGACY - Tier 2 fallback)
@@ -4342,7 +4691,9 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
                 'binary_extractions_performed': len(self.binary_extractions),
                 'protocol_validations': len(self.protocol_validations),
                 'completeness_assessment': self.completeness_assessment,
-                'v2_document_discovery_stats': self.v2_document_discovery_stats  # V4.2: Performance tracking
+                'v2_document_discovery_stats': self.v2_document_discovery_stats,  # V4.2: Performance tracking
+                'validation_stats': self.validation_stats,  # V4.2+: Validation performance
+                'failed_extractions_count': len(self.failed_extractions)  # V4.2+: Failed extraction count
             },
             'timeline_events': self.timeline_events,
             'extraction_gaps': self.extraction_gaps,
@@ -4377,6 +4728,42 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
                 print(f"     Tier 3 (Temporal fallback): {tier3_count}/{total_lookups} ({tier3_pct:.1f}%)")
                 print(f"     Not found: {not_found}/{total_lookups} ({not_found/total_lookups*100:.1f}%)")
                 print(f"     Success rate: {(total_lookups - not_found)/total_lookups*100:.1f}%")
+
+        # V4.2+ Enhancement #1: Report validation statistics
+        if self.validation_stats:
+            print()
+            print("  🛡️  V4.2+ Extraction Validation Performance:")
+
+            # Document type validation
+            doc_success = self.validation_stats.get('doc_type_validation_success', 0)
+            doc_mismatch = self.validation_stats.get('doc_type_validation_mismatch', 0)
+            doc_no_metadata = self.validation_stats.get('doc_type_validation_no_metadata', 0)
+            doc_error = self.validation_stats.get('doc_type_validation_error', 0)
+            doc_total = doc_success + doc_mismatch + doc_no_metadata + doc_error
+
+            if doc_total > 0:
+                print(f"     Document Type Validation:")
+                print(f"       ✓ Success: {doc_success}/{doc_total} ({doc_success/doc_total*100:.1f}%)")
+                print(f"       ⚠️ Mismatch detected: {doc_mismatch}/{doc_total} ({doc_mismatch/doc_total*100:.1f}%)")
+                if doc_no_metadata > 0:
+                    print(f"       ⚠️ No metadata: {doc_no_metadata}/{doc_total} ({doc_no_metadata/doc_total*100:.1f}%)")
+                if doc_error > 0:
+                    print(f"       ❌ Errors: {doc_error}/{doc_total} ({doc_error/doc_total*100:.1f}%)")
+
+            # Extraction result validation
+            extract_success = self.validation_stats.get('extraction_validation_success', 0)
+            extract_failed = self.validation_stats.get('extraction_validation_failed', 0)
+            extract_total = extract_success + extract_failed
+
+            if extract_total > 0:
+                print(f"     Extraction Result Validation:")
+                print(f"       ✓ Valid extractions: {extract_success}/{extract_total} ({extract_success/extract_total*100:.1f}%)")
+                print(f"       ❌ Invalid extractions: {extract_failed}/{extract_total} ({extract_failed/extract_total*100:.1f}%)")
+
+            # Failed extractions
+            if len(self.failed_extractions) > 0:
+                print(f"     Failed Extractions Logged: {len(self.failed_extractions)}")
+                print(f"       (See artifact metadata for details)")
 
         return artifact
 
