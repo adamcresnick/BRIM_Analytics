@@ -73,13 +73,16 @@ except ImportError as e:
     logger.warning(f"Could not import V4.1 features: {e}")
     V41_FEATURES_AVAILABLE = False
 
-# V4.2: Import tumor measurement extractor
+# V4.2: Import tumor measurement and treatment response extractors
 try:
     from lib.tumor_measurement_extractor import TumorMeasurementExtractor
+    from lib.treatment_response_extractor import TreatmentResponseExtractor
     V42_MEASUREMENT_EXTRACTION_AVAILABLE = True
+    V42_RESPONSE_EXTRACTION_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"Could not import V4.2 measurement extractor: {e}")
+    logger.warning(f"Could not import V4.2 extractors: {e}")
     V42_MEASUREMENT_EXTRACTION_AVAILABLE = False
+    V42_RESPONSE_EXTRACTION_AVAILABLE = False
 
 # Import custom JSON encoder for safe serialization of dataclasses
 try:
@@ -291,6 +294,16 @@ class PatientTimelineAbstractor:
             except Exception as e:
                 logger.warning(f"⚠️  Could not initialize V4.2 measurement extractor: {e}")
                 self.measurement_extractor = None
+
+        # V4.2: Initialize treatment response extractor
+        self.response_extractor = None
+        if V42_RESPONSE_EXTRACTION_AVAILABLE and self.medgemma_agent:
+            try:
+                self.response_extractor = TreatmentResponseExtractor(medgemma_agent=self.medgemma_agent)
+                logger.info("✅ V4.2 treatment response extractor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize V4.2 response extractor: {e}")
+                self.response_extractor = None
 
         # Load WHO 2021 classification AFTER agents are initialized (needed for dynamic classification)
         self.who_2021_classification = self._load_who_classification()
@@ -2955,6 +2968,38 @@ Return ONLY the JSON object, no additional text.
 
                 except Exception as e:
                     logger.warning(f"⚠️  Could not extract measurements from imaging report: {e}")
+
+            # V4.2 STEP 5.6: Extract treatment response from imaging reports
+            if self.response_extractor and extracted_text and gap['gap_type'] == 'imaging_conclusion':
+                try:
+                    diagnostic_report_id = gap.get('diagnostic_report_id')
+                    imaging_date = gap.get('event_date')
+
+                    logger.info(f"📈 Extracting treatment response assessment...")
+                    response = self.response_extractor.extract_response(
+                        report_text=extracted_text,
+                        imaging_date=imaging_date,
+                        timeline_events=self.timeline_events,
+                        source_id=diagnostic_report_id
+                    )
+
+                    if response:
+                        logger.info(f"📈 Extracted treatment response: {response.response_category}")
+                        # Convert TreatmentResponse object to dict for JSON serialization
+                        response_dict = response.to_dict()
+
+                        # Store response with imaging event
+                        for img in self.timeline_events:
+                            if img.get('event_type') == 'imaging' and img.get('diagnostic_report_id') == diagnostic_report_id:
+                                if 'treatment_response' not in img:
+                                    img['treatment_response'] = response_dict
+                                    logger.info(f"   Added response assessment to imaging event on {img.get('event_date')}")
+                                break
+                    else:
+                        logger.debug("   No treatment response extracted from imaging report")
+
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not extract treatment response from imaging report: {e}")
 
             # V4.1 STEP 6: Extract tumor location from operative notes
             if self.location_extractor and extracted_text and gap['gap_type'] == 'missing_eor':
