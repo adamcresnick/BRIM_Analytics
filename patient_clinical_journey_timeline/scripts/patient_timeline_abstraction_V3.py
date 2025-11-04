@@ -2101,20 +2101,31 @@ Return ONLY the JSON object, no additional text.
         surgery_date: Optional[str] = None
     ) -> Optional[str]:
         """
-        V2 Enhanced: Find operative notes using encounter linkage with temporal fallback
+        V2 Enhanced: Find operative notes using 5-tier discovery strategy
 
-        This method implements V4.2 Enhancement #2: V2 Document Discovery Steps 3-4
-        Uses encounter-based lookup for 95%+ success rate vs ~70% with temporal matching alone.
+        This method implements V4.2 Enhancement #2: V2 Document Discovery
+        Uses encounter-based lookup with multiple fallback strategies.
 
         Strategy:
-        1. TIER 1 (PREFERRED): Use encounter_id to query v2_document_reference_enriched
-        2. TIER 2 (FALLBACK): Query procedure table for encounter_reference if encounter_id not provided
-        3. TIER 3 (LEGACY): Fall back to temporal matching if encounter linkage fails
+        1. TIER 1 (PREFERRED): Direct encounter match via v_document_reference_enriched
+           - Uses encounter_id to find OP notes with keywords: operative, op note, surgical
+        2. TIER 2 (FALLBACK): Lookup encounter from procedure table if not provided
+           - Queries procedure table for encounter_reference, then recursive Tier 1
+        3. TIER 3 (LEGACY): Temporal document matching (±7 days from surgery date)
+           - Uses v_binary_files view with date proximity search
+        4. TIER 4 (ENCOUNTER DATE MATCH): Find OP notes via encounter date matching
+           - Handles "encounter mismatch" (OP notes linked to different encounter same day)
+           - Searches by patient + keywords + encounter date within ±1 day
+           - Solves admission vs surgical encounter problem
+        5. TIER 5 (ALTERNATIVE CLINICAL NOTES): Progress notes, H&P, discharge summaries
+           - Fallback to other clinical documentation when OP notes don't exist
+           - Searches within ±3 days, prioritizes discharge > encounter summary > H&P > progress
+           - May contain surgical details, EOR, complications
 
         Args:
             procedure_fhir_id: FHIR ID of the procedure (e.g., "Procedure/abc123")
             encounter_id: Encounter ID from v2_annotation (e.g., "Encounter/xyz789")
-            surgery_date: Date of surgery (YYYY-MM-DD) - used for Tier 3 fallback
+            surgery_date: Date of surgery (YYYY-MM-DD) - used for Tier 3, 4, 5 fallback
 
         Returns:
             Binary ID if found (e.g., "Binary/12345"), None otherwise
@@ -2133,12 +2144,14 @@ Return ONLY the JSON object, no additional text.
                     doc_date,
                     document_category,
                     custodian_org_name
-                FROM fhir_prd_db.v2_document_reference_enriched
+                FROM fhir_prd_db.v_document_reference_enriched
                 WHERE encounter_id = '{encounter_id}'
                   AND (
                       LOWER(doc_type_text) LIKE '%operative%'
                       OR LOWER(doc_type_text) LIKE '%procedure%'
                       OR LOWER(doc_type_text) LIKE '%surgical%'
+                      OR LOWER(doc_type_text) LIKE '%op%note%'
+                      OR LOWER(doc_type_text) LIKE 'op note%'
                       OR document_category = 'operative_note'
                   )
                 ORDER BY
@@ -2206,8 +2219,121 @@ Return ONLY the JSON object, no additional text.
                     self.v2_document_discovery_stats[tier_used] = self.v2_document_discovery_stats.get(tier_used, 0) + 1
                 return binary_id
 
-        # All tiers failed
-        logger.warning(f"V2: No operative note found (all tiers exhausted)")
+        # TIER 4: Date-based encounter lookup (handles encounter mismatch cases)
+        if surgery_date:
+            try:
+                logger.debug(f"V2 Tier 4: Looking for OP notes via encounter date matching for {surgery_date}")
+                query = f"""
+                SELECT
+                    drc.content_attachment_url as binary_id,
+                    dr.type_text as doc_type_text,
+                    e.period_start as encounter_start,
+                    dce.context_encounter_reference as encounter_id
+                FROM fhir_prd_db.document_reference dr
+                JOIN fhir_prd_db.document_reference_context_encounter dce
+                    ON dr.id = dce.document_reference_id
+                JOIN fhir_prd_db.document_reference_content drc
+                    ON dr.id = drc.document_reference_id
+                JOIN fhir_prd_db.encounter e
+                    ON dce.context_encounter_reference = e.id
+                WHERE dr.subject_reference = '{self.patient_id}'
+                    AND (
+                        LOWER(dr.type_text) LIKE '%operative%'
+                        OR LOWER(dr.type_text) LIKE '%op%note%'
+                        OR LOWER(dr.type_text) LIKE 'op note%'
+                        OR LOWER(dr.type_text) LIKE '%surgical%'
+                        OR LOWER(dr.type_text) LIKE '%procedure%'
+                    )
+                    AND DATE(e.period_start) BETWEEN DATE '{surgery_date}' - INTERVAL '1' DAY
+                                                 AND DATE '{surgery_date}' + INTERVAL '1' DAY
+                ORDER BY
+                    CASE
+                        WHEN LOWER(dr.type_text) LIKE '%operative%complete%' THEN 1
+                        WHEN LOWER(dr.type_text) LIKE '%op%note%complete%' THEN 2
+                        WHEN LOWER(dr.type_text) LIKE '%operative%' THEN 3
+                        WHEN LOWER(dr.type_text) LIKE '%op%note%' THEN 4
+                        ELSE 5
+                    END,
+                    e.period_start DESC
+                LIMIT 1
+                """
+
+                results = query_athena(query, f"V2 Tier 4: Finding OP note via encounter date for {surgery_date}", suppress_output=True)
+
+                if results and results[0].get('binary_id'):
+                    binary_id = results[0]['binary_id']
+                    encounter_id = results[0].get('encounter_id', 'unknown')
+                    doc_type = results[0].get('doc_type_text', 'unknown')
+                    tier_used = "v2_tier4_encounter_date_match"
+                    logger.info(f"V2 Tier 4 ✓: Found operative note {binary_id} (type: {doc_type}) via encounter date matching (encounter: {encounter_id})")
+                    if hasattr(self, 'v2_document_discovery_stats'):
+                        self.v2_document_discovery_stats[tier_used] = self.v2_document_discovery_stats.get(tier_used, 0) + 1
+                    return binary_id
+
+            except Exception as e:
+                logger.warning(f"V2 Tier 4 failed: {e}")
+
+        # TIER 5: Alternative clinical notes (progress notes, H&P, discharge summaries, encounter summaries)
+        if surgery_date:
+            try:
+                logger.debug(f"V2 Tier 5: Looking for alternative clinical notes for {surgery_date}")
+                query = f"""
+                SELECT
+                    drc.content_attachment_url as binary_id,
+                    dr.type_text as doc_type_text,
+                    e.period_start as encounter_start,
+                    dce.context_encounter_reference as encounter_id
+                FROM fhir_prd_db.document_reference dr
+                JOIN fhir_prd_db.document_reference_context_encounter dce
+                    ON dr.id = dce.document_reference_id
+                JOIN fhir_prd_db.document_reference_content drc
+                    ON dr.id = drc.document_reference_id
+                JOIN fhir_prd_db.encounter e
+                    ON dce.context_encounter_reference = e.id
+                WHERE dr.subject_reference = '{self.patient_id}'
+                    AND (
+                        LOWER(dr.type_text) LIKE '%progress%note%'
+                        OR LOWER(dr.type_text) LIKE '%h&p%'
+                        OR LOWER(dr.type_text) LIKE '%history%physical%'
+                        OR LOWER(dr.type_text) LIKE '%discharge%summary%'
+                        OR LOWER(dr.type_text) LIKE '%encounter%summary%'
+                        OR LOWER(dr.type_text) LIKE '%physician%note%'
+                        OR LOWER(dr.type_text) LIKE '%clinical%note%'
+                        OR LOWER(dr.type_text) LIKE '%consult%'
+                    )
+                    AND DATE(e.period_start) BETWEEN DATE '{surgery_date}' - INTERVAL '3' DAY
+                                                 AND DATE '{surgery_date}' + INTERVAL '3' DAY
+                ORDER BY
+                    CASE
+                        WHEN LOWER(dr.type_text) LIKE '%discharge%summary%' THEN 1
+                        WHEN LOWER(dr.type_text) LIKE '%encounter%summary%' THEN 2
+                        WHEN LOWER(dr.type_text) LIKE '%h&p%' THEN 3
+                        WHEN LOWER(dr.type_text) LIKE '%history%physical%' THEN 4
+                        WHEN LOWER(dr.type_text) LIKE '%progress%' THEN 5
+                        ELSE 6
+                    END,
+                    ABS(DATE_DIFF('day', DATE(e.period_start), DATE '{surgery_date}'))
+                LIMIT 1
+                """
+
+                results = query_athena(query, f"V2 Tier 5: Finding alternative clinical notes for {surgery_date}", suppress_output=True)
+
+                if results and results[0].get('binary_id'):
+                    binary_id = results[0]['binary_id']
+                    encounter_id = results[0].get('encounter_id', 'unknown')
+                    doc_type = results[0].get('doc_type_text', 'unknown')
+                    tier_used = "v2_tier5_alternative_clinical_notes"
+                    logger.info(f"V2 Tier 5 ✓: Found alternative clinical note {binary_id} (type: {doc_type}) via encounter date (encounter: {encounter_id})")
+                    logger.info(f"V2 Tier 5: Using '{doc_type}' as fallback for operative note - may contain surgical details")
+                    if hasattr(self, 'v2_document_discovery_stats'):
+                        self.v2_document_discovery_stats[tier_used] = self.v2_document_discovery_stats.get(tier_used, 0) + 1
+                    return binary_id
+
+            except Exception as e:
+                logger.warning(f"V2 Tier 5 failed: {e}")
+
+        # All 5 tiers failed
+        logger.warning(f"V2: No operative note or clinical note found (all 5 tiers exhausted)")
         if hasattr(self, 'v2_document_discovery_stats'):
             self.v2_document_discovery_stats['v2_not_found'] = self.v2_document_discovery_stats.get('v2_not_found', 0) + 1
         return None
