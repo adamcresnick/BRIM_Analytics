@@ -14,6 +14,8 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import logging
 import time
+import hashlib
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +48,21 @@ class MedGemmaAgent:
         model_name: str = "gemma2:27b",
         ollama_url: str = "http://localhost:11434",
         temperature: float = 0.1,
-        max_retries: int = 3
+        max_retries: int = 3,
+        cache_dir: Optional[str] = None,
+        enable_chunking: bool = True,
+        chunk_size: int = 8000  # chars per chunk
     ):
         self.model_name = model_name
         self.ollama_url = ollama_url
         self.temperature = temperature
         self.max_retries = max_retries
+        self.enable_chunking = enable_chunking
+        self.chunk_size = chunk_size
+
+        # Setup caching
+        self.cache_dir = Path(cache_dir) if cache_dir else Path("/tmp/medgemma_cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Verify Ollama is running
         self._verify_ollama_connection()
@@ -78,6 +89,94 @@ class MedGemmaAgent:
                 f"Start Ollama with: ollama serve"
             ) from e
 
+    def _get_cache_key(self, prompt: str, temperature: float) -> str:
+        """Generate cache key from prompt and temperature"""
+        content = f"{prompt}|{temperature}|{self.model_name}"
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def _get_from_cache(self, cache_key: str) -> Optional[str]:
+        """Retrieve cached response if available"""
+        cache_file = self.cache_dir / f"{cache_key}.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, 'r') as f:
+                    cached = json.load(f)
+                logger.info(f"Cache hit for key {cache_key[:8]}...")
+                return cached['response']
+            except Exception as e:
+                logger.warning(f"Failed to load cache: {e}")
+        return None
+
+    def _save_to_cache(self, cache_key: str, response: str) -> None:
+        """Save response to cache"""
+        cache_file = self.cache_dir / f"{cache_key}.json"
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump({'response': response, 'timestamp': time.time()}, f)
+            logger.info(f"Cached response for key {cache_key[:8]}...")
+        except Exception as e:
+            logger.warning(f"Failed to save cache: {e}")
+
+    def _chunk_text(self, text: str, max_chunk_size: int) -> List[str]:
+        """
+        Split text into chunks on paragraph boundaries.
+        Tries to keep chunks under max_chunk_size while preserving document structure.
+        """
+        # Split on double newlines (paragraphs)
+        paragraphs = text.split('\n\n')
+
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for para in paragraphs:
+            para_size = len(para) + 2  # +2 for \n\n
+
+            if current_size + para_size > max_chunk_size and current_chunk:
+                # Commit current chunk
+                chunks.append('\n\n'.join(current_chunk))
+                current_chunk = [para]
+                current_size = para_size
+            else:
+                current_chunk.append(para)
+                current_size += para_size
+
+        # Add last chunk
+        if current_chunk:
+            chunks.append('\n\n'.join(current_chunk))
+
+        logger.info(f"Split document into {len(chunks)} chunks")
+        return chunks
+
+    def _merge_extraction_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Merge multiple extraction results from chunked documents.
+        Combines lists and takes the first non-null value for scalar fields.
+        """
+        merged = {}
+
+        for result in results:
+            for key, value in result.items():
+                if key == 'confidence':
+                    # Average confidences
+                    if key not in merged:
+                        merged[key] = []
+                    merged[key].append(value)
+                elif isinstance(value, list):
+                    # Extend lists
+                    if key not in merged:
+                        merged[key] = []
+                    merged[key].extend(value)
+                elif value and key not in merged:
+                    # Take first non-null scalar
+                    merged[key] = value
+
+        # Average confidence scores
+        if 'confidence' in merged and isinstance(merged['confidence'], list):
+            merged['confidence'] = sum(merged['confidence']) / len(merged['confidence'])
+
+        return merged
+
     def extract(
         self,
         prompt: str,
@@ -87,6 +186,11 @@ class MedGemmaAgent:
     ) -> ExtractionResult:
         """
         Extract structured data from clinical text using MedGemma.
+
+        Features:
+        - Caching: Avoid re-processing identical prompts
+        - Chunking: Split large documents automatically
+        - Exponential backoff: Retry with increasing delays
 
         Args:
             prompt: The extraction prompt with clinical text
@@ -102,13 +206,39 @@ class MedGemmaAgent:
         # Build full prompt
         full_prompt = self._build_prompt(prompt, system_prompt)
 
-        # Try extraction with retries
+        # Check cache first
+        cache_key = self._get_cache_key(full_prompt, temp)
+        cached_response = self._get_from_cache(cache_key)
+        if cached_response:
+            try:
+                extracted_data = self._parse_response(cached_response)
+                return ExtractionResult(
+                    success=True,
+                    extracted_data=extracted_data,
+                    confidence=extracted_data.get('confidence', 0.8),
+                    raw_response=cached_response,
+                    prompt_tokens=len(full_prompt.split()),
+                    completion_tokens=len(cached_response.split())
+                )
+            except Exception as e:
+                logger.warning(f"Cached response invalid: {e}")
+
+        # Check if we need to chunk the document
+        prompt_length = len(full_prompt)
+        if self.enable_chunking and prompt_length > self.chunk_size * 2:
+            logger.info(f"Document is large ({prompt_length} chars), using chunking strategy")
+            return self._extract_with_chunking(full_prompt, system_prompt, expected_schema, temp)
+
+        # Try extraction with exponential backoff
         for attempt in range(self.max_retries):
             try:
                 logger.info(f"MedGemma extraction attempt {attempt + 1}/{self.max_retries}")
 
                 # Call Ollama API
                 response = self._call_ollama(full_prompt, temp)
+
+                # Save to cache
+                self._save_to_cache(cache_key, response)
 
                 # Parse JSON response
                 extracted_data = self._parse_response(response)
@@ -131,7 +261,12 @@ class MedGemmaAgent:
 
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON response (attempt {attempt + 1}): {e}")
-                if attempt == self.max_retries - 1:
+                # Exponential backoff before retry
+                if attempt < self.max_retries - 1:
+                    backoff_time = 2 ** attempt
+                    logger.info(f"Waiting {backoff_time}s before retry...")
+                    time.sleep(backoff_time)
+                else:
                     return ExtractionResult(
                         success=False,
                         extracted_data={},
@@ -142,7 +277,12 @@ class MedGemmaAgent:
 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Ollama API error (attempt {attempt + 1}): {e}")
-                if attempt == self.max_retries - 1:
+                # Exponential backoff before retry
+                if attempt < self.max_retries - 1:
+                    backoff_time = 2 ** attempt
+                    logger.info(f"Waiting {backoff_time}s before retry...")
+                    time.sleep(backoff_time)
+                else:
                     return ExtractionResult(
                         success=False,
                         extracted_data={},
@@ -153,7 +293,12 @@ class MedGemmaAgent:
 
             except Exception as e:
                 logger.error(f"Unexpected error (attempt {attempt + 1}): {e}")
-                if attempt == self.max_retries - 1:
+                # Exponential backoff before retry
+                if attempt < self.max_retries - 1:
+                    backoff_time = 2 ** attempt
+                    logger.info(f"Waiting {backoff_time}s before retry...")
+                    time.sleep(backoff_time)
+                else:
                     return ExtractionResult(
                         success=False,
                         extracted_data={},
@@ -171,14 +316,99 @@ class MedGemmaAgent:
             error="Max retries exceeded"
         )
 
+    def _extract_with_chunking(
+        self,
+        full_prompt: str,
+        system_prompt: Optional[str] = None,
+        expected_schema: Optional[Dict[str, Any]] = None,
+        temperature: float = 0.1
+    ) -> ExtractionResult:
+        """
+        Extract from a large document by chunking it into smaller pieces.
+        Each chunk is processed separately, then results are merged.
+        """
+        # Split the prompt into instruction and document content
+        # Assume format: "instruction\n\nDOCUMENT:\n{content}"
+        parts = full_prompt.split('DOCUMENT:', 1)
+        if len(parts) != 2:
+            # Fallback: just chunk the whole thing
+            instruction = ""
+            document = full_prompt
+        else:
+            instruction = parts[0]
+            document = parts[1]
+
+        # Chunk the document
+        chunks = self._chunk_text(document, self.chunk_size)
+
+        # Extract from each chunk
+        chunk_results = []
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Processing chunk {i+1}/{len(chunks)}")
+
+            # Rebuild prompt with this chunk
+            chunk_prompt = f"{instruction}DOCUMENT:\n{chunk}" if instruction else chunk
+
+            # Try extraction on this chunk
+            for attempt in range(self.max_retries):
+                try:
+                    response = self._call_ollama(chunk_prompt, temperature)
+                    extracted_data = self._parse_response(response)
+
+                    if expected_schema:
+                        self._validate_schema(extracted_data, expected_schema)
+
+                    chunk_results.append(extracted_data)
+                    break  # Success, move to next chunk
+
+                except Exception as e:
+                    logger.warning(f"Chunk {i+1} extraction failed (attempt {attempt+1}): {e}")
+                    if attempt < self.max_retries - 1:
+                        backoff_time = 2 ** attempt
+                        time.sleep(backoff_time)
+                    else:
+                        # This chunk failed, but continue with others
+                        logger.error(f"Chunk {i+1} extraction failed after all retries")
+
+        # Merge all chunk results
+        if not chunk_results:
+            return ExtractionResult(
+                success=False,
+                extracted_data={},
+                confidence=0.0,
+                raw_response="",
+                error="All chunks failed extraction"
+            )
+
+        merged_data = self._merge_extraction_results(chunk_results)
+
+        return ExtractionResult(
+            success=True,
+            extracted_data=merged_data,
+            confidence=merged_data.get('confidence', 0.8),
+            raw_response=f"Merged from {len(chunk_results)} chunks",
+            prompt_tokens=len(full_prompt.split()),
+            completion_tokens=0  # Not tracked for chunked extraction
+        )
+
     def _build_prompt(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Build full prompt with system message"""
         if system_prompt:
             return f"{system_prompt}\n\n{prompt}"
         return prompt
 
-    def _call_ollama(self, prompt: str, temperature: float) -> str:
-        """Call Ollama API and return response text"""
+    def _call_ollama(self, prompt: str, temperature: float, use_streaming: bool = False) -> str:
+        """
+        Call Ollama API and return response text.
+
+        Args:
+            prompt: The prompt to send
+            temperature: Sampling temperature
+            use_streaming: If True, use streaming mode for very large documents
+
+        Returns:
+            Complete response text
+        """
         prompt_length = len(prompt)
         preview = prompt[:200].replace("\n", " ") if prompt_length > 200 else prompt.replace("\n", " ")
         logger.info(f"MedGemma prompt length: {prompt_length} chars | preview: {preview[:200]}")
@@ -189,36 +419,71 @@ class MedGemmaAgent:
         # Large documents (>15KB) need more time to process
         if prompt_length > 15000:
             timeout = 300  # 5 minutes for very large documents
+            use_streaming = True  # Force streaming for very large docs
         elif prompt_length > 10000:
             timeout = 240  # 4 minutes for large documents
         else:
             timeout = 180  # 3 minutes for normal documents
 
-        logger.info(f"Using timeout: {timeout}s for prompt length {prompt_length}")
+        logger.info(f"Using timeout: {timeout}s for prompt length {prompt_length} | streaming: {use_streaming}")
 
         payload = {
             "model": self.model_name,
             "prompt": prompt,
             "temperature": temperature,
-            "stream": False,
+            "stream": use_streaming,
             "format": "json"  # Request JSON format
         }
+
+        if use_streaming:
+            # Stream response to avoid timeout
+            response_text = self._stream_ollama_response(payload, timeout)
+        else:
+            # Standard non-streaming request
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json=payload,
+                timeout=timeout
+            )
+            response.raise_for_status()
+            result = response.json()
+            response_text = result.get('response', '')
+
+        elapsed = time.perf_counter() - start_time
+        response_preview = response_text[:200].replace("\n", " ")
+        logger.info(f"Ollama responded in {elapsed:.1f}s | response preview: {response_preview}")
+
+        return response_text
+
+    def _stream_ollama_response(self, payload: Dict[str, Any], timeout: int) -> str:
+        """
+        Stream response from Ollama to avoid timeout on long-running requests.
+        """
+        logger.info("Using streaming mode to avoid timeout")
 
         response = requests.post(
             f"{self.ollama_url}/api/generate",
             json=payload,
-            timeout=timeout
+            stream=True,
+            timeout=(10, timeout)  # connection timeout, read timeout
         )
 
         response.raise_for_status()
 
-        result = response.json()
+        # Collect streamed chunks
+        full_response = []
+        for line in response.iter_lines():
+            if line:
+                try:
+                    chunk = json.loads(line)
+                    if 'response' in chunk:
+                        full_response.append(chunk['response'])
+                    if chunk.get('done', False):
+                        break
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse streaming chunk: {line}")
 
-        elapsed = time.perf_counter() - start_time
-        response_preview = result.get('response', '')[:200].replace("\n", " ")
-        logger.info(f"Ollama responded in {elapsed:.1f}s | response preview: {response_preview}")
-
-        return result.get('response', '')
+        return ''.join(full_response)
 
     def _parse_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON response from model"""
