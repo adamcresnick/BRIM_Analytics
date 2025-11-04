@@ -2337,6 +2337,27 @@ Return ONLY the JSON object, no additional text.
             self.v2_document_discovery_stats['v2_not_found'] = self.v2_document_discovery_stats.get('v2_not_found', 0) + 1
         return None
 
+    def _map_gap_to_doc_type(self, gap_type: str) -> Optional[str]:
+        """
+        Map gap type to expected document type for Layer 1 validation
+
+        Args:
+            gap_type: Type of gap (e.g., 'missing_eor', 'missing_radiation_details')
+
+        Returns:
+            Expected document type key or None
+        """
+        gap_to_doc_type = {
+            'missing_eor': 'operative_note',
+            'missing_tumor_location': 'operative_note',
+            'missing_laterality': 'operative_note',
+            'missing_radiation_details': 'radiation_summary',
+            'missing_radiation_dose': 'radiation_summary',
+            'imaging_conclusion': 'imaging_report',
+            'missing_chemotherapy_details': None  # Multiple possible doc types
+        }
+        return gap_to_doc_type.get(gap_type)
+
     def _validate_document_type(
         self,
         binary_id: str,
@@ -3273,6 +3294,26 @@ Return ONLY the JSON object, no additional text.
                         gap['status'] = 'NO_DOCUMENTS_AVAILABLE'
                         failed_count += 1
                         continue
+
+                # V4.2+ STEP 2.1: LAYER 1 VALIDATION - Validate document type BEFORE fetching
+                expected_doc_type = self._map_gap_to_doc_type(gap['gap_type'])
+                if expected_doc_type and medgemma_target.startswith('Binary/'):
+                    is_correct_type = self._validate_document_type(medgemma_target, expected_doc_type)
+                    if not is_correct_type:
+                        print(f"    ⚠️  Document type mismatch detected - searching for alternatives...")
+                        # ESCALATION: Wrong document type, try alternatives immediately
+                        alternative_success = self._try_alternative_documents(gap, [])
+                        if alternative_success:
+                            print(f"    ✅ Alternative document extraction successful!")
+                            extracted_count += 1
+                            continue
+                        else:
+                            print(f"    ❌ All alternatives exhausted")
+                            gap['status'] = 'WRONG_DOCUMENT_TYPE'
+                            failed_count += 1
+                            continue
+                    else:
+                        print(f"    ✅ Document type validated: {expected_doc_type}")
 
                 extracted_text = self._fetch_binary_document(medgemma_target)
                 if not extracted_text:
