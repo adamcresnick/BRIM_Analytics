@@ -1534,7 +1534,7 @@ Return ONLY the JSON object, no additional text.
                 SELECT
                     patient_fhir_id,
                     procedure_fhir_id,
-                    proc_performed_date_time,
+                    COALESCE(proc_performed_date_time, proc_performed_period_start) as proc_performed_date_time,
                     surgery_type,
                     proc_code_text,
                     proc_encounter_reference,
@@ -1546,7 +1546,7 @@ Return ONLY the JSON object, no additional text.
                 FROM fhir_prd_db.v_procedures_tumor
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
                     AND is_tumor_surgery = true
-                ORDER BY proc_performed_date_time
+                ORDER BY COALESCE(proc_performed_date_time, proc_performed_period_start)
             """,
             'chemotherapy': f"""
                 SELECT
