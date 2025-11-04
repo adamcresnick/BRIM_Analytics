@@ -1492,9 +1492,16 @@ Return ONLY the JSON object, no additional text.
             'procedures': f"""
                 SELECT
                     patient_fhir_id,
+                    procedure_fhir_id,
                     proc_performed_date_time,
                     surgery_type,
-                    proc_code_text
+                    proc_code_text,
+                    proc_encounter_reference,
+                    -- V2 NEW FIELDS: V4.1 Institution tracking + cross-resource annotation
+                    specimen_id,
+                    performer_org_id,
+                    performer_org_name,
+                    institution_confidence
                 FROM fhir_prd_db.v_procedures_tumor
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
                     AND is_tumor_surgery = true
@@ -1528,7 +1535,11 @@ Return ONLY the JSON object, no additional text.
                     imaging_modality,
                     result_information as report_conclusion,
                     result_diagnostic_report_id,
-                    diagnostic_report_id
+                    diagnostic_report_id,
+                    -- V2 NEW FIELDS: V4.1 Institution tracking + binary content direct access
+                    performer_org_id,
+                    performer_org_name,
+                    binary_content_id
                 FROM fhir_prd_db.v_imaging
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
                 ORDER BY imaging_date
@@ -1560,21 +1571,74 @@ Return ONLY the JSON object, no additional text.
                 row_count=len(self.structured_data[source_name])
             )
 
-        # V4.1: Extract institution from procedures and imaging (Steps 3 & 4)
+        # V4.1: Extract institution from procedures and imaging (Steps 3 & 4) - V2 OPTIMIZED
         if self.institution_tracker:
+            from datetime import datetime
+            tier1_procedures = 0
+            tier23_procedures = 0
+
             # Extract institution from procedures
             for proc_dict in self.structured_data.get('procedures', []):
-                institution_feature = self.institution_tracker.extract_from_procedure(proc_dict)
-                if institution_feature:
+                # V2 OPTIMIZATION: Check V2 institution_confidence field
+                if proc_dict.get('institution_confidence') == 'HIGH':
+                    # TIER 1: Use V2 performer_org fields directly (85% coverage from structured FHIR)
+                    from lib.feature_object import FeatureObject, SourceRecord
+                    institution_feature = FeatureObject(
+                        value=proc_dict['performer_org_name'],
+                        sources=[
+                            SourceRecord(
+                                source_type="structured_fhir",
+                                extracted_value=proc_dict['performer_org_name'],
+                                extraction_method="fhir_performer_reference",
+                                confidence="HIGH",
+                                source_id=proc_dict.get('performer_org_id'),
+                                extracted_at=datetime.utcnow().isoformat() + 'Z'
+                            )
+                        ]
+                    )
                     proc_dict['v41_institution'] = institution_feature.to_dict()
+                    tier1_procedures += 1
+                else:
+                    # TIER 2/3: Use InstitutionTracker for metadata/text extraction (15% fallback)
+                    institution_feature = self.institution_tracker.extract_from_procedure(proc_dict)
+                    if institution_feature:
+                        proc_dict['v41_institution'] = institution_feature.to_dict()
+                        tier23_procedures += 1
+
+            tier1_imaging = 0
+            tier23_imaging = 0
 
             # Extract institution from imaging
             for img_dict in self.structured_data.get('imaging', []):
-                institution_feature = self.institution_tracker.extract_from_imaging(img_dict)
-                if institution_feature:
+                # V2 OPTIMIZATION: Use performer_org_name if available
+                if img_dict.get('performer_org_name'):
+                    # TIER 1: Use V2 performer fields (85% coverage from structured FHIR)
+                    from lib.feature_object import FeatureObject, SourceRecord
+                    institution_feature = FeatureObject(
+                        value=img_dict['performer_org_name'],
+                        sources=[
+                            SourceRecord(
+                                source_type="structured_fhir",
+                                extracted_value=img_dict['performer_org_name'],
+                                extraction_method="fhir_performer_reference",
+                                confidence="HIGH",
+                                source_id=img_dict.get('performer_org_id'),
+                                extracted_at=datetime.utcnow().isoformat() + 'Z'
+                            )
+                        ]
+                    )
                     img_dict['v41_institution'] = institution_feature.to_dict()
+                    tier1_imaging += 1
+                else:
+                    # TIER 2/3: Use InstitutionTracker
+                    institution_feature = self.institution_tracker.extract_from_imaging(img_dict)
+                    if institution_feature:
+                        img_dict['v41_institution'] = institution_feature.to_dict()
+                        tier23_imaging += 1
 
-            logger.info("✅ V4.1: Institution tracking added to structured data")
+            logger.info(f"✅ V4.1: Institution tracking complete (V2 optimized)")
+            logger.info(f"  Procedures: Tier 1={tier1_procedures}, Tier 2/3={tier23_procedures}")
+            logger.info(f"  Imaging: Tier 1={tier1_imaging}, Tier 2/3={tier23_imaging}")
 
         print(f"  ✅ Loaded structured data from 6 views:")
         for source, data in self.structured_data.items():
@@ -1641,6 +1705,17 @@ Return ONLY the JSON object, no additional text.
             if record.get('v41_tumor_location'):
                 clinical_features['tumor_location'] = record['v41_tumor_location']
 
+            # V2 STEP 5: Add cross-resource annotation for provenance tracking
+            v2_annotation = {}
+            if record.get('specimen_id'):
+                v2_annotation['specimen_id'] = record['specimen_id']
+            if record.get('proc_encounter_reference'):
+                v2_annotation['encounter_id'] = record['proc_encounter_reference']
+            if record.get('performer_org_id'):
+                v2_annotation['performer_org_id'] = record['performer_org_id']
+            if record.get('procedure_fhir_id'):
+                v2_annotation['procedure_id'] = record['procedure_fhir_id']
+
             event = {
                 'event_type': 'surgery',
                 'event_date': record.get('proc_performed_date_time', '').split()[0] if record.get('proc_performed_date_time') else '',
@@ -1653,6 +1728,10 @@ Return ONLY the JSON object, no additional text.
             # Add clinical_features if not empty
             if clinical_features:
                 event['clinical_features'] = clinical_features
+
+            # Add V2 annotation if not empty
+            if v2_annotation:
+                event['v2_annotation'] = v2_annotation
 
             events.append(event)
             surgery_count += 1
@@ -1744,6 +1823,13 @@ Return ONLY the JSON object, no additional text.
             if record.get('v41_tumor_location'):
                 clinical_features['tumor_location'] = record['v41_tumor_location']
 
+            # V2 STEP 5: Add cross-resource annotation for provenance tracking
+            v2_annotation = {}
+            if record.get('binary_content_id'):
+                v2_annotation['binary_content_id'] = record['binary_content_id']
+            if record.get('performer_org_id'):
+                v2_annotation['performer_org_id'] = record['performer_org_id']
+
             event = {
                 'event_type': 'imaging',
                 'event_date': record.get('imaging_date'),
@@ -1758,6 +1844,10 @@ Return ONLY the JSON object, no additional text.
             # Add clinical_features if not empty
             if clinical_features:
                 event['clinical_features'] = clinical_features
+
+            # Add V2 annotation if not empty
+            if v2_annotation:
+                event['v2_annotation'] = v2_annotation
 
             events.append(event)
             imaging_count += 1
