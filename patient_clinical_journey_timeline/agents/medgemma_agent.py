@@ -185,6 +185,17 @@ class MedGemmaAgent:
 
         start_time = time.perf_counter()
 
+        # Adaptive timeout based on document size
+        # Large documents (>15KB) need more time to process
+        if prompt_length > 15000:
+            timeout = 300  # 5 minutes for very large documents
+        elif prompt_length > 10000:
+            timeout = 240  # 4 minutes for large documents
+        else:
+            timeout = 180  # 3 minutes for normal documents
+
+        logger.info(f"Using timeout: {timeout}s for prompt length {prompt_length}")
+
         payload = {
             "model": self.model_name,
             "prompt": prompt,
@@ -196,7 +207,7 @@ class MedGemmaAgent:
         response = requests.post(
             f"{self.ollama_url}/api/generate",
             json=payload,
-            timeout=120  # 2 minute timeout for large models
+            timeout=timeout
         )
 
         response.raise_for_status()
