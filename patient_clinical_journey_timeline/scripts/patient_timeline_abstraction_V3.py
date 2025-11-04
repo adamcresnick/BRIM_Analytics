@@ -2476,7 +2476,47 @@ Return ONLY the JSON object, no additional text.
             errors.append("Extraction result is empty")
             return False, errors
 
-        # 1. Schema validation (if schema provided)
+        # STEP 1: Check required fields (merged from original method)
+        required_fields = {
+            'missing_eor': ['extent_of_resection', 'surgeon_assessment'],
+            'missing_radiation_details': [
+                'date_at_radiation_start',
+                'date_at_radiation_stop',
+                'total_dose_cgy',
+                'radiation_type'
+            ],
+            'imaging_conclusion': ['lesions', 'rano_assessment'],
+            'missing_chemotherapy_details': [
+                'protocol_name',
+                'on_protocol_status',
+                'agent_names'
+            ]
+        }
+
+        # Field alternatives for validation
+        field_alternatives = {
+            'total_dose_cgy': [
+                'total_dose_cgy',
+                'radiation_focal_or_boost_dose',
+                'completed_radiation_focal_or_boost_dose',
+                'completed_craniospinal_or_whole_ventricular_radiation_dose'
+            ]
+        }
+
+        required = required_fields.get(gap_type, [])
+        for field in required:
+            alternatives = field_alternatives.get(field, [field])
+            field_found = False
+
+            for alt_field in alternatives:
+                if alt_field in result and result[alt_field] is not None and result[alt_field] != "":
+                    field_found = True
+                    break
+
+            if not field_found:
+                errors.append(field)  # Add missing required field to errors
+
+        # STEP 2: Schema validation (if schema provided)
         if expected_schema:
             for field, field_type in expected_schema.items():
                 if field not in result:
@@ -2487,7 +2527,7 @@ Return ONLY the JSON object, no additional text.
                         f"expected {field_type.__name__}, got {type(result[field]).__name__}"
                     )
 
-        # 2. Gap-type specific semantic validation
+        # STEP 3: Gap-type specific semantic validation
         if gap_type == 'missing_eor':
             eor_value = result.get('extent_of_resection')
             valid_eor_values = ['GTR', 'NTR', 'STR', 'Biopsy', None]
@@ -2541,7 +2581,7 @@ Return ONLY the JSON object, no additional text.
             if laterality and laterality not in valid_laterality:
                 errors.append(f"Invalid laterality value: '{laterality}'")
 
-        # 3. Confidence check
+        # STEP 4: Confidence check
         confidence = result.get('confidence', 'MEDIUM')
         if confidence == 'LOW':
             errors.append(
@@ -4131,60 +4171,6 @@ OUTPUT FORMAT (JSON):
             return False, f"Document contains forbidden keywords: {found_forbidden} (wrong document type)"
 
         return True, f"Document validated with keywords: {found_keywords}"
-
-    def _validate_extraction_result(self, extraction_data: Dict, gap_type: str) -> Tuple[bool, List[str]]:
-        """
-        Validate that MedGemma extraction contains required fields (Agent 1 validation)
-
-        Args:
-            extraction_data: Extracted data from MedGemma
-            gap_type: Type of gap
-
-        Returns:
-            Tuple of (is_valid, list of missing required fields)
-        """
-        # Define required fields by gap type
-        required_fields = {
-            'missing_eor': ['extent_of_resection', 'surgeon_assessment'],
-            'missing_radiation_details': [
-                'date_at_radiation_start',
-                'date_at_radiation_stop',  # Required for tracking re-irradiation episodes
-                'total_dose_cgy',
-                'radiation_type'
-            ],
-            'imaging_conclusion': ['lesions', 'rano_assessment'],
-            'missing_chemotherapy_details': [
-                'protocol_name',           # e.g., "COG ACNS0126", "SJMB12"
-                'on_protocol_status',      # "enrolled", "treated_as_per_protocol", etc.
-                'agent_names'              # List of drug names
-                # start_date and end_date optional - may come from structured data
-                # change_in_therapy_reason optional - null if no change
-            ]
-        }
-
-        required = required_fields.get(gap_type, [])
-        missing = []
-
-        # Define alternative field names for validation
-        field_alternatives = {
-            'total_dose_cgy': ['total_dose_cgy', 'radiation_focal_or_boost_dose', 'completed_radiation_focal_or_boost_dose', 'completed_craniospinal_or_whole_ventricular_radiation_dose']
-        }
-
-        for field in required:
-            # Check if field exists, or if any alternative exists
-            alternatives = field_alternatives.get(field, [field])
-            field_found = False
-
-            for alt_field in alternatives:
-                if alt_field in extraction_data and extraction_data[alt_field] is not None and extraction_data[alt_field] != "":
-                    field_found = True
-                    break
-
-            if not field_found:
-                missing.append(field)
-
-        is_valid = len(missing) == 0
-        return is_valid, missing
 
     def _retry_extraction_with_clarification(self, gap: Dict, extracted_text: str, first_result: Dict, missing_fields: List[str]) -> Optional[Dict]:
         """
