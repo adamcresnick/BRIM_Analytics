@@ -86,10 +86,14 @@ except ImportError as e:
 
 # Import custom JSON encoder for safe serialization of dataclasses
 try:
-    from lib.checkpoint_manager import DataclassJSONEncoder
+    from lib.checkpoint_manager import DataclassJSONEncoder, CheckpointManager, Phase
+    CHECKPOINT_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"Could not import DataclassJSONEncoder: {e}")
+    logger.warning(f"Could not import checkpoint modules: {e}")
     DataclassJSONEncoder = None  # Fallback to default str encoder
+    CheckpointManager = None
+    Phase = None
+    CHECKPOINT_AVAILABLE = False
 
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
@@ -374,6 +378,12 @@ class PatientTimelineAbstractor:
         self.schema_loader = None
         self.investigation_engine = None  # Initialized later in run() after Athena client setup
         self.who_kb = None
+
+        # Checkpoint manager for phase-level resumption
+        self.checkpoint_manager = None
+        if CHECKPOINT_AVAILABLE:
+            self.checkpoint_manager = CheckpointManager(self.athena_patient_id, str(self.output_dir))
+            logger.info("✅ Checkpoint manager initialized")
 
         try:
             from orchestration.schema_loader import AthenaSchemaLoader
@@ -1345,13 +1355,40 @@ Return ONLY the JSON object, no additional text.
         # TIFF magic numbers: II (little-endian) or MM (big-endian)
         return (image_bytes[:2] == b'II' or image_bytes[:2] == b'MM')
 
-    def run(self) -> Dict[str, Any]:
-        """Execute full iterative timeline abstraction workflow"""
+    def run(self, resume: bool = False) -> Dict[str, Any]:
+        """Execute full iterative timeline abstraction workflow
+
+        Args:
+            resume: If True, attempt to resume from last successful checkpoint
+        """
 
         print("="*80)
         print(f"PATIENT TIMELINE ABSTRACTION: {self.patient_id}")
         print("="*80)
         print()
+
+        # Check for resume
+        start_phase = None
+        if resume and self.checkpoint_manager:
+            latest_checkpoint = self.checkpoint_manager.get_latest_checkpoint()
+            if latest_checkpoint:
+                print(f"🔄 RESUMING from checkpoint: {latest_checkpoint}")
+                print("="*80)
+                print()
+                # Determine which phase to start from
+                phase_list = Phase.all_phases()
+                last_completed_index = Phase.phase_index(latest_checkpoint)
+                if last_completed_index >= 0 and last_completed_index < len(phase_list) - 1:
+                    start_phase = phase_list[last_completed_index + 1]
+                    print(f"✅ Last completed phase: {latest_checkpoint}")
+                    print(f"▶️  Starting from phase: {start_phase}")
+                    print()
+            else:
+                print("⚠️  No checkpoints found - starting from beginning")
+                print()
+        elif resume:
+            print("⚠️  Checkpoint manager not available - starting from beginning")
+            print()
 
         # PHASE 0: WHO 2021 TUMOR CLASSIFICATION (Run ONCE, cache forever)
         # This is the ONLY place tumor classification happens
@@ -1370,10 +1407,17 @@ Return ONLY the JSON object, no additional text.
         print()
 
         # PHASE 1: Load structured data from 6 Athena views FOR TIMELINE
-        print("PHASE 1: LOAD STRUCTURED DATA FROM ATHENA VIEWS")
-        print("-"*80)
-        self._phase1_load_structured_data()
-        print()
+        if self._should_skip_phase(Phase.PHASE_1_DATA_LOADING, start_phase):
+            print("⏭️  SKIPPING PHASE 1 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_1_DATA_LOADING)
+            print()
+        else:
+            print("PHASE 1: LOAD STRUCTURED DATA FROM ATHENA VIEWS")
+            print("-"*80)
+            self._phase1_load_structured_data()
+            print()
+            self._save_checkpoint(Phase.PHASE_1_DATA_LOADING)
 
         # V4.6: Initialize investigation engine (needs Athena client from query_athena function)
         if self.schema_loader and not self.investigation_engine:
@@ -1401,44 +1445,82 @@ Return ONLY the JSON object, no additional text.
             print()
 
         # PHASE 2: Construct initial timeline
-        print("PHASE 2: CONSTRUCT INITIAL TIMELINE")
-        print("-"*80)
-        self._phase2_construct_initial_timeline()
-        print()
+        if self._should_skip_phase(Phase.PHASE_2_TIMELINE_CONSTRUCTION, start_phase):
+            print("⏭️  SKIPPING PHASE 2 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_2_TIMELINE_CONSTRUCTION)
+            print()
+        else:
+            print("PHASE 2: CONSTRUCT INITIAL TIMELINE")
+            print("-"*80)
+            self._phase2_construct_initial_timeline()
+            print()
+            self._save_checkpoint(Phase.PHASE_2_TIMELINE_CONSTRUCTION)
 
         # PHASE 2.5: Assign treatment ordinality (V4 Enhancement)
-        self._phase2_5_assign_treatment_ordinality()
-        print()
+        if not self._should_skip_phase(Phase.PHASE_2_5_TREATMENT_ORDINALITY, start_phase):
+            self._phase2_5_assign_treatment_ordinality()
+            print()
+            self._save_checkpoint(Phase.PHASE_2_5_TREATMENT_ORDINALITY)
 
         # PHASE 3: Identify extraction gaps
-        print("PHASE 3: IDENTIFY GAPS REQUIRING BINARY EXTRACTION")
-        print("-"*80)
-        self._phase3_identify_extraction_gaps()
-        print()
+        if self._should_skip_phase(Phase.PHASE_3_GAP_IDENTIFICATION, start_phase):
+            print("⏭️  SKIPPING PHASE 3 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_3_GAP_IDENTIFICATION)
+            print()
+        else:
+            print("PHASE 3: IDENTIFY GAPS REQUIRING BINARY EXTRACTION")
+            print("-"*80)
+            self._phase3_identify_extraction_gaps()
+            print()
+            self._save_checkpoint(Phase.PHASE_3_GAP_IDENTIFICATION)
 
         # PHASE 4: Prioritize and extract from binaries (REAL MEDGEMMA INTEGRATION)
-        print("PHASE 4: PRIORITIZED BINARY EXTRACTION WITH MEDGEMMA")
-        print("-"*80)
-        self._phase4_extract_from_binaries()
-        print()
+        if self._should_skip_phase(Phase.PHASE_4_BINARY_EXTRACTION, start_phase):
+            print("⏭️  SKIPPING PHASE 4 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_4_BINARY_EXTRACTION)
+            print()
+        else:
+            print("PHASE 4: PRIORITIZED BINARY EXTRACTION WITH MEDGEMMA")
+            print("-"*80)
+            self._phase4_extract_from_binaries()
+            print()
+            self._save_checkpoint(Phase.PHASE_4_BINARY_EXTRACTION)
 
         # PHASE 4.5: Orchestrator assessment of extraction completeness
-        print("PHASE 4.5: ORCHESTRATOR ASSESSMENT OF EXTRACTION COMPLETENESS")
-        print("-"*80)
-        self._phase4_5_assess_extraction_completeness()
-        print()
+        if self._should_skip_phase(Phase.PHASE_4_5_COMPLETENESS_ASSESSMENT, start_phase):
+            print("⏭️  SKIPPING PHASE 4.5 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_4_5_COMPLETENESS_ASSESSMENT)
+            print()
+        else:
+            print("PHASE 4.5: ORCHESTRATOR ASSESSMENT OF EXTRACTION COMPLETENESS")
+            print("-"*80)
+            self._phase4_5_assess_extraction_completeness()
+            print()
+            self._save_checkpoint(Phase.PHASE_4_5_COMPLETENESS_ASSESSMENT)
 
         # PHASE 5: Protocol validation
-        print("PHASE 5: WHO 2021 PROTOCOL VALIDATION")
-        print("-"*80)
-        self._phase5_protocol_validation()
-        print()
+        if self._should_skip_phase(Phase.PHASE_5_PROTOCOL_VALIDATION, start_phase):
+            print("⏭️  SKIPPING PHASE 5 (already completed)")
+            print("-"*80)
+            self._load_checkpoint_state(Phase.PHASE_5_PROTOCOL_VALIDATION)
+            print()
+        else:
+            print("PHASE 5: WHO 2021 PROTOCOL VALIDATION")
+            print("-"*80)
+            self._phase5_protocol_validation()
+            print()
+            self._save_checkpoint(Phase.PHASE_5_PROTOCOL_VALIDATION)
 
         # PHASE 6: Generate final artifact
         print("PHASE 6: GENERATE FINAL TIMELINE ARTIFACT")
         print("-"*80)
         artifact = self._phase6_generate_artifact()
         print()
+        self._save_checkpoint(Phase.PHASE_6_ARTIFACT_GENERATION)
 
         return artifact
 
@@ -1554,6 +1636,77 @@ Return ONLY the JSON object, no additional text.
                 return extraction['extracted_text']
 
         return None
+
+    def _should_skip_phase(self, phase_name: str, start_phase: str) -> bool:
+        """
+        Determine if a phase should be skipped during resume.
+
+        Args:
+            phase_name: Current phase name
+            start_phase: Phase to start from (first phase to execute)
+
+        Returns:
+            True if phase should be skipped (already completed)
+        """
+        if not start_phase or not Phase:
+            return False
+
+        current_index = Phase.phase_index(phase_name)
+        start_index = Phase.phase_index(start_phase)
+
+        return current_index < start_index
+
+    def _load_checkpoint_state(self, phase_name: str):
+        """
+        Load state from a checkpoint if available.
+
+        Args:
+            phase_name: Phase name to load checkpoint for
+        """
+        if not self.checkpoint_manager:
+            return
+
+        state = self.checkpoint_manager.load_checkpoint(phase_name)
+        if state:
+            # Restore state variables
+            if 'structured_data' in state:
+                self.structured_data = state['structured_data']
+            if 'timeline_events' in state:
+                self.timeline_events = state['timeline_events']
+            if 'extraction_gaps' in state:
+                self.extraction_gaps = state['extraction_gaps']
+            if 'binary_extractions' in state:
+                self.binary_extractions = state['binary_extractions']
+            if 'protocol_validations' in state:
+                self.protocol_validations = state['protocol_validations']
+            if 'completeness_assessment' in state:
+                self.completeness_assessment = state['completeness_assessment']
+            if 'patient_demographics' in state:
+                self.patient_demographics = state['patient_demographics']
+
+    def _save_checkpoint(self, phase_name: str):
+        """
+        Save checkpoint after phase completion.
+
+        Args:
+            phase_name: Phase name that just completed
+        """
+        if not self.checkpoint_manager:
+            return
+
+        # Collect state to checkpoint
+        state = {
+            'structured_data': self.structured_data if hasattr(self, 'structured_data') else {},
+            'timeline_events': self.timeline_events,
+            'extraction_gaps': self.extraction_gaps,
+            'binary_extractions': self.binary_extractions,
+            'protocol_validations': self.protocol_validations,
+            'completeness_assessment': self.completeness_assessment,
+            'patient_demographics': self.patient_demographics,
+            'extraction_tracker': self.extraction_tracker
+        }
+
+        self.checkpoint_manager.save_checkpoint(phase_name, state)
 
     def _track_extraction_attempt(self, gap: Dict, document: Dict, result: Dict):
         """
@@ -5769,6 +5922,11 @@ def main():
         action='store_true',
         help='Force re-generation of WHO 2021 classification even if cached'
     )
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='Resume from last successful checkpoint (if available)'
+    )
 
     args = parser.parse_args()
 
@@ -5778,9 +5936,29 @@ def main():
         sys.exit(1)
 
     # Create output directory
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = Path(args.output_dir) / timestamp
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # If resuming, use the most recent directory; otherwise create new timestamped directory
+    if args.resume:
+        # Find most recent output directory for this patient
+        base_dir = Path(args.output_dir)
+        if base_dir.exists():
+            existing_dirs = sorted([d for d in base_dir.iterdir() if d.is_dir()], reverse=True)
+            if existing_dirs:
+                output_dir = existing_dirs[0]
+                print(f"🔄 Resuming from existing directory: {output_dir}")
+            else:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                output_dir = base_dir / timestamp
+                output_dir.mkdir(parents=True, exist_ok=True)
+                print(f"⚠️  No existing directory found, starting fresh: {output_dir}")
+        else:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_dir = base_dir / timestamp
+            output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"⚠️  Output directory doesn't exist, starting fresh: {output_dir}")
+    else:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path(args.output_dir) / timestamp
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     # Run abstraction
     abstractor = PatientTimelineAbstractor(
@@ -5789,7 +5967,7 @@ def main():
         max_extractions=args.max_extractions,
         force_reclassify=args.force_reclassify
     )
-    artifact = abstractor.run()
+    artifact = abstractor.run(resume=args.resume)
 
     print()
     print("="*80)
