@@ -5932,7 +5932,10 @@ Return JSON:
 
     def _fetch_source_documents(self, doc_ids: List[str]) -> str:
         """
-        V4.6: Fetch and combine text from source document IDs
+        V4.6.1: Fetch and combine text from source document IDs
+
+        V4.6.1 ENHANCEMENT: Now actually fetches Binary resources for uncached documents
+        using BinaryFileAgent, completing the Investigation Engine plumbing.
 
         Args:
             doc_ids: List of binary document IDs
@@ -5947,6 +5950,70 @@ Return JSON:
             text = self._get_cached_binary_text(doc_id)
             if text:
                 combined.append(f"--- Document {doc_id} ---\n{text}\n")
+                continue
+
+            # V4.6.1: If not cached, fetch from S3 using BinaryFileAgent
+            logger.info(f"      🔄 V4.6.1: Fetching uncached document {doc_id[:20]}...")
+
+            try:
+                # Stream Binary resource from S3
+                binary_content = self.binary_file_agent.stream_binary_from_s3(doc_id)
+
+                if not binary_content:
+                    logger.warning(f"        ⚠️  Could not fetch Binary resource for {doc_id[:20]}")
+                    continue
+
+                # Extract text based on content type (PDF, HTML, TIFF, etc.)
+                extracted_text = None
+                extraction_error = None
+
+                # Try PDF extraction
+                text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                if text and len(text.strip()) > 50:
+                    extracted_text = text
+                    content_type = 'application/pdf'
+                elif error:
+                    extraction_error = error
+                    logger.warning(f"        ⚠️  PDF extraction failed: {error}")
+
+                # If PDF failed, try HTML extraction
+                if not extracted_text:
+                    text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+                    if text and len(text.strip()) > 50:
+                        extracted_text = text
+                        content_type = 'text/html'
+
+                # If text-based formats failed, try TIFF/image extraction
+                if not extracted_text:
+                    logger.info(f"        📸 Attempting OCR extraction for {doc_id[:20]}...")
+                    text, error = self.binary_file_agent.extract_text_from_image(binary_content)
+                    if text and len(text.strip()) > 50:
+                        extracted_text = text
+                        content_type = 'image/tiff'
+                    elif error:
+                        logger.warning(f"        ⚠️  OCR extraction failed: {error}")
+
+                if extracted_text:
+                    # Add to binary_extractions cache so _get_cached_binary_text() finds it
+                    if not hasattr(self, 'binary_extractions'):
+                        self.binary_extractions = []
+
+                    self.binary_extractions.append({
+                        'binary_id': doc_id,
+                        'extracted_text': extracted_text,
+                        'content_type': content_type,
+                        'extraction_method': 'gap_filling_alternative',
+                        'text_length': len(extracted_text)
+                    })
+
+                    combined.append(f"--- Document {doc_id} ---\n{extracted_text}\n")
+                    logger.info(f"        ✅ V4.6.1: Extracted {len(extracted_text)} chars from {doc_id[:20]} ({content_type})")
+                else:
+                    logger.warning(f"        ⚠️  No text extracted from {doc_id[:20]} (tried PDF, HTML, OCR)")
+
+            except Exception as e:
+                logger.error(f"        ❌ Error fetching document {doc_id[:20]}: {e}")
+                continue
 
         return "\n".join(combined)
 
