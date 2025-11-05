@@ -424,6 +424,150 @@ class InvestigationEngine:
             logger.error(f"Failed to execute query: {e}")
             return []
 
+    def investigate_gap_filling_failure(
+        self,
+        gap_type: str,
+        event: Dict,
+        reason: str
+    ) -> Dict:
+        """
+        V4.6 GAP #1: Investigate why gap-filling failed (no source documents available).
+
+        This method is called when Phase 4.5 gap-filling can't find source_document_ids,
+        typically because MedGemma extraction in Phase 4 failed validation.
+
+        Args:
+            gap_type: Type of gap (surgery_eor, radiation_dose, imaging_conclusion)
+            event: The event missing data
+            reason: Why gap-filling failed
+
+        Returns:
+            Dict with suggested alternative document sources
+        """
+        logger.info(f"Investigating gap-filling failure for {gap_type}: {reason}")
+
+        investigation = {
+            'gap_type': gap_type,
+            'event_date': event.get('event_date'),
+            'reason': reason,
+            'root_cause': 'MedGemma extraction failed validation, so source_document_ids not populated',
+            'explanation': None,
+            'suggested_alternatives': []
+        }
+
+        # Suggest alternative document sources based on gap type
+        # V4.6 ENHANCEMENT: Added core timeline gap types from Phase 2.1
+        if gap_type == 'missing_surgeries':
+            investigation['explanation'] = (
+                "No surgery events found in v_procedures_tumor. "
+                "Try alternative procedure types (biopsy, resection, debulking) or expanded temporal window."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'query_alternative_procedure_types',
+                    'description': 'Search for biopsies, resections, debulking procedures',
+                    'confidence': 0.85
+                },
+                {
+                    'method': 'query_encounters_for_procedures',
+                    'description': 'Look for surgical encounters without linked Procedure resources',
+                    'confidence': 0.7
+                }
+            ]
+        elif gap_type == 'missing_chemo_end_dates':
+            investigation['explanation'] = (
+                "Chemotherapy start found but no corresponding end date. "
+                "Try v_medication_administration for last administration date or clinical notes."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'query_last_medication_administration',
+                    'description': 'Find last MedicationAdministration for chemotherapy agents',
+                    'confidence': 0.9
+                },
+                {
+                    'method': 'search_clinical_notes_for_completion',
+                    'description': 'Search clinical notes for "completed chemotherapy" or "last dose"',
+                    'confidence': 0.6
+                }
+            ]
+        elif gap_type == 'missing_radiation_end_dates':
+            investigation['explanation'] = (
+                "Radiation start found but no corresponding end date. "
+                "Try v_radiation_documents for completion summaries."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'query_radiation_completion_documents',
+                    'description': 'Search radiation treatment summaries for completion date',
+                    'confidence': 0.85
+                },
+                {
+                    'method': 'calculate_from_fractions_and_start',
+                    'description': 'Calculate end date from start date + number of fractions',
+                    'confidence': 0.7
+                }
+            ]
+        elif gap_type == 'radiation_dose':
+            investigation['explanation'] = (
+                "Temporal matching found low-quality documents (progress notes). "
+                "Try v_radiation_documents with extraction_priority for better quality."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'v_radiation_documents_priority',
+                    'description': 'Use v_radiation_documents view with priority sorting (Treatment summaries first)',
+                    'confidence': 0.9,
+                    'query_template': 'v_radiation_documents WHERE extraction_priority = 1'
+                },
+                {
+                    'method': 'expand_temporal_window',
+                    'description': 'Expand temporal window from ±30 days to ±60 days',
+                    'confidence': 0.6
+                },
+                {
+                    'method': 'alternative_document_categories',
+                    'description': 'Try consultation notes or outside records',
+                    'confidence': 0.5
+                }
+            ]
+        elif gap_type == 'surgery_eor':
+            investigation['explanation'] = (
+                "Operative notes may be missing or under wrong encounter. "
+                "Try v_document_reference_enriched with encounter-based lookup."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'v_document_reference_enriched',
+                    'description': 'Use encounter-based document discovery',
+                    'confidence': 0.8
+                },
+                {
+                    'method': 'expand_document_categories',
+                    'description': 'Include surgical notes, anesthesia records, surgeon progress notes',
+                    'confidence': 0.7
+                }
+            ]
+        elif gap_type == 'imaging_conclusion':
+            investigation['explanation'] = (
+                "Imaging reports may not have Binary attachments. "
+                "Try DiagnosticReport.conclusion field or result_information."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'structured_conclusion',
+                    'description': 'Use DiagnosticReport.conclusion from v2_imaging instead of Binary extraction',
+                    'confidence': 0.95
+                },
+                {
+                    'method': 'result_information_field',
+                    'description': 'Parse v2_imaging.result_information field',
+                    'confidence': 0.85
+                }
+            ]
+
+        return investigation
+
 
 if __name__ == '__main__':
     # Test the investigation engine

@@ -40,6 +40,7 @@ import os
 import argparse
 import logging
 import json
+import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta
 import boto3
@@ -129,17 +130,103 @@ WHO_2021_REFERENCE_PATH = Path("/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM
 # Enhancement: See _enhance_classification_with_binary_pathology() method (lines 722-892)
 
 
+class SSOTokenManager:
+    """
+    V4.6.1: Manages AWS SSO token lifecycle with automatic refresh.
+
+    Prevents long-running processes from crashing due to token expiration.
+    """
+    def __init__(self, profile_name: str = 'radiant-prod'):
+        self.profile_name = profile_name
+        self.last_check_time = None
+        self.check_interval = 300  # Check every 5 minutes
+
+    def is_token_valid(self) -> bool:
+        """Check if current SSO token is valid"""
+        try:
+            session = boto3.Session(profile_name=self.profile_name)
+            sts = session.client('sts')
+            sts.get_caller_identity()
+            self.last_check_time = time.time()
+            return True
+        except Exception as e:
+            error_str = str(e)
+            if 'expired' in error_str.lower() or 'TokenRetrievalError' in error_str:
+                logger.warning(f"⚠️  AWS SSO token expired: {e}")
+                return False
+            else:
+                logger.error(f"AWS SSO token validation error: {e}")
+                return False
+
+    def refresh_token(self) -> bool:
+        """
+        Trigger AWS SSO login to refresh token.
+
+        Returns:
+            True if refresh successful, False otherwise
+        """
+        logger.warning("🔄 AWS SSO token expired. Attempting automatic refresh...")
+        logger.warning(f"   Running: aws sso login --profile {self.profile_name}")
+
+        try:
+            # Trigger SSO login
+            result = subprocess.run(
+                ['aws', 'sso', 'login', '--profile', self.profile_name],
+                capture_output=True,
+                text=True,
+                timeout=60  # 60 second timeout for login
+            )
+
+            if result.returncode == 0:
+                logger.info("✅ AWS SSO token refreshed successfully")
+                self.last_check_time = time.time()
+                return True
+            else:
+                logger.error(f"❌ SSO login failed: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error("❌ SSO login timed out after 60 seconds")
+            return False
+        except Exception as e:
+            logger.error(f"❌ SSO login failed: {e}")
+            return False
+
+    def ensure_valid_token(self) -> bool:
+        """
+        Ensure token is valid, refreshing if necessary.
+
+        Returns:
+            True if token is valid (or successfully refreshed), False otherwise
+        """
+        # Periodic check (every 5 minutes during long-running operations)
+        if self.last_check_time and (time.time() - self.last_check_time) < self.check_interval:
+            return True  # Assume valid if checked recently
+
+        if self.is_token_valid():
+            return True
+
+        # Token invalid - attempt refresh
+        return self.refresh_token()
+
+# Global SSO token manager instance
+_sso_manager = None
+
+def get_sso_manager(profile_name: str = 'radiant-prod') -> SSOTokenManager:
+    """Get global SSO token manager instance"""
+    global _sso_manager
+    if _sso_manager is None:
+        _sso_manager = SSOTokenManager(profile_name)
+    return _sso_manager
+
 def check_aws_sso_token(profile_name: str = 'radiant-prod') -> bool:
-    """Check if AWS SSO token is valid"""
-    try:
-        session = boto3.Session(profile_name=profile_name)
-        sts = session.client('sts')
-        sts.get_caller_identity()
-        logger.info(f"AWS SSO token for '{profile_name}' is valid")
-        return True
-    except Exception as e:
-        logger.error(f"AWS SSO token invalid: {e}")
-        return False
+    """
+    Check if AWS SSO token is valid (legacy function for backward compatibility).
+
+    V4.6.1: Now uses SSOTokenManager for better error handling.
+    """
+    manager = get_sso_manager(profile_name)
+    return manager.is_token_valid()
 
 
 def query_athena(query: str, description: str = None, profile: str = 'radiant-prod', suppress_output: bool = False, investigation_engine = None, schema_loader = None, retry_count: int = 0) -> List[Dict[str, Any]]:
@@ -153,20 +240,53 @@ def query_athena(query: str, description: str = None, profile: str = 'radiant-pr
         investigation_engine: V4.6: Optional investigation engine for auto-fixing failures
         schema_loader: V4.6: Optional schema loader for investigation
         retry_count: V4.6: Number of retry attempts (prevents infinite loops)
+
+    V4.6.1: Now includes automatic SSO token refresh on expiration.
     """
     if description and not suppress_output:
         print(f"  {description}...", end='', flush=True)
 
-    session = boto3.Session(profile_name=profile)
-    client = session.client('athena', region_name='us-east-1')
+    # V4.6.1: Ensure SSO token is valid before query
+    sso_manager = get_sso_manager(profile)
+    if not sso_manager.ensure_valid_token():
+        error_msg = "AWS SSO token invalid and refresh failed. Run: aws sso login --profile {profile}"
+        logger.error(error_msg)
+        if description and not suppress_output:
+            print(f" ❌ FAILED: {error_msg}")
+        raise RuntimeError(error_msg)
 
-    response = client.start_query_execution(
-        QueryString=query,
-        QueryExecutionContext={'Database': 'fhir_prd_db'},
-        ResultConfiguration={
-            'OutputLocation': 's3://aws-athena-query-results-343218191717-us-east-1/'
-        }
-    )
+    try:
+        session = boto3.Session(profile_name=profile)
+        client = session.client('athena', region_name='us-east-1')
+
+        response = client.start_query_execution(
+            QueryString=query,
+            QueryExecutionContext={'Database': 'fhir_prd_db'},
+            ResultConfiguration={
+                'OutputLocation': 's3://aws-athena-query-results-343218191717-us-east-1/'
+            }
+        )
+    except Exception as e:
+        # V4.6.1: Detect token expiration errors and retry once
+        error_str = str(e)
+        if 'expired' in error_str.lower() or 'TokenRetrievalError' in error_str:
+            logger.warning("⚠️  Token expiration detected during query execution. Attempting refresh...")
+            if sso_manager.refresh_token():
+                logger.info("🔄 Retrying query after token refresh...")
+                # Retry with fresh session
+                session = boto3.Session(profile_name=profile)
+                client = session.client('athena', region_name='us-east-1')
+                response = client.start_query_execution(
+                    QueryString=query,
+                    QueryExecutionContext={'Database': 'fhir_prd_db'},
+                    ResultConfiguration={
+                        'OutputLocation': 's3://aws-athena-query-results-343218191717-us-east-1/'
+                    }
+                )
+            else:
+                raise
+        else:
+            raise
 
     query_id = response['QueryExecutionId']
 
@@ -255,6 +375,36 @@ def query_athena(query: str, description: str = None, profile: str = 'radiant-pr
             if len(results['ResultSet']['Rows']) <= 1:
                 if description and not suppress_output:
                     print(f" ✅ 0 records")
+
+                # V4.6 BUG FIX #1: Investigation Engine - Trigger on empty results for document lookups
+                if investigation_engine and ('DocumentReference' in query or 'Binary' in query or 'v_binary_files' in query):
+                    logger.info(f"🔍 V4.6: Investigating empty result set for document query...")
+                    try:
+                        investigation = investigation_engine.investigate_query_failure(
+                            query_id=query_id,
+                            query_string=query,
+                            error_message="Query succeeded but returned 0 rows (no documents found)"
+                        )
+
+                        logger.info(f"  Investigation type: {investigation.get('error_type', 'empty_result_set')}")
+
+                        # Check for suggested alternative query
+                        if 'suggested_fix' in investigation:
+                            confidence = investigation.get('fix_confidence', 0.0)
+                            logger.info(f"  Suggested alternative query (confidence: {confidence:.1%})")
+
+                            # Log suggestion but don't auto-retry on empty results (only on failures)
+                            # This prevents infinite loops and gives visibility into why no documents exist
+                            if confidence > 0.7:
+                                logger.info(f"  💡 Suggestion: {investigation.get('explanation', 'Try alternative document sources')}")
+
+                            # Save investigation report for analysis
+                            if hasattr(investigation_engine, 'save_report'):
+                                investigation_engine.save_report(query_id, investigation)
+
+                    except Exception as e:
+                        logger.debug(f"  Investigation of empty result skipped: {e}")
+
                 return []
             header = [col['VarCharValue'] for col in results['ResultSet']['Rows'][0]['Data']]
             result_rows = results['ResultSet']['Rows'][1:]
@@ -1457,6 +1607,13 @@ Return ONLY the JSON object, no additional text.
             print()
             self._save_checkpoint(Phase.PHASE_2_TIMELINE_CONSTRUCTION)
 
+        # PHASE 2.1: Validate minimal completeness (V4.6 REQUIREMENT)
+        print("\n" + "="*80)
+        print("PHASE 2.1: VALIDATE MINIMAL COMPLETENESS")
+        print("="*80)
+        self._validate_minimal_completeness()
+        print()
+
         # PHASE 2.5: Assign treatment ordinality (V4 Enhancement)
         if not self._should_skip_phase(Phase.PHASE_2_5_TREATMENT_ORDINALITY, start_phase):
             self._phase2_5_assign_treatment_ordinality()
@@ -2307,6 +2464,15 @@ Return ONLY the JSON object, no additional text.
         print(f"     Radiation courses: {summary['total_radiation_courses']}")
         print(f"     Timing context: {summary['upfront_treatments']} upfront, "
               f"{summary['adjuvant_treatments']} adjuvant, {summary['salvage_treatments']} salvage")
+
+        # V4.6 GAP #2: Compute treatment change reasons
+        self._compute_treatment_change_reasons()
+
+        # V4.6 GAP #3: Enrich event relationships
+        self._enrich_event_relationships()
+
+        # V4.6 GAP #5: Add RANO assessment to imaging events
+        self._enrich_imaging_with_rano_assessment()
 
     def _phase3_identify_extraction_gaps(self):
         """Phase 3: Identify gaps in structured data requiring binary extraction"""
@@ -3407,17 +3573,28 @@ Return as structured JSON with confidence levels."""
             return None
 
         try:
-            # Query v_radiation_documents for documents near radiation start
+            # V4.6 ENHANCEMENT: Use extraction_priority from v_radiation_documents for better document selection
+            # Priority 1 = Treatment summaries (best for dose extraction)
+            # Priority 2 = Consult notes
+            # Priority 3 = Outside summaries
             query = f"""
-            SELECT document_id, doc_type_text, doc_date, doc_description
+            SELECT document_id, doc_type_text, doc_date, doc_description,
+                   extraction_priority, document_category, docc_attachment_url as binary_id
             FROM fhir_prd_db.v_radiation_documents
             WHERE patient_fhir_id = '{self.athena_patient_id}'
               AND ABS(DATE_DIFF('day', CAST(doc_date AS DATE), CAST(TIMESTAMP '{radiation_date}' AS DATE))) <= 30
-            ORDER BY ABS(DATE_DIFF('day', CAST(doc_date AS DATE), CAST(TIMESTAMP '{radiation_date}' AS DATE)))
+            ORDER BY extraction_priority ASC,
+                     ABS(DATE_DIFF('day', CAST(doc_date AS DATE), CAST(TIMESTAMP '{radiation_date}' AS DATE))) ASC
             LIMIT 1
             """
 
-            results = query_athena(query, f"Finding radiation document for {radiation_date}", suppress_output=True)
+            results = query_athena(
+                query,
+                f"Finding radiation document for {radiation_date}",
+                suppress_output=True,
+                investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+            )
 
             if results:
                 doc_id = results[0].get('document_id')
@@ -4826,7 +5003,14 @@ OUTPUT FORMAT (JSON):
                 LIMIT 1
                 """
 
-                results = query_athena(query, f"Finding Binary for {resource_type}/{resource_id}", suppress_output=True)
+                # V4.6 BUG FIX #1: Pass investigation engine for empty result analysis
+                results = query_athena(
+                    query,
+                    f"Finding Binary for {resource_type}/{resource_id}",
+                    suppress_output=True,
+                    investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                    schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+                )
 
                 if not results:
                     logger.warning(f"No Binary found for {fhir_target} in v_binary_files")
@@ -4853,7 +5037,14 @@ OUTPUT FORMAT (JSON):
                 LIMIT 1
                 """
 
-                results = query_athena(query, f"Finding content_type for {binary_id}", suppress_output=True)
+                # V4.6 BUG FIX #1: Pass investigation engine for empty result analysis
+                results = query_athena(
+                    query,
+                    f"Finding content_type for {binary_id}",
+                    suppress_output=True,
+                    investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                    schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+                )
 
                 if results and results[0].get('content_type'):
                     content_type = results[0]['content_type']
@@ -4896,6 +5087,15 @@ OUTPUT FORMAT (JSON):
                 success=True,
                 metadata={'text_length': len(extracted_text) if extracted_text else 0, 'resource_type': resource_type}
             )
+
+            # V4.6 BUG FIX #2/#3: Store extracted text in binary_extractions for gap-filling reuse
+            self.binary_extractions.append({
+                'binary_id': binary_id,
+                'extracted_text': extracted_text,
+                'content_type': content_type,
+                'resource_type': resource_type,
+                'fhir_target': fhir_target
+            })
 
             return extracted_text
 
@@ -5100,6 +5300,11 @@ INSTRUCTIONS:
         event_date = gap.get('event_date')
         gap_type = gap.get('gap_type')
 
+        # V4.6 BUG FIX #2: Extract document ID for source_document_ids tracking
+        document_id = gap.get('medgemma_target', '')
+        if document_id.startswith('DocumentReference/'):
+            document_id = document_id.replace('DocumentReference/', '')
+
         # NOTE: Date mismatch detection now happens earlier in Phase 4 (before validation)
         # This function only handles NORMAL merging of data into existing events
 
@@ -5112,6 +5317,12 @@ INSTRUCTIONS:
                     # Merge imaging-specific fields
                     event['report_conclusion'] = extraction_data.get('radiologist_impression', '')
                     event['medgemma_extraction'] = extraction_data
+                    # V4.6 BUG FIX #2: Track source document for gap-filling reuse
+                    if document_id:
+                        if 'source_document_ids' not in event:
+                            event['source_document_ids'] = []
+                        if document_id not in event['source_document_ids']:
+                            event['source_document_ids'].append(document_id)
                     logger.info(f"Merged imaging conclusion for {event_date}: {event.get('report_conclusion', '')[:100]}")
                     event_merged = True
                     break
@@ -5201,6 +5412,12 @@ INSTRUCTIONS:
                     # Always update other fields
                     event['tumor_site'] = extraction_data.get('tumor_site')
                     event['medgemma_extraction'] = extraction_data
+                    # V4.6 BUG FIX #2: Track source document for gap-filling reuse
+                    if document_id:
+                        if 'source_document_ids' not in event:
+                            event['source_document_ids'] = []
+                        if document_id not in event['source_document_ids']:
+                            event['source_document_ids'].append(document_id)
                     logger.info(f"Merged EOR for {event_date}: {event.get('extent_of_resection')} (sources: {len(event['extent_of_resection_v4']['sources'])})")
                     event_merged = True
                     break
@@ -5218,6 +5435,12 @@ INSTRUCTIONS:
                     event['date_at_radiation_start'] = extraction_data.get('date_at_radiation_start')
                     event['date_at_radiation_stop'] = extraction_data.get('date_at_radiation_stop')
                     event['medgemma_extraction'] = extraction_data
+                    # V4.6 BUG FIX #2: Track source document for gap-filling reuse
+                    if document_id:
+                        if 'source_document_ids' not in event:
+                            event['source_document_ids'] = []
+                        if document_id not in event['source_document_ids']:
+                            event['source_document_ids'].append(document_id)
                     logger.info(f"Merged radiation details for {event_date}: {event.get('total_dose_cgy')} cGy")
                     event_merged = True
                     break
@@ -5227,6 +5450,12 @@ INSTRUCTIONS:
                     event['chemotherapy_protocol'] = extraction_data.get('chemotherapy_protocol')
                     event['chemotherapy_intent'] = extraction_data.get('chemotherapy_intent')
                     event['medgemma_extraction'] = extraction_data
+                    # V4.6 BUG FIX #2: Track source document for gap-filling reuse
+                    if document_id:
+                        if 'source_document_ids' not in event:
+                            event['source_document_ids'] = []
+                        if document_id not in event['source_document_ids']:
+                            event['source_document_ids'].append(document_id)
                     logger.info(f"Merged chemotherapy details for {event_date}: {event.get('chemotherapy_agents')}")
                     event_merged = True
                     break
@@ -5283,6 +5512,173 @@ INSTRUCTIONS:
                     assessment['chemotherapy']['complete'] += 1
 
         return assessment
+
+    def _validate_minimal_completeness(self):
+        """
+        V4.6: Validate minimal timeline completeness before extracting optional features.
+
+        REQUIRED (Core Timeline):
+        - WHO Diagnosis
+        - All tumor surgeries/biopsies
+        - All chemotherapy start/stop dates
+        - All radiation start/stop dates
+
+        OPTIONAL (Features):
+        - Extent of resection
+        - Radiation doses
+        - Imaging conclusions
+        - Progression/recurrence flags
+        - Protocols
+        """
+        logger.info("\n✅ V4.6 PHASE 2.1: Validating minimal timeline completeness...")
+
+        validation = {
+            'who_diagnosis': {'present': False, 'status': 'REQUIRED'},
+            'surgeries': {'count': 0, 'status': 'REQUIRED'},
+            'chemotherapy': {'count': 0, 'missing_end_dates': 0, 'status': 'REQUIRED'},
+            'radiation': {'count': 0, 'missing_end_dates': 0, 'status': 'REQUIRED'},
+            'optional_features': {
+                'extent_of_resection': 0,
+                'radiation_doses': 0,
+                'imaging_conclusions': 0,
+                'progression_flags': 0,
+                'protocols': 0
+            }
+        }
+
+        # Check WHO Diagnosis
+        if self.who_2021_classification:
+            validation['who_diagnosis']['present'] = True
+            who_grade = self.who_2021_classification.get('who_grade') or self.who_2021_classification.get('final_diagnosis', 'Unknown')
+            logger.info(f"  ✅ WHO Diagnosis: {who_grade}")
+        else:
+            logger.warning("  ⚠️  WHO Diagnosis: MISSING (REQUIRED)")
+
+        # Count surgeries/biopsies
+        surgery_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'surgery']
+        validation['surgeries']['count'] = len(surgery_events)
+
+        if validation['surgeries']['count'] > 0:
+            logger.info(f"  ✅ Surgeries/Biopsies: {validation['surgeries']['count']} found")
+        else:
+            logger.warning("  ⚠️  Surgeries/Biopsies: NONE FOUND (REQUIRED)")
+
+        # Validate chemotherapy start/stop dates
+        chemo_start_events = [e for e in self.timeline_events
+                             if e.get('event_type') in ['chemo_start', 'chemotherapy_start']]
+        validation['chemotherapy']['count'] = len(chemo_start_events)
+
+        for chemo in chemo_start_events:
+            chemo_end = chemo.get('relationships', {}).get('related_events', {}).get('chemotherapy_end')
+            if not chemo_end:
+                validation['chemotherapy']['missing_end_dates'] += 1
+
+        if validation['chemotherapy']['count'] > 0:
+            logger.info(f"  ✅ Chemotherapy Regimens: {validation['chemotherapy']['count']} found")
+            if validation['chemotherapy']['missing_end_dates'] > 0:
+                logger.warning(f"  ⚠️  Chemotherapy: {validation['chemotherapy']['missing_end_dates']} missing end dates")
+        else:
+            logger.info("  ℹ️  Chemotherapy: None found (acceptable for surgical-only cases)")
+
+        # Validate radiation start/stop dates
+        radiation_start_events = [e for e in self.timeline_events
+                                 if e.get('event_type') == 'radiation_start']
+        validation['radiation']['count'] = len(radiation_start_events)
+
+        for rad in radiation_start_events:
+            rad_end = rad.get('relationships', {}).get('related_events', {}).get('radiation_end')
+            if not rad_end:
+                validation['radiation']['missing_end_dates'] += 1
+
+        if validation['radiation']['count'] > 0:
+            logger.info(f"  ✅ Radiation Courses: {validation['radiation']['count']} found")
+            if validation['radiation']['missing_end_dates'] > 0:
+                logger.warning(f"  ⚠️  Radiation: {validation['radiation']['missing_end_dates']} missing end dates")
+        else:
+            logger.info("  ℹ️  Radiation: None found (acceptable for non-radiation cases)")
+
+        # Count optional features (for context only)
+        for event in self.timeline_events:
+            if event.get('extent_of_resection'):
+                validation['optional_features']['extent_of_resection'] += 1
+            if event.get('radiation_dose_gy'):
+                validation['optional_features']['radiation_doses'] += 1
+            if event.get('report_conclusion'):
+                validation['optional_features']['imaging_conclusions'] += 1
+            if event.get('progression_flag'):
+                validation['optional_features']['progression_flags'] += 1
+            if event.get('protocol_name'):
+                validation['optional_features']['protocols'] += 1
+
+        logger.info("\n  OPTIONAL FEATURES (will be extracted in Phase 3, 4, 4.5):")
+        logger.info(f"    - Extent of Resection: {validation['optional_features']['extent_of_resection']}")
+        logger.info(f"    - Radiation Doses: {validation['optional_features']['radiation_doses']}")
+        logger.info(f"    - Imaging Conclusions: {validation['optional_features']['imaging_conclusions']}")
+        logger.info(f"    - Progression Flags: {validation['optional_features']['progression_flags']}")
+        logger.info(f"    - Protocols: {validation['optional_features']['protocols']}")
+
+        # Determine overall completeness
+        core_complete = (
+            validation['who_diagnosis']['present'] and
+            validation['surgeries']['count'] > 0
+        )
+
+        if core_complete:
+            logger.info("\n  ✅ CORE TIMELINE: Complete (WHO + Surgeries present)")
+        else:
+            logger.warning("\n  ⚠️  CORE TIMELINE: Incomplete (missing WHO diagnosis or surgeries)")
+            logger.warning("  → Proceeding to Phase 2.5+ to extract additional features")
+
+        # Store validation results
+        self.minimal_completeness_validation = validation
+
+        # V4.6 ENHANCEMENT: Trigger Investigation Engine for core timeline gaps
+        if self.investigation_engine:
+            logger.info("\n  🔍 V4.6 ENHANCEMENT: Investigating core timeline gaps...")
+
+            # Investigate missing surgeries
+            if validation['surgeries']['count'] == 0:
+                logger.info("  → Investigating missing surgeries...")
+                investigation = self.investigation_engine.investigate_gap_filling_failure(
+                    gap_type='missing_surgeries',
+                    event={'event_type': 'surgery', 'patient_id': self.patient_id},
+                    reason="No surgery events found in v_procedures_tumor"
+                )
+                if investigation.get('suggested_alternatives'):
+                    logger.info(f"    💡 {investigation.get('explanation', '')}")
+                    for alt in investigation['suggested_alternatives']:
+                        logger.info(f"      - {alt.get('method', 'unknown')}: {alt.get('description', '')} (confidence: {alt.get('confidence', 0):.0%})")
+
+            # Investigate missing chemo end dates
+            if validation['chemotherapy']['missing_end_dates'] > 0:
+                logger.info(f"  → Investigating {validation['chemotherapy']['missing_end_dates']} missing chemotherapy end dates...")
+                investigation = self.investigation_engine.investigate_gap_filling_failure(
+                    gap_type='missing_chemo_end_dates',
+                    event={'event_type': 'chemotherapy', 'patient_id': self.patient_id},
+                    reason=f"{validation['chemotherapy']['missing_end_dates']} chemotherapy regimens missing end dates"
+                )
+                if investigation.get('suggested_alternatives'):
+                    logger.info(f"    💡 {investigation.get('explanation', '')}")
+                    for alt in investigation['suggested_alternatives']:
+                        logger.info(f"      - {alt.get('method', 'unknown')}: {alt.get('description', '')} (confidence: {alt.get('confidence', 0):.0%})")
+
+            # Investigate missing radiation end dates
+            if validation['radiation']['missing_end_dates'] > 0:
+                logger.info(f"  → Investigating {validation['radiation']['missing_end_dates']} missing radiation end dates...")
+                investigation = self.investigation_engine.investigate_gap_filling_failure(
+                    gap_type='missing_radiation_end_dates',
+                    event={'event_type': 'radiation', 'patient_id': self.patient_id},
+                    reason=f"{validation['radiation']['missing_end_dates']} radiation courses missing end dates"
+                )
+                if investigation.get('suggested_alternatives'):
+                    logger.info(f"    💡 {investigation.get('explanation', '')}")
+                    for alt in investigation['suggested_alternatives']:
+                        logger.info(f"      - {alt.get('method', 'unknown')}: {alt.get('description', '')} (confidence: {alt.get('confidence', 0):.0%})")
+
+            logger.info("  ℹ️  Note: Investigation suggestions logged for future implementation of remediation strategies")
+
+        return validation
 
     def _phase4_5_assess_extraction_completeness(self):
         """
@@ -5415,7 +5811,32 @@ INSTRUCTIONS:
         source_docs = gap.get('source_documents', [])
         if not source_docs:
             logger.warning(f"      ⚠️  No source documents available for gap-filling")
-            return False
+
+            # GAP #1 FIX: Trigger Investigation Engine to find alternative documents
+            if self.investigation_engine:
+                logger.info(f"      🔍 V4.6 GAP #1: Investigating alternative document sources for {gap_type}")
+                investigation = self.investigation_engine.investigate_gap_filling_failure(
+                    gap_type=gap_type,
+                    event=event,
+                    reason="No source_document_ids populated - likely due to MedGemma extraction failure in Phase 4"
+                )
+
+                if investigation and investigation.get('suggested_alternatives'):
+                    logger.info(f"      💡 Investigation suggests: {investigation.get('explanation', '')}")
+
+                    # Try suggested document sources (e.g., use v_radiation_documents instead of temporal matching)
+                    alternatives = investigation.get('suggested_alternatives', [])
+                    for alt in alternatives[:3]:  # Try top 3 alternatives
+                        logger.info(f"      🔄 Trying alternative: {alt.get('method', 'unknown')}")
+                        alt_docs = self._try_alternative_document_source(alt, event, gap_type)
+                        if alt_docs:
+                            source_docs = alt_docs
+                            logger.info(f"      ✅ Found {len(source_docs)} alternative documents")
+                            break
+
+            # If still no documents after investigation, give up
+            if not source_docs:
+                return False
 
         # Construct targeted extraction prompt
         prompt = self._create_gap_filling_prompt(gap_type, field, event)
@@ -5528,6 +5949,435 @@ Return JSON:
                 combined.append(f"--- Document {doc_id} ---\n{text}\n")
 
         return "\n".join(combined)
+
+    def _try_alternative_document_source(self, alternative: Dict, event: Dict, gap_type: str) -> List[str]:
+        """
+        V4.6 GAP #1: Execute Investigation Engine's suggested alternative document source.
+
+        Args:
+            alternative: Dict with 'method', 'description', 'confidence'
+            event: The event missing data
+            gap_type: Type of gap (radiation_dose, surgery_eor, imaging_conclusion)
+
+        Returns:
+            List of document IDs found via alternative method, or []
+        """
+        method = alternative.get('method')
+        logger.info(f"        Executing alternative method: {method}")
+
+        try:
+            if method == 'v_radiation_documents_priority':
+                return self._query_radiation_documents_by_priority(event)
+            elif method == 'structured_conclusion':
+                return self._get_imaging_structured_conclusion(event)
+            elif method == 'result_information_field':
+                return self._get_imaging_result_information(event)
+            elif method == 'v_document_reference_enriched':
+                return self._query_document_reference_enriched(event)
+            elif method == 'expand_temporal_window':
+                return self._query_documents_expanded_window(event, gap_type)
+            elif method == 'expand_document_categories':
+                return self._query_alternative_document_categories(event, gap_type)
+            else:
+                logger.warning(f"        Unknown alternative method: {method}")
+                return []
+        except Exception as e:
+            logger.error(f"        Error executing alternative {method}: {e}")
+            return []
+
+    def _query_radiation_documents_by_priority(self, event: Dict) -> List[str]:
+        """
+        V4.6 GAP #1: Query v_radiation_documents with extraction_priority sorting.
+        """
+        radiation_date = event.get('event_date')
+        if not radiation_date:
+            return []
+
+        logger.info(f"        🔍 Querying v_radiation_documents for {radiation_date}")
+
+        query = f"""
+        SELECT document_id, doc_type_text, doc_date, docc_attachment_url as binary_id
+        FROM fhir_prd_db.v_radiation_documents
+        WHERE patient_fhir_id = '{self.athena_patient_id}'
+          AND ABS(DATE_DIFF('day', CAST(doc_date AS DATE), CAST(TIMESTAMP '{radiation_date}' AS DATE))) <= 45
+        ORDER BY extraction_priority ASC,
+                 ABS(DATE_DIFF('day', CAST(doc_date AS DATE), CAST(TIMESTAMP '{radiation_date}' AS DATE))) ASC
+        LIMIT 3
+        """
+
+        results = query_athena(query, f"Priority radiation docs for {radiation_date}", suppress_output=True)
+        if results:
+            doc_ids = [row.get('document_id', row.get('binary_id', '')) for row in results if row.get('document_id') or row.get('binary_id')]
+            logger.info(f"        ✅ Found {len(doc_ids)} priority radiation documents")
+            return doc_ids
+        return []
+
+    def _get_imaging_structured_conclusion(self, event: Dict) -> List[str]:
+        """
+        V4.6 GAP #1: Extract imaging conclusion from structured field.
+        """
+        result_info = event.get('result_information', '')
+        if result_info and len(result_info) > 50:
+            logger.info(f"        ✅ Found structured conclusion ({len(result_info)} chars)")
+            pseudo_doc_id = f"structured_conclusion_{event.get('event_id', 'unknown')}"
+            if not hasattr(self, 'binary_extractions'):
+                self.binary_extractions = []
+            self.binary_extractions.append({
+                'binary_id': pseudo_doc_id,
+                'extracted_text': result_info,
+                'content_type': 'structured_field',
+                'resource_type': 'DiagnosticReport',
+                'fhir_target': event.get('event_id', '')
+            })
+            return [pseudo_doc_id]
+        return []
+
+    def _get_imaging_result_information(self, event: Dict) -> List[str]:
+        """
+        V4.6 GAP #1: Extract from result_information field.
+        """
+        result_info = event.get('result_information', '')
+        if result_info and len(result_info) > 30:
+            logger.info(f"        ✅ Found result_information field ({len(result_info)} chars)")
+            pseudo_doc_id = f"result_information_{event.get('event_id', 'unknown')}"
+            if not hasattr(self, 'binary_extractions'):
+                self.binary_extractions = []
+            self.binary_extractions.append({
+                'binary_id': pseudo_doc_id,
+                'extracted_text': result_info,
+                'content_type': 'structured_field',
+                'resource_type': 'DiagnosticReport',
+                'fhir_target': event.get('event_id', '')
+            })
+            return [pseudo_doc_id]
+        return []
+
+    def _query_document_reference_enriched(self, event: Dict) -> List[str]:
+        """
+        V4.6 GAP #1: Query v_document_reference_enriched with encounter lookup.
+        """
+        event_date = event.get('event_date')
+        if not event_date:
+            return []
+
+        logger.info(f"        🔍 Querying v_document_reference_enriched for {event_date}")
+
+        query = f"""
+        SELECT document_reference_id, binary_id
+        FROM fhir_prd_db.v_document_reference_enriched
+        WHERE patient_fhir_id = '{self.athena_patient_id}'
+          AND ABS(DATE_DIFF('day', CAST(document_date AS DATE), CAST(TIMESTAMP '{event_date}' AS DATE))) <= 14
+          AND document_type IN ('operative note', 'surgical note', 'procedure note')
+        ORDER BY ABS(DATE_DIFF('day', CAST(document_date AS DATE), CAST(TIMESTAMP '{event_date}' AS DATE))) ASC
+        LIMIT 2
+        """
+
+        results = query_athena(query, f"Encounter-based docs for {event_date}", suppress_output=True)
+        if results:
+            doc_ids = [row.get('document_reference_id', row.get('binary_id', '')) for row in results]
+            logger.info(f"        ✅ Found {len(doc_ids)} encounter-based documents")
+            return doc_ids
+        return []
+
+    def _query_documents_expanded_window(self, event: Dict, gap_type: str) -> List[str]:
+        """
+        V4.6 GAP #1: Retry with expanded temporal window (±60 days).
+        """
+        event_date = event.get('event_date')
+        if not event_date:
+            return []
+
+        logger.info(f"        🔍 Querying with expanded window (±60 days)")
+
+        if gap_type == 'surgery_eor':
+            categories = "('operative note', 'surgical note', 'procedure note')"
+        elif gap_type == 'radiation_dose':
+            categories = "('radiation summary', 'treatment summary')"
+        else:
+            categories = "('radiology report', 'imaging report')"
+
+        query = f"""
+        SELECT dr.id as document_id
+        FROM fhir_prd_db.document_reference dr
+        WHERE dr.subject_reference = 'Patient/{self.athena_patient_id}'
+          AND dr.category_text IN {categories}
+          AND ABS(DATE_DIFF('day',
+              CAST(TRY(date_parse(dr.date, '%Y-%m-%dT%H:%i:%s.%fZ')) AS DATE),
+              CAST(TIMESTAMP '{event_date}' AS DATE))) <= 60
+        ORDER BY ABS(DATE_DIFF('day',
+            CAST(TRY(date_parse(dr.date, '%Y-%m-%dT%H:%i:%s.%fZ')) AS DATE),
+            CAST(TIMESTAMP '{event_date}' AS DATE))) ASC
+        LIMIT 2
+        """
+
+        results = query_athena(query, f"Expanded window docs", suppress_output=True)
+        if results:
+            doc_ids = [row.get('document_id', '') for row in results]
+            logger.info(f"        ✅ Found {len(doc_ids)} documents in expanded window")
+            return doc_ids
+        return []
+
+    def _query_alternative_document_categories(self, event: Dict, gap_type: str) -> List[str]:
+        """
+        V4.6 GAP #1: Query alternative document categories.
+        """
+        event_date = event.get('event_date')
+        if not event_date:
+            return []
+
+        if gap_type == 'surgery_eor':
+            categories = "('anesthesia record', 'discharge summary', 'post-operative note')"
+        elif gap_type == 'radiation_dose':
+            categories = "('consultation note', 'outside record')"
+        else:
+            return []
+
+        query = f"""
+        SELECT dr.id as document_id
+        FROM fhir_prd_db.document_reference dr
+        WHERE dr.subject_reference = 'Patient/{self.athena_patient_id}'
+          AND dr.category_text IN {categories}
+          AND ABS(DATE_DIFF('day',
+              CAST(TRY(date_parse(dr.date, '%Y-%m-%dT%H:%i:%s.%fZ')) AS DATE),
+              CAST(TIMESTAMP '{event_date}' AS DATE))) <= 30
+        LIMIT 2
+        """
+
+        results = query_athena(query, f"Alternative category docs", suppress_output=True)
+        if results:
+            doc_ids = [row.get('document_id', '') for row in results]
+            logger.info(f"        ✅ Found {len(doc_ids)} alternative documents")
+            return doc_ids
+        return []
+
+    def _get_cached_binary_text(self, doc_id: str) -> Optional[str]:
+        """
+        V4.6 GAP #1: Get cached binary text (handles pseudo-documents).
+        """
+        if not hasattr(self, 'binary_extractions'):
+            return None
+        for extraction in self.binary_extractions:
+            if extraction.get('binary_id') == doc_id:
+                return extraction.get('extracted_text', '')
+        return None
+
+    def _compute_treatment_change_reasons(self):
+        """V4.6 GAP #2: Compute reason for treatment changes."""
+        logger.info("📊 V4.6 GAP #2: Computing treatment change reasons...")
+        chemo_events = [e for e in self.timeline_events
+                       if e.get('event_type') in ['chemo_start', 'chemotherapy_start']]
+        chemo_events.sort(key=lambda x: x.get('event_date', ''))
+        if len(chemo_events) < 2:
+            logger.info("  No treatment line changes to analyze")
+            return
+        for i in range(1, len(chemo_events)):
+            prior_event = chemo_events[i - 1]
+            current_event = chemo_events[i]
+            prior_end_date = self._find_chemo_end_date(prior_event)
+            current_start_date = current_event.get('event_date')
+            if not prior_end_date or not current_start_date:
+                continue
+            reason = self._analyze_treatment_change_reason(prior_end_date, current_start_date, prior_event, current_event)
+            if 'relationships' not in current_event:
+                current_event['relationships'] = {}
+            if 'ordinality' not in current_event['relationships']:
+                current_event['relationships']['ordinality'] = {}
+            current_event['relationships']['ordinality']['reason_for_change_from_prior'] = reason
+            logger.info(f"  Line {i} → {i+1} change reason: {reason}")
+        logger.info("✅ Treatment change reasons computed")
+
+    def _find_chemo_end_date(self, chemo_start_event: Dict) -> Optional[str]:
+        """Find the end date for a chemotherapy episode."""
+        start_date = chemo_start_event.get('event_date')
+        for event in self.timeline_events:
+            if event.get('event_type') in ['chemo_end', 'chemotherapy_end']:
+                end_date = event.get('event_date')
+                if start_date and end_date and end_date > start_date:
+                    return end_date
+        return chemo_start_event.get('therapy_end_date')
+
+    def _analyze_treatment_change_reason(self, prior_end_date: str, current_start_date: str, prior_event: Dict, current_event: Dict) -> str:
+        """V4.6 GAP #2: Analyze why treatment changed."""
+        interim_imaging = [e for e in self.timeline_events
+                          if e.get('event_type') == 'imaging'
+                          and prior_end_date <= e.get('event_date', '') <= current_start_date]
+        for img in interim_imaging:
+            conclusion = (img.get('report_conclusion', '') or img.get('result_information', '')).lower()
+            progression_keywords = ['progression', 'progressing', 'progressive', 'increased', 'enlarging',
+                                   'enlargement', 'expansion', 'growing', 'growth', 'worsening', 'worsen',
+                                   'new lesion', 'new enhancement', 'recurrence', 'recurrent']
+            if any(kw in conclusion for kw in progression_keywords):
+                return 'progression'
+            rano = img.get('rano_assessment', '')
+            if rano == 'PD' or 'progressive disease' in rano.lower():
+                return 'progression'
+            if 'medgemma_extraction' in img:
+                extraction = img['medgemma_extraction']
+                rano_ext = extraction.get('rano_assessment', '')
+                if rano_ext == 'PD':
+                    return 'progression'
+        protocol_status = prior_event.get('protocol_status', '')
+        if 'complete' in protocol_status.lower():
+            return 'completion'
+        return 'unclear'
+
+    def _enrich_event_relationships(self):
+        """V4.6 GAP #3: Populate related_events for cross-event linkage."""
+        logger.info("🔗 V4.6 GAP #3: Enriching event relationships...")
+        for event in self.timeline_events:
+            if 'relationships' not in event:
+                event['relationships'] = {}
+            event_type = event.get('event_type')
+            event_date = event.get('event_date')
+            if not event_date:
+                continue
+            if event_type == 'surgery':
+                event['relationships']['related_events'] = {
+                    'preop_imaging': self._find_imaging_before(event, days=7),
+                    'postop_imaging': self._find_imaging_after(event, days=7),
+                    'pathology_reports': self._find_pathology_for_surgery(event)
+                }
+            elif event_type in ['chemo_start', 'chemotherapy_start']:
+                event['relationships']['related_events'] = {
+                    'chemotherapy_end': self._find_chemo_end(event),
+                    'response_imaging': self._find_response_imaging(event)
+                }
+            elif event_type == 'radiation_start':
+                event['relationships']['related_events'] = {
+                    'radiation_end': self._find_radiation_end(event),
+                    'simulation_imaging': self._find_simulation_imaging(event)
+                }
+        logger.info("✅ Event relationships enriched")
+
+    def _find_imaging_before(self, surgery_event: Dict, days: int = 7) -> List[str]:
+        """Find imaging within N days before surgery."""
+        from datetime import datetime, timedelta
+        surgery_date = datetime.fromisoformat(surgery_event['event_date'].replace('Z', '+00:00'))
+        window_start = surgery_date - timedelta(days=days)
+        imaging_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'imaging'
+                         and window_start <= datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) < surgery_date]
+        return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
+
+    def _find_imaging_after(self, surgery_event: Dict, days: int = 7) -> List[str]:
+        """Find imaging within N days after surgery."""
+        from datetime import datetime, timedelta
+        surgery_date = datetime.fromisoformat(surgery_event['event_date'].replace('Z', '+00:00'))
+        window_end = surgery_date + timedelta(days=days)
+        imaging_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'imaging'
+                         and surgery_date < datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) <= window_end]
+        return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
+
+    def _find_pathology_for_surgery(self, surgery_event: Dict) -> List[str]:
+        """Find pathology reports matching surgery specimen."""
+        specimen_id = surgery_event.get('specimen_id')
+        if not specimen_id:
+            return []
+        pathology_events = [e for e in self.timeline_events
+                           if e.get('event_type') == 'pathology'
+                           and e.get('specimen_id') == specimen_id]
+        return [e.get('event_id', e.get('fhir_id', '')) for e in pathology_events]
+
+    def _find_chemo_end(self, chemo_start_event: Dict) -> Optional[str]:
+        """Find corresponding chemo_end event."""
+        start_date = chemo_start_event.get('event_date')
+        for event in self.timeline_events:
+            if event.get('event_type') in ['chemo_end', 'chemotherapy_end']:
+                end_date = event.get('event_date')
+                if start_date and end_date and end_date > start_date:
+                    return event.get('event_id', event.get('fhir_id', ''))
+        return None
+
+    def _find_response_imaging(self, chemo_start_event: Dict) -> List[str]:
+        """Find response imaging (first imaging >30 days after chemo end)."""
+        from datetime import datetime, timedelta
+        end_date_str = self._find_chemo_end_date(chemo_start_event)
+        if not end_date_str:
+            return []
+        end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+        response_window_start = end_date + timedelta(days=30)
+        imaging_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'imaging'
+                         and datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) >= response_window_start]
+        imaging_events.sort(key=lambda x: x.get('event_date', ''))
+        return [imaging_events[0].get('event_id', imaging_events[0].get('fhir_id', ''))] if imaging_events else []
+
+    def _find_radiation_end(self, radiation_start_event: Dict) -> Optional[str]:
+        """Find corresponding radiation_end event."""
+        start_date = radiation_start_event.get('event_date')
+        for event in self.timeline_events:
+            if event.get('event_type') == 'radiation_end':
+                end_date = event.get('event_date')
+                if start_date and end_date and end_date > start_date:
+                    return event.get('event_id', event.get('fhir_id', ''))
+        return None
+
+    def _find_simulation_imaging(self, radiation_start_event: Dict) -> List[str]:
+        """Find simulation/planning imaging (±7 days before radiation start)."""
+        from datetime import datetime, timedelta
+        start_date = datetime.fromisoformat(radiation_start_event['event_date'].replace('Z', '+00:00'))
+        window_start = start_date - timedelta(days=7)
+        window_end = start_date + timedelta(days=7)
+        imaging_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'imaging'
+                         and window_start <= datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) <= window_end]
+        return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
+
+    def _classify_imaging_response(self, report_text: str) -> Dict:
+        """V4.6 GAP #5: Classify imaging response using RANO keywords."""
+        if not report_text:
+            return {'rano_assessment': None, 'progression_flag': None, 'response_flag': None}
+        text_lower = report_text.lower()
+        progression_keywords = ['progression', 'progressing', 'progressive', 'increased', 'increase in', 'enlarging',
+                               'enlargement', 'enlarged', 'expansion', 'growing', 'growth', 'larger',
+                               'worsening', 'worsen', 'worse', 'new enhancement', 'new lesion', 'additional lesion']
+        recurrence_keywords = ['recurrence', 'recurrent', 'recurred', 'tumor recurrence', 'disease recurrence']
+        response_keywords = ['decreased', 'decrease in', 'decreasing', 'reduction', 'reduced', 'reducing',
+                            'shrinkage', 'shrinking', 'smaller', 'improvement', 'improved', 'improving',
+                            'resolving', 'resolved', 'resolution']
+        stable_keywords = ['stable', 'stability', 'unchanged', 'no change', 'no significant change',
+                          'similar', 'comparable to prior']
+        complete_response_keywords = ['no evidence of', 'no residual', 'no tumor', 'complete resolution',
+                                     'complete response', 'no enhancement', 'no enhancing lesion']
+        if any(kw in text_lower for kw in progression_keywords):
+            if any(kw in text_lower for kw in recurrence_keywords):
+                return {'rano_assessment': 'PD', 'progression_flag': 'recurrence_suspected', 'response_flag': None}
+            else:
+                return {'rano_assessment': 'PD', 'progression_flag': 'progression_suspected', 'response_flag': None}
+        if any(kw in text_lower for kw in complete_response_keywords):
+            return {'rano_assessment': 'CR', 'progression_flag': None, 'response_flag': 'complete_response_suspected'}
+        if any(kw in text_lower for kw in response_keywords):
+            return {'rano_assessment': 'PR', 'progression_flag': None, 'response_flag': 'response_suspected'}
+        if any(kw in text_lower for kw in stable_keywords):
+            return {'rano_assessment': 'SD', 'progression_flag': None, 'response_flag': 'stable_disease'}
+        return {'rano_assessment': None, 'progression_flag': None, 'response_flag': None}
+
+    def _enrich_imaging_with_rano_assessment(self):
+        """V4.6 GAP #5: Add RANO assessment to all imaging events."""
+        logger.info("🏥 V4.6 GAP #5: Adding RANO assessment to imaging events...")
+        imaging_count = 0
+        classified_count = 0
+        for event in self.timeline_events:
+            if event.get('event_type') != 'imaging':
+                continue
+            imaging_count += 1
+            report_text = (event.get('report_conclusion', '') or event.get('result_information', '') or
+                          event.get('medgemma_extraction', {}).get('radiologist_impression', ''))
+            classification = self._classify_imaging_response(report_text)
+            if not event.get('rano_assessment'):
+                event['rano_assessment'] = classification['rano_assessment']
+            if not event.get('progression_flag'):
+                event['progression_flag'] = classification['progression_flag']
+            if not event.get('response_flag'):
+                event['response_flag'] = classification['response_flag']
+            if classification['rano_assessment']:
+                classified_count += 1
+        logger.info(f"  ✅ Classified {classified_count}/{imaging_count} imaging events")
+        logger.info(f"     PD: {sum(1 for e in self.timeline_events if e.get('rano_assessment') == 'PD')}")
+        logger.info(f"     SD: {sum(1 for e in self.timeline_events if e.get('rano_assessment') == 'SD')}")
+        logger.info(f"     PR: {sum(1 for e in self.timeline_events if e.get('rano_assessment') == 'PR')}")
+        logger.info(f"     CR: {sum(1 for e in self.timeline_events if e.get('rano_assessment') == 'CR')}")
 
     def _extract_molecular_findings(self) -> List[str]:
         """
