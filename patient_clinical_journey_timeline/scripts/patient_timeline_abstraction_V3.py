@@ -167,6 +167,9 @@ def query_athena(query: str, description: str = None, profile: str = 'radiant-pr
             reason = status_response['QueryExecution']['Status'].get('StateChangeReason', 'Unknown')
             if description and not suppress_output:
                 print(f" ❌ FAILED: {reason}")
+                logger.error(f"Query failed for '{description}': {reason}")
+                # Log the query that failed for debugging
+                logger.error(f"Failed query ID: {query_id}")
             return []
         time.sleep(1)
 
@@ -4536,12 +4539,34 @@ OUTPUT FORMAT (JSON):
 
             if error:
                 logger.warning(f"Error extracting text from {binary_id}: {error}")
+                # Track failed binary fetch
+                self._track_binary_fetch(
+                    binary_id=binary_id,
+                    content_type=content_type,
+                    success=False,
+                    metadata={'error': str(error), 'resource_type': resource_type}
+                )
                 return None
+
+            # Track successful binary fetch
+            self._track_binary_fetch(
+                binary_id=binary_id,
+                content_type=content_type,
+                success=True,
+                metadata={'text_length': len(extracted_text) if extracted_text else 0, 'resource_type': resource_type}
+            )
 
             return extracted_text
 
         except Exception as e:
             logger.error(f"Error fetching binary {binary_id}: {e}")
+            # Track failed binary fetch
+            self._track_binary_fetch(
+                binary_id=binary_id,
+                content_type=content_type,
+                success=False,
+                metadata={'error': str(e), 'resource_type': resource_type}
+            )
             return None
 
     def _get_patient_chemotherapy_keywords(self) -> List[str]:

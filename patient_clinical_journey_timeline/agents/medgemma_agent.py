@@ -485,8 +485,30 @@ class MedGemmaAgent:
 
         return ''.join(full_response)
 
+    def _normalize_dates(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize date-only strings to ISO datetime format.
+        Converts "2018-08-07" to "2018-08-07T00:00:00" for Athena compatibility.
+        """
+        import re
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')  # Matches YYYY-MM-DD only
+
+        for key, value in data.items():
+            if isinstance(value, str) and date_pattern.match(value):
+                # Convert date-only to ISO datetime format
+                data[key] = f"{value}T00:00:00"
+                logger.debug(f"Normalized date field '{key}': {value} -> {data[key]}")
+            elif isinstance(value, dict):
+                # Recursively normalize nested dicts
+                data[key] = self._normalize_dates(value)
+            elif isinstance(value, list):
+                # Recursively normalize lists
+                data[key] = [self._normalize_dates(item) if isinstance(item, dict) else item for item in value]
+
+        return data
+
     def _parse_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON response from model"""
+        """Parse JSON response from model and normalize dates"""
         # Try to extract JSON from response (might have markdown code blocks)
         response = response.strip()
 
@@ -500,7 +522,12 @@ class MedGemmaAgent:
 
         response = response.strip()
 
-        return json.loads(response)
+        parsed_data = json.loads(response)
+
+        # Normalize date-only strings to datetime format
+        normalized_data = self._normalize_dates(parsed_data)
+
+        return normalized_data
 
     def _validate_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> None:
         """Validate extracted data against expected schema"""
