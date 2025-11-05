@@ -315,6 +315,33 @@ class PatientTimelineAbstractor:
                 logger.warning(f"⚠️  Could not initialize V4.2 response extractor: {e}")
                 self.response_extractor = None
 
+        # V4.6: Initialize Active Reasoning Orchestrator components
+        self.schema_loader = None
+        self.investigation_engine = None  # Initialized later in run() after Athena client setup
+        self.who_kb = None
+
+        try:
+            from orchestration.schema_loader import AthenaSchemaLoader
+            from orchestration.who_cns_knowledge_base import WHOCNSKnowledgeBase
+
+            # Schema awareness
+            schema_csv_path = Path('/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/References/Athena_Schema_1103b2025.csv')
+
+            if schema_csv_path.exists():
+                self.schema_loader = AthenaSchemaLoader(str(schema_csv_path))
+                logger.info("✅ V4.6: Schema loader initialized")
+
+                # WHO CNS knowledge base
+                who_ref_path = Path('/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/References/WHO 2021 CNS Tumor Classification.md')
+                if who_ref_path.exists():
+                    self.who_kb = WHOCNSKnowledgeBase(who_reference_path=str(who_ref_path))
+                    logger.info("✅ V4.6: WHO CNS knowledge base initialized")
+            else:
+                logger.warning("⚠️  V4.6: Schema CSV not found, orchestrator features disabled")
+
+        except Exception as e:
+            logger.warning(f"⚠️  V4.6: Could not initialize orchestrator components: {e}")
+
         # Load WHO 2021 classification AFTER agents are initialized (needed for dynamic classification)
         self.who_2021_classification = self._load_who_classification()
 
