@@ -138,8 +138,18 @@ def check_aws_sso_token(profile_name: str = 'radiant-prod') -> bool:
         return False
 
 
-def query_athena(query: str, description: str = None, profile: str = 'radiant-prod', suppress_output: bool = False) -> List[Dict[str, Any]]:
-    """Execute Athena query and return results as list of dicts"""
+def query_athena(query: str, description: str = None, profile: str = 'radiant-prod', suppress_output: bool = False, investigation_engine = None, schema_loader = None, retry_count: int = 0) -> List[Dict[str, Any]]:
+    """Execute Athena query and return results as list of dicts
+
+    Args:
+        query: SQL query string
+        description: Human-readable description for logging
+        profile: AWS profile name
+        suppress_output: Whether to suppress console output
+        investigation_engine: V4.6: Optional investigation engine for auto-fixing failures
+        schema_loader: V4.6: Optional schema loader for investigation
+        retry_count: V4.6: Number of retry attempts (prevents infinite loops)
+    """
     if description and not suppress_output:
         print(f"  {description}...", end='', flush=True)
 
@@ -170,6 +180,51 @@ def query_athena(query: str, description: str = None, profile: str = 'radiant-pr
                 logger.error(f"Query failed for '{description}': {reason}")
                 # Log the query that failed for debugging
                 logger.error(f"Failed query ID: {query_id}")
+
+            # V4.6: AUTOMATIC INVESTIGATION
+            if investigation_engine and retry_count < 3:
+                logger.info(f"🔍 V4.6: Investigating failure (attempt {retry_count + 1}/3)...")
+
+                try:
+                    investigation = investigation_engine.investigate_query_failure(
+                        query_id=query_id,
+                        query_string=query,
+                        error_message=reason
+                    )
+
+                    logger.info(f"  Error type: {investigation.get('error_type', 'unknown')}")
+
+                    # Check for auto-fix
+                    if 'suggested_fix' in investigation:
+                        confidence = investigation.get('fix_confidence', 0.0)
+                        logger.info(f"  Fix confidence: {confidence:.1%}")
+
+                        if confidence > 0.9 and retry_count < 2:
+                            logger.info(f"  ✅ High confidence - auto-applying fix")
+                            # Retry with fixed query
+                            return query_athena(
+                                query=investigation['suggested_fix'],
+                                description=f"{description} (auto-fixed)",
+                                profile=profile,
+                                suppress_output=suppress_output,
+                                investigation_engine=investigation_engine,
+                                schema_loader=schema_loader,
+                                retry_count=retry_count + 1
+                            )
+                        else:
+                            logger.warning(f"  ⚠️  Medium confidence or max retries - manual review needed")
+                            # Save investigation report for manual review
+                            import json
+                            from pathlib import Path
+                            report_dir = Path("/tmp/investigation_reports")
+                            report_dir.mkdir(parents=True, exist_ok=True)
+                            report_path = report_dir / f"{query_id}.json"
+                            with open(report_path, 'w') as f:
+                                json.dump(investigation, f, indent=2)
+                            logger.info(f"  📋 V4.6: Investigation report saved: {report_path}")
+                except Exception as e:
+                    logger.warning(f"  ⚠️  Investigation failed: {e}")
+
             return []
         time.sleep(1)
 
@@ -334,7 +389,7 @@ class PatientTimelineAbstractor:
                 # WHO CNS knowledge base
                 who_ref_path = Path('/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/References/WHO 2021 CNS Tumor Classification.md')
                 if who_ref_path.exists():
-                    self.who_kb = WHOCNSKnowledgeBase(who_reference_path=str(who_ref_path))
+                    self.who_kb = WHOCNSKnowledgeBase(who_md_path=str(who_ref_path))
                     logger.info("✅ V4.6: WHO CNS knowledge base initialized")
             else:
                 logger.warning("⚠️  V4.6: Schema CSV not found, orchestrator features disabled")
@@ -1320,6 +1375,31 @@ Return ONLY the JSON object, no additional text.
         self._phase1_load_structured_data()
         print()
 
+        # V4.6: Initialize investigation engine (needs Athena client from query_athena function)
+        if self.schema_loader and not self.investigation_engine:
+            try:
+                from orchestration.investigation_engine import InvestigationEngine
+
+                # Create a temporary Athena client for investigation engine
+                import boto3
+                session = boto3.Session(profile_name='radiant-prod', region_name='us-east-1')
+                athena_client = session.client('athena')
+
+                self.investigation_engine = InvestigationEngine(
+                    athena_client=athena_client,
+                    schema_loader=self.schema_loader
+                )
+                logger.info("✅ V4.6: Investigation engine initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  V4.6: Could not initialize investigation engine: {e}")
+
+        # V4.6: PHASE 1.5: Validate schema coverage
+        if self.schema_loader:
+            print("PHASE 1.5: V4.6 SCHEMA COVERAGE VALIDATION")
+            print("-"*80)
+            self._phase1_5_validate_schema_coverage()
+            print()
+
         # PHASE 2: Construct initial timeline
         print("PHASE 2: CONSTRUCT INITIAL TIMELINE")
         print("-"*80)
@@ -1437,6 +1517,43 @@ Return ONLY the JSON object, no additional text.
         })
 
         logger.debug(f"Tracked binary fetch: {binary_id} (success={success})")
+
+    def _save_investigation_report(self, query_id: str, investigation: Dict):
+        """
+        V4.6: Save investigation report for manual review
+
+        Args:
+            query_id: Athena query execution ID
+            investigation: Investigation results dictionary
+        """
+        import json
+        from pathlib import Path
+
+        report_dir = Path(self.output_dir) / "investigation_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+        report_path = report_dir / f"{query_id}.json"
+        with open(report_path, 'w') as f:
+            json.dump(investigation, f, indent=2)
+
+        logger.info(f"  📋 V4.6: Investigation report saved: {report_path}")
+
+    def _get_cached_binary_text(self, binary_id: str) -> Optional[str]:
+        """
+        V4.6: Get cached binary document text from extraction tracker
+
+        Args:
+            binary_id: Binary document ID
+
+        Returns:
+            Extracted text if available, None otherwise
+        """
+        # Search through binary extractions for this ID
+        for extraction in self.binary_extractions:
+            if extraction.get('binary_id') == binary_id and extraction.get('extracted_text'):
+                return extraction['extracted_text']
+
+        return None
 
     def _track_extraction_attempt(self, gap: Dict, document: Dict, result: Dict):
         """
@@ -1628,7 +1745,13 @@ Return ONLY the JSON object, no additional text.
 
         self.structured_data = {}
         for source_name, query in queries.items():
-            self.structured_data[source_name] = query_athena(query, f"Loading {source_name}")
+            # V4.6: Pass investigation engine for automatic query failure investigation
+            self.structured_data[source_name] = query_athena(
+                query=query,
+                description=f"Loading {source_name}",
+                investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+            )
 
             # V3: Track schema query
             field_names = []
@@ -1714,6 +1837,44 @@ Return ONLY the JSON object, no additional text.
         print(f"  ✅ Loaded structured data from 6 views:")
         for source, data in self.structured_data.items():
             print(f"     {source}: {len(data)} records")
+
+    def _phase1_5_validate_schema_coverage(self):
+        """
+        V4.6: Validate that all available FHIR resources were queried
+        Uses schema loader to identify patient-scoped tables and check coverage
+        """
+        if not self.schema_loader:
+            logger.warning("⚠️  V4.6: Schema loader not available - skipping coverage validation")
+            return
+
+        logger.info("\n🔍 V4.6: Validating FHIR schema coverage")
+
+        # Get all patient-scoped tables from schema
+        patient_tables = self.schema_loader.find_patient_reference_tables()
+        logger.info(f"  Found {len(patient_tables)} patient-scoped tables in schema")
+
+        # Check which tables we've queried
+        queried_tables = set(self.extraction_tracker['free_text_schema_fields'].keys())
+
+        # Identify missing tables
+        missing_tables = set(patient_tables) - queried_tables
+
+        if missing_tables:
+            logger.warning(f"  ⚠️  {len(missing_tables)} tables NOT queried:")
+            for table in sorted(missing_tables)[:10]:  # Show first 10
+                # Note: We can't check counts here without Athena client access
+                # Just log the missing table names
+                logger.warning(f"    • {table}: NOT extracted")
+        else:
+            logger.info(f"  ✅ All {len(patient_tables)} patient-scoped tables queried")
+
+        # Store coverage metrics
+        self.schema_coverage = {
+            'total_patient_tables': len(patient_tables),
+            'queried_tables': len(queried_tables),
+            'coverage_pct': (len(queried_tables) / len(patient_tables) * 100) if patient_tables else 0,
+            'missing_tables': list(missing_tables)
+        }
 
     def _phase2_construct_initial_timeline(self):
         """
@@ -4920,10 +5081,13 @@ INSTRUCTIONS:
         if not event_merged:
             logger.warning(f"⚠️  No matching event found for gap_type={gap_type}, event_date={event_date}")
 
-    def _phase4_5_assess_extraction_completeness(self):
+    def _assess_data_completeness(self) -> Dict:
         """
-        Orchestrator assessment of extraction completeness
-        Validates that critical fields were successfully populated
+        V4.6: Assess data completeness across treatment modalities
+        (Extracted from _phase4_5_assess_extraction_completeness for reuse)
+
+        Returns:
+            Assessment dictionary with completeness metrics
         """
         assessment = {
             'surgery': {'total': 0, 'missing_eor': 0, 'complete': 0},
@@ -4965,11 +5129,41 @@ INSTRUCTIONS:
                 else:
                     assessment['chemotherapy']['complete'] += 1
 
-        # Report assessment
+        return assessment
+
+    def _phase4_5_assess_extraction_completeness(self):
+        """
+        V4.6: Orchestrator assessment with ITERATIVE GAP-FILLING
+        Validates that critical fields were populated, and attempts to fill gaps
+        """
+        # Phase 4.5a: Assess completeness
+        assessment = self._assess_data_completeness()
+
+        # Phase 4.5b: V4.6 ITERATIVE GAP-FILLING
+        if self.medgemma_agent and self.who_kb:
+            logger.info("\n🔁 V4.6: Initiating iterative gap-filling")
+
+            gaps_filled = self._attempt_gap_filling(assessment)
+
+            if gaps_filled > 0:
+                logger.info(f"  ✅ Filled {gaps_filled} gaps")
+
+                # Re-assess after gap-filling
+                logger.info("  Re-assessing data completeness...")
+                final_assessment = self._assess_data_completeness()
+                self.completeness_assessment = final_assessment
+            else:
+                logger.info("  ℹ️  No gaps could be filled automatically")
+                self.completeness_assessment = assessment
+        else:
+            logger.warning("⚠️  V4.6: Gap-filling unavailable (MedGemma or WHO KB not initialized)")
+            self.completeness_assessment = assessment
+
+        # Report final assessment
         print("  DATA COMPLETENESS ASSESSMENT:")
         print()
 
-        for category, stats in assessment.items():
+        for category, stats in self.completeness_assessment.items():
             if stats['total'] > 0:
                 completeness_pct = (stats['complete'] / stats['total']) * 100
                 print(f"    {category.upper()}:")
@@ -4987,8 +5181,229 @@ INSTRUCTIONS:
                     print(f"      ✅ COMPLETE")
                 print()
 
-        # Store assessment for artifact
-        self.completeness_assessment = assessment
+    def _attempt_gap_filling(self, assessment: Dict) -> int:
+        """
+        V4.6: Attempt to fill critical data gaps using targeted MedGemma extraction
+
+        Args:
+            assessment: Current completeness assessment
+
+        Returns:
+            Number of gaps successfully filled
+        """
+        gaps_filled = 0
+
+        # Identify high-priority gaps
+        priority_gaps = []
+
+        # Surgery: Missing extent of resection
+        if assessment['surgery']['missing_eor'] > 0:
+            surgery_events = [e for e in self.timeline_events
+                             if e.get('event_type') == 'surgery' and not e.get('extent_of_resection')]
+            for event in surgery_events:
+                priority_gaps.append({
+                    'type': 'surgery_eor',
+                    'event': event,
+                    'field': 'extent_of_resection',
+                    'source_documents': event.get('source_document_ids', [])
+                })
+
+        # Radiation: Missing dose
+        if assessment['radiation']['missing_dose'] > 0:
+            radiation_events = [e for e in self.timeline_events
+                               if e.get('event_type') == 'radiation_start' and not e.get('total_dose_cgy')]
+            for event in radiation_events:
+                priority_gaps.append({
+                    'type': 'radiation_dose',
+                    'event': event,
+                    'field': 'total_dose_cgy',
+                    'source_documents': event.get('source_document_ids', [])
+                })
+
+        # Imaging: Missing conclusions
+        if assessment['imaging']['missing_conclusion'] > 0:
+            imaging_events = [e for e in self.timeline_events
+                             if e.get('event_type') == 'imaging' and not e.get('report_conclusion')]
+            for event in imaging_events:
+                priority_gaps.append({
+                    'type': 'imaging_conclusion',
+                    'event': event,
+                    'field': 'report_conclusion',
+                    'source_documents': event.get('source_document_ids', [])
+                })
+
+        logger.info(f"  Found {len(priority_gaps)} high-priority gaps to fill")
+
+        # Attempt to fill each gap
+        for gap in priority_gaps:
+            filled = self._fill_single_gap(gap)
+            if filled:
+                gaps_filled += 1
+
+        return gaps_filled
+
+    def _fill_single_gap(self, gap: Dict) -> bool:
+        """
+        V4.6: Attempt to fill a single gap using targeted MedGemma extraction
+
+        Args:
+            gap: Gap specification with event, field, and source documents
+
+        Returns:
+            True if gap was filled, False otherwise
+        """
+        event = gap['event']
+        field = gap['field']
+        gap_type = gap['type']
+
+        logger.info(f"    Attempting to fill {gap_type} for event at {event.get('event_date', 'unknown date')}")
+
+        # Get source documents for this event
+        source_docs = gap.get('source_documents', [])
+        if not source_docs:
+            logger.warning(f"      ⚠️  No source documents available for gap-filling")
+            return False
+
+        # Construct targeted extraction prompt
+        prompt = self._create_gap_filling_prompt(gap_type, field, event)
+
+        # Fetch source document text
+        combined_text = self._fetch_source_documents(source_docs)
+        if not combined_text:
+            logger.warning(f"      ⚠️  Could not fetch source document text")
+            return False
+
+        # Execute targeted MedGemma extraction
+        try:
+            full_prompt = f"{prompt}\n\nSOURCE DOCUMENTS:\n{combined_text}"
+            result = self.medgemma_agent.extract(full_prompt)
+
+            if result and result.success and result.extracted_data:
+                # Update event with extracted field
+                extracted_value = result.extracted_data.get(field)
+                if extracted_value:
+                    event[field] = extracted_value
+                    logger.info(f"      ✅ Filled {field}: {extracted_value}")
+                    return True
+
+            logger.warning(f"      ❌ Could not extract {field}")
+            return False
+
+        except Exception as e:
+            logger.error(f"      ❌ Gap-filling error: {e}")
+            return False
+
+    def _create_gap_filling_prompt(self, gap_type: str, field: str, event: Dict) -> str:
+        """
+        V4.6: Create targeted extraction prompt for specific gap type
+
+        Args:
+            gap_type: Type of gap (surgery_eor, radiation_dose, imaging_conclusion)
+            field: Field name to extract
+            event: Event dictionary with context
+
+        Returns:
+            Targeted prompt string
+        """
+        if gap_type == 'surgery_eor':
+            return f"""
+Extract the EXTENT OF RESECTION for the surgery performed on {event.get('event_date', 'unknown date')}.
+
+Look for terms like:
+- Gross total resection (GTR)
+- Subtotal resection (STR)
+- Biopsy only
+- Complete resection
+- Partial resection
+- Near total resection (NTR)
+
+Return JSON:
+{{
+  "extent_of_resection": "<one of: GTR, STR, NTR, Biopsy, Partial, Unknown>"
+}}
+"""
+
+        elif gap_type == 'radiation_dose':
+            return f"""
+Extract the TOTAL RADIATION DOSE for radiation therapy starting on {event.get('event_date', 'unknown date')}.
+
+Look for dose specifications like:
+- "5400 cGy" or "54 Gy"
+- "Prescribed dose: X cGy"
+- Total dose in Gray or centiGray
+
+Return JSON:
+{{
+  "total_dose_cgy": <numeric value in centiGray>
+}}
+"""
+
+        elif gap_type == 'imaging_conclusion':
+            return f"""
+Extract the RADIOLOGIST'S CONCLUSION/IMPRESSION for the imaging study performed on {event.get('event_date', 'unknown date')}.
+
+Look for sections labeled:
+- IMPRESSION
+- CONCLUSION
+- FINDINGS SUMMARY
+- ASSESSMENT
+
+Return JSON:
+{{
+  "report_conclusion": "<full conclusion text>"
+}}
+"""
+
+        return ""
+
+    def _fetch_source_documents(self, doc_ids: List[str]) -> str:
+        """
+        V4.6: Fetch and combine text from source document IDs
+
+        Args:
+            doc_ids: List of binary document IDs
+
+        Returns:
+            Combined document text
+        """
+        combined = []
+
+        for doc_id in doc_ids[:5]:  # Limit to first 5 docs to avoid context overflow
+            # Check if we've already fetched this binary
+            text = self._get_cached_binary_text(doc_id)
+            if text:
+                combined.append(f"--- Document {doc_id} ---\n{text}\n")
+
+        return "\n".join(combined)
+
+    def _extract_molecular_findings(self) -> List[str]:
+        """
+        V4.6: Extract molecular markers from pathology data
+
+        Returns:
+            List of molecular markers found
+        """
+        findings = []
+
+        # Check pathology events for molecular markers
+        for event in self.timeline_events:
+            if event.get('event_type') == 'pathology':
+                markers = event.get('molecular_markers', [])
+                findings.extend(markers)
+
+        # Also check diagnosis data
+        if hasattr(self, 'who_2021_classification'):
+            diagnosis = self.who_2021_classification.get('who_2021_diagnosis', '')
+
+            # Extract markers from diagnosis string
+            if 'IDH' in diagnosis:
+                findings.append('IDH-mutant' if 'mutant' in diagnosis else 'IDH-wildtype')
+            if 'H3 K27' in diagnosis:
+                findings.append('H3 K27-altered')
+            if 'MGMT' in diagnosis:
+                findings.append('MGMT methylated' if 'methylat' in diagnosis else 'MGMT unmethylated')
+
+        return list(set(findings))  # Deduplicate
 
     def _phase5_protocol_validation(self):
         """
@@ -5021,6 +5436,52 @@ INSTRUCTIONS:
             return
 
         logger.info(f"Validating care for: {diagnosis}")
+
+        # V4.6: Structured WHO KB validation
+        if self.who_kb:
+            logger.info("🔬 V4.6: Running structured WHO CNS validation")
+
+            # Validate diagnosis against WHO 2021 criteria
+            patient_age = self.patient_demographics.get('pd_age_years')
+            tumor_location = self.patient_demographics.get('tumor_location')
+
+            validation = self.who_kb.validate_diagnosis(
+                diagnosis=diagnosis,
+                patient_age=patient_age,
+                tumor_location=tumor_location
+            )
+
+            logger.info(f"  Diagnosis validity: {validation['valid']}")
+            if not validation['valid']:
+                logger.warning(f"  ⚠️  Validation issues: {validation.get('issues', [])}")
+
+            # Check for molecular grading overrides
+            molecular_findings = self._extract_molecular_findings()
+            if molecular_findings:
+                override = self.who_kb.check_molecular_grading_override(
+                    diagnosis=diagnosis,
+                    molecular_findings=molecular_findings
+                )
+
+                if override:
+                    logger.info(f"  🧬 Molecular override detected:")
+                    logger.info(f"    Original grade: {override['original_grade']}")
+                    logger.info(f"    Overridden by: {override['molecular_marker']}")
+                    logger.info(f"    New classification: {override['revised_diagnosis']}")
+
+                    # Store override for artifact
+                    self.molecular_grade_override = override
+
+            # Check NOS/NEC suffix appropriateness
+            molecular_tested = len(molecular_findings) > 0
+            nos_nec_suggestion = self.who_kb.suggest_nos_or_nec(
+                diagnosis=diagnosis,
+                molecular_testing_performed=molecular_tested,
+                molecular_results_contradictory=validation.get('molecular_contradictory', False)
+            )
+
+            if nos_nec_suggestion:
+                logger.info(f"  📝 WHO suffix suggestion: {nos_nec_suggestion}")
 
         # Load WHO 2021 Diagnostic Agent Prompt (cross-episode implications and treatment guidance)
         try:
