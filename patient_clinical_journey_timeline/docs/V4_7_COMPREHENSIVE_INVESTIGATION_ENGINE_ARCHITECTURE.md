@@ -2,7 +2,7 @@
 
 **Date**: November 6, 2025
 **Status**: ✅ PRODUCTION READY
-**Version**: V4.8 with Phase 3.5 Enhancement
+**Version**: V4.8 with Intelligent Chemotherapy Date Adjudication
 
 ---
 
@@ -23,8 +23,9 @@
 13. [Phase 4.5: Completeness Assessment](#phase-45-completeness-assessment)
 14. [Phase 5: Protocol Validation](#phase-5-protocol-validation)
 15. [Phase 6: Artifact Generation](#phase-6-artifact-generation)
-16. [V4.8: Enhanced Visualization & Clinical Summary](#v48-enhanced-visualization--clinical-summary)
-17. [Investigation Engine](#investigation-engine)
+16. [V4.8: Intelligent Chemotherapy Date Adjudication](#v48-intelligent-chemotherapy-date-adjudication)
+17. [V4.8: Enhanced Visualization & Clinical Summary](#v48-enhanced-visualization--clinical-summary)
+18. [Investigation Engine](#investigation-engine)
 18. [Critical Bug Fixes](#critical-bug-fixes)
 19. [Multi-Source EOR Adjudication](#multi-source-eor-adjudication)
 20. [Performance Optimizations](#performance-optimizations)
@@ -1303,3 +1304,136 @@ if event_date.tzinfo is None:
 **Last Updated**: November 6, 2025
 
 **Contact**: For questions about this system, refer to commit history on `feature/v4.1-location-institution` branch.
+
+## V4.8: Intelligent Chemotherapy Date Adjudication
+
+### Purpose
+Intelligently construct accurate chemotherapy start/end dates by using ALL available date fields in `v_chemo_treatment_episodes` schema, not just passively accepting incomplete data.
+
+### Root Cause Analysis
+
+**PROBLEM**: Previous code only used 2 date fields (`episode_start_datetime`, `episode_end_datetime`) and ignored 5+ other available date fields containing useful information:
+- `raw_medication_start_date`, `raw_medication_stop_date` - Individual medication dates
+- `medication_start_datetime`, `medication_stop_datetime` - Structured medication dates
+- `raw_medication_authored_date` - Prescription authoring date
+- `medication_dosage_instructions` - Contains duration information ("for 5 days")
+
+**RESULT**: Missing end dates (10-14 per patient) that could have been filled from alternative date fields or calculated from dosage instructions.
+
+**USER REQUIREMENT**: "MedGemma and Investigation Engine should review all available date fields in the schema and adjudicate start and stop dates in ways consistent with chemotherapy regimens"
+
+### Solution: V4.8 Implementation
+
+**Phase 1** (commit 1c255be): Schema Expansion + Adjudication Module
+- Expanded `v_chemo_treatment_episodes` query from 4 fields to 18 fields
+- Created [`orchestration/chemotherapy_date_adjudication.py`](../orchestration/chemotherapy_date_adjudication.py) module
+
+**Phase 2** (commit d5302d6): Integration Complete
+- Integrated adjudication into main extraction workflow
+- Replaced simple date extraction with intelligent 5-tier fallback hierarchy
+- Added comprehensive logging with tier-by-tier provenance
+
+### Adjudication Module Architecture
+
+**File**: `orchestration/chemotherapy_date_adjudication.py` (167 lines)
+
+**Key Functions**:
+
+1. **`parse_dosage_duration(dosage_instructions: str) -> Optional[int]`**
+   - Parses medication dosage instructions to extract treatment duration
+   - Patterns: "for X days", "for X weeks", "for X months", "once" (single dose)
+   - Returns duration in days or None if ongoing
+   
+   Examples:
+   ```python
+   "for 5 days" → 5
+   "every 24 hours for 5 days" → 5  
+   "once daily for 1 week" → 7
+   "twice daily" → None (ongoing)
+   ```
+
+2. **`adjudicate_chemotherapy_dates(record: Dict) -> Tuple[start, end, log]`**
+   - 5-tier intelligent fallback hierarchy for date selection
+   - Returns: `(start_date, end_date, adjudication_log)`
+   
+   **5-Tier Fallback Hierarchy**:
+   ```
+   Tier 1: episode_start_datetime + episode_end_datetime (if both present)
+           ↓ (if incomplete)
+   Tier 2a: raw_medication_start_date + raw_medication_stop_date
+           ↓ (if still missing)
+   Tier 3a: medication_start_datetime + medication_stop_datetime
+           ↓ (if end date still missing)
+   Tier 4: Calculate end date from start + parse_dosage_duration()
+           ↓ (if start date missing)
+   Tier 5: Fallback to raw_medication_authored_date for start
+   ```
+
+### Integration into Main Pipeline
+
+**File**: `scripts/patient_timeline_abstraction_V3.py` (lines 2393-2448)
+
+**Old Code** (V4.7 and earlier):
+```python
+# Only used episode-level dates
+event_date = record.get('episode_start_datetime', '').split()[0]
+```
+
+**New Code** (V4.8):
+```python
+# V4.8: Intelligently adjudicate using ALL available fields
+start_date, end_date, adjud_log = adjudicate_chemotherapy_dates(record)
+
+# Log adjudication decision
+logger.info(f"V4.8 Adjudication: {drug_names} - {adjud_log}")
+
+# Add to timeline event with full provenance
+event['v48_adjudication'] = adjud_log  # Audit trail
+```
+
+### Output Example
+
+```
+Stage 3: Chemotherapy episodes (V4.8: Intelligent date adjudication)
+  V4.8 Adjudication: lomustine | temozolomide - ✓ Tier 2a: Used raw_medication_start_date for start | ✓ Tier 2a: Used raw_medication_stop_date for end
+  V4.8 Adjudication: temozolomide - ✓ Tier 2a: Used raw_medication_start_date for start | ✓ Tier 4: Calculated end date from dosage instructions (5 days)
+  ✅ Added 14 chemotherapy episodes (V4.8: Used intelligent date adjudication)
+  V4.8: Adjudicated 14 chemotherapy records using 5-tier fallback hierarchy
+```
+
+### Timeline Event Provenance
+
+**V4.8 Enhancement**: Each chemotherapy timeline event now includes `v48_adjudication` field for full transparency:
+
+```json
+{
+  "event_type": "chemotherapy_start",
+  "event_date": "2022-02-09",
+  "episode_drug_names": "lomustine | temozolomide",
+  "episode_end_datetime": "2022-02-09",
+  "medication_dosage_instructions": "Take TWO capsule(s)... for 5 days",
+  "v48_adjudication": "✓ Tier 2a: Used raw_medication_start_date for start | ✓ Tier 2a: Used raw_medication_stop_date for end"
+}
+```
+
+### Benefits
+
+✅ **Uses ALL 18 available date fields** instead of just 2  
+✅ **Calculates missing end dates** from dosage instructions + duration parsing  
+✅ **Full transparency** - adjudication provenance logged for every record  
+✅ **Intelligent filtering** - skips malformed records, logs warnings  
+✅ **Backward compatible** - existing fields preserved, new fields optional
+
+### Expected Impact
+
+**Before V4.8**:
+- Patient ekrJf9m27ER1umcVah.rRqC.9hDY9ch91PfbuGjUHko03: 14 chemotherapy records, 8 missing end dates
+- Patient eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83: 26 chemotherapy records, 20+ missing end dates
+
+**After V4.8**:
+- Lomustine: Complete start/end dates from `raw_medication_start/stop_date`
+- Temozolomide: Start date from `raw_medication_start_date`, end date calculated from "for 5 days" instruction
+- Missing dates reduced significantly through intelligent adjudication
+
+---
+
