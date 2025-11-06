@@ -156,32 +156,109 @@ V4.8: Enhanced Visualization & Clinical Summary
 
 ---
 
+## Data Modeling Principles
+
+**IMPORTANT**: This system follows a rigorous data modeling philosophy documented in [DATA_MODELING_PRINCIPLES.md](DATA_MODELING_PRINCIPLES.md).
+
+### Key Architectural Patterns
+
+1. **Multi-Layer Architecture with Provenance**: Three-layer separation (Core Event Metadata → Clinical Features → Relationships)
+2. **FeatureObject Pattern**: Every extracted feature tracks ALL sources with confidence scores and adjudication
+3. **Date Handling**: Normalize at extraction point using `YYYY-MM-DDTHH:MM:SSZ` format
+4. **Treatment Ordinality**: Explicit sequencing rather than inference
+5. **Binary Document Tracking**: Full lifecycle from fetch to extraction to validation
+6. **Gap Identification**: Structured deficit tracking with multi-tier search strategies
+7. **Schema Tracking**: Query audit trail for performance analysis and data lineage
+8. **WHO 2021 Protocol Validation**: Evidence-based QA against standard of care
+9. **Two-Agent Quality Control**: Extraction agent + validation agent pattern
+10. **Error Handling**: Fail loudly, track everything, enable debugging
+
+**Required Reading**: All developers must read [DATA_MODELING_PRINCIPLES.md](DATA_MODELING_PRINCIPLES.md) to understand:
+- FeatureObject multi-source provenance pattern
+- Date normalization strategies
+- Treatment ordinality semantics
+- Binary fetch lifecycle tracking
+- Validation patterns
+
+---
+
 ## Data Sources
+
+### Athena Database Structure
+
+**Database**: `fhir_prd_db` (FHIR Production Database)
+**Query Engine**: AWS Athena (Presto SQL)
+**Data Format**: FHIR R4 resources flattened into views
+**Region**: us-east-1
+**Profile**: `radiant-prod`
 
 ### Athena Views (Structured Data - Phase 1)
 
-| View | Primary Use | Key Fields |
-|------|------------|------------|
-| `v_demographics` | Patient context | age, gender, race |
-| `v_pathology_diagnostics` | Molecular markers | IDH mutation, 1p/19q deletion, MGMT methylation |
-| `v_procedures_tumor` | Surgeries | procedure_type, performed_datetime, encounter_id |
-| `v_chemo_treatment_episodes` | Chemotherapy | agent_names, start_date, end_date, protocol |
-| `v_radiation_episode_enrichment` | Radiation | start_date, end_date, total_dose_cgy, fractions |
-| `v_imaging` | Imaging studies | imaging_date, modality, report_conclusion, result_information |
-| `v_visits_unified` | Clinical encounters | visit_date, visit_type, encounter_id |
-| `v_binary_files` | Document inventory | dr_type_text, dr_date, binary_id |
-| `v_radiation_documents` | Radiation docs | doc_type, extraction_priority, binary_id |
+| View | Primary Use | Key Fields | Row Count (Typical) | Query Time |
+|------|------------|------------|-------------------|-----------|
+| `v_demographics` | Patient context | age, gender, race | 1 per patient | <1s |
+| `v_pathology_diagnostics` | Molecular markers | IDH mutation, 1p/19q deletion, MGMT methylation, diagnostic_date, result_value | 100-20,000 per patient | 5-10s |
+| `v_procedures_tumor` | Surgeries | procedure_type, performed_datetime, encounter_id, is_tumor_surgery | 1-10 per patient | <1s |
+| `v_chemo_treatment_episodes` | Chemotherapy | agent_names, start_date, end_date, protocol, episode_id | 5-50 per patient | 2-5s |
+| `v_radiation_episode_enrichment` | Radiation | start_date, end_date, total_dose_cgy, fractions, appointments | 1-5 per patient | 2-3s |
+| `v_imaging` | Imaging studies | imaging_date, modality, report_conclusion, result_information, binary_content_id | 20-150 per patient | 3-5s |
+| `v_visits_unified` | Clinical encounters | visit_date, visit_type, encounter_id | 10-100 per patient | 1-2s |
+| `v_binary_files` | Document inventory | dr_type_text, dr_date, binary_id, content_type | 50-500 per patient | 2-3s |
+| `v_radiation_documents` | Radiation docs | doc_type, extraction_priority, binary_id, doc_date | 0-20 per patient | 1-2s |
+
+**FHIR Resource Mapping**:
+- `v_demographics` ← `Patient` resources
+- `v_pathology_diagnostics` ← `Observation` resources (category = laboratory)
+- `v_procedures_tumor` ← `Procedure` resources (code = surgical procedures)
+- `v_chemo_treatment_episodes` ← `MedicationAdministration` + `MedicationRequest` resources
+- `v_radiation_episode_enrichment` ← `Procedure` (radiation therapy) + `Appointment` resources
+- `v_imaging` ← `DiagnosticReport` (category = imaging) + `ImagingStudy` resources
+- `v_visits_unified` ← `Encounter` resources
+- `v_binary_files` ← `DocumentReference` + `Binary` resources
+
+**Date Field Formats**:
+- **Problem**: FHIR `date` fields contain ISO timestamp strings like `"2021-10-30T16:56:59Z"`, NOT SQL DATE types
+- **Solution**: Use `DATE(SUBSTR(dr.date, 1, 10))` for all date comparisons
+- **Validation**: Always add `AND dr.date IS NOT NULL AND LENGTH(dr.date) >= 10`
+
+**Critical Athena Query Pattern**:
+```sql
+-- ❌ BROKEN - This will fail on FHIR timestamp strings:
+WHERE CAST(dr.date AS DATE) >= DATE '2021-10-01'
+
+-- ✅ CORRECT - Extract date portion first:
+WHERE dr.date IS NOT NULL
+  AND LENGTH(dr.date) >= 10
+  AND DATE(SUBSTR(dr.date, 1, 10)) >= DATE '2021-10-01'
+```
 
 ### Binary Documents (Unstructured Data - Phase 4)
 
-| Document Type | Extraction Target | Priority |
-|--------------|------------------|----------|
-| Operative notes | Extent of resection, tumor site | HIGHEST |
-| Post-op imaging | EOR (objective radiological assessment) | HIGHEST |
-| Radiation summaries | Total dose, fractions, radiation fields | HIGH |
-| Chemotherapy infusion records | Protocol, agent doses, cycle numbers | MEDIUM |
-| Progress notes | Treatment completion, ongoing therapy status | MEDIUM |
-| Pathology reports | Histology, grading (if missing from v_pathology) | LOW |
+**Storage**: AWS S3 bucket `s3://radiant-prd-343218191717-us-east-1-prd-ehr-pipeline/prd/source/Binary/`
+**Access Pattern**: Query `v_binary_files` for metadata → Fetch binary from S3 → Extract text → Send to MedGemma
+
+| Document Type | Extraction Target | Priority | Typical Format | Extraction Method |
+|--------------|------------------|----------|---------------|------------------|
+| Operative notes | Extent of resection, tumor site | HIGHEST | PDF, TIFF | pdfplumber, AWS Textract |
+| Post-op imaging | EOR (objective radiological assessment) | HIGHEST | PDF, TIFF | pdfplumber, AWS Textract |
+| Radiation summaries | Total dose, fractions, radiation fields | HIGH | PDF | pdfplumber |
+| Chemotherapy infusion records | Protocol, agent doses, cycle numbers | MEDIUM | PDF | pdfplumber |
+| Progress notes | Treatment completion, ongoing therapy status | MEDIUM | PDF, TIFF | pdfplumber, AWS Textract |
+| Pathology reports | Histology, grading (if missing from v_pathology) | LOW | PDF | pdfplumber |
+
+**Binary ID Format**: Base64-encoded strings (e.g., `eT_zNP7y7RRz2T_GkBGdUA_u852Y81vXO1pD1J5ybQGQ3`)
+**File Path Handling**: S3 keys use underscores - pipeline converts `.` to `_` in binary IDs before fetch
+
+### Reference Materials
+
+**Location**: `reference_materials/` directory
+
+| File | Purpose | Used By |
+|------|---------|---------|
+| `WHO_2021_INTEGRATED_DIAGNOSES_9_PATIENTS.md` | Pre-classified WHO 2021 diagnoses for 9 test patients | Phase 0 classification cache |
+| `WHO_CNS5_Treatment_Guide.pdf` | WHO 2021 treatment standards for protocol validation | Phase 5 validation |
+| `CBTN_Anatomical_Codes.json` | Children's Brain Tumor Network anatomical location codes | V4.1 tumor location mapping |
+| `athena_schema_dump.json` | Full Athena table schema with 370 tables | V4.6 schema loader |
 
 ---
 
