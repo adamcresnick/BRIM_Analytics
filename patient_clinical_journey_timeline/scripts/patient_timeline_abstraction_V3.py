@@ -5834,10 +5834,15 @@ INSTRUCTIONS:
                     logger.info(f"    ✅ Found {filled} radiation end dates")
                     validation['radiation']['missing_end_dates'] -= filled
 
+            # V4.6.4: Remediate missing extent of resection
+            eor_filled = self._remediate_missing_extent_of_resection()
+            if eor_filled > 0:
+                remediation_count += eor_filled
+
             if remediation_count > 0:
-                logger.info(f"\n  ✅ V4.6.3: Remediated {remediation_count} missing end dates")
+                logger.info(f"\n  ✅ V4.6.3-V4.6.4: Remediated {remediation_count} missing data points")
             else:
-                logger.info(f"\n  ⚠️  V4.6.3: No end dates found via remediation")
+                logger.info(f"\n  ⚠️  V4.6.3-V4.6.4: No data found via remediation")
 
         return validation
 
@@ -6745,6 +6750,145 @@ Return JSON:
         logger.info(f"      Total missing: {total_missing}")
         logger.info(f"      Successfully filled: {filled_count} ({100*filled_count/total_missing if total_missing > 0 else 0:.1f}%)")
         logger.info(f"      Still missing: {total_missing - filled_count}")
+
+        return filled_count
+
+    def _remediate_missing_extent_of_resection(self) -> int:
+        """
+        V4.6.4 PHASE 2.2: Remediate missing extent of resection
+
+        Strategy:
+        - Use Tier 6 operative notes (already found in V4.6.2)
+        - Extract EOR keywords: GTR, STR, biopsy, partial resection, etc.
+        - Map to standard values
+        """
+        from datetime import datetime, timedelta
+        import re
+
+        filled_count = 0
+
+        # Find all surgery events missing extent of resection
+        surgery_events = [e for e in self.timeline_events
+                         if e.get('event_type') == 'surgery'
+                         and not e.get('extent_of_resection')]
+
+        if not surgery_events:
+            return 0
+
+        logger.info(f"   → Remediating {len(surgery_events)} missing extent of resection...")
+
+        for surg_event in surgery_events:
+            surgery_date_str = surg_event.get('event_date')
+            if not surgery_date_str:
+                continue
+
+            surgery_date = datetime.fromisoformat(surgery_date_str.replace('Z', '+00:00')).date()
+
+            logger.info(f"      Searching for EOR for surgery on {surgery_date_str}")
+
+            # Search for operative notes within ±7 days of surgery
+            window_start = (surgery_date - timedelta(days=7)).isoformat()
+            window_end = (surgery_date + timedelta(days=7)).isoformat()
+
+            # CRITICAL FIX: dr.date contains timestamp strings like "2021-10-30T16:56:59Z"
+            # Must use SUBSTR to extract date portion (same as treatment end date fix)
+            query = f"""
+            SELECT
+                drc.content_attachment_url as binary_id,
+                dr.type_text as doc_type_text,
+                dr.date as doc_date
+            FROM fhir_prd_db.document_reference dr
+            JOIN fhir_prd_db.document_reference_content drc
+                ON dr.id = drc.document_reference_id
+            WHERE dr.subject_reference = '{self.patient_id}'
+                AND dr.date IS NOT NULL
+                AND LENGTH(dr.date) >= 10
+                AND (
+                    LOWER(dr.type_text) LIKE '%operative%'
+                    OR LOWER(dr.type_text) LIKE '%op%note%'
+                    OR LOWER(dr.type_text) LIKE '%surgery%'
+                    OR LOWER(dr.type_text) LIKE '%procedure%note%'
+                )
+                AND DATE(SUBSTR(dr.date, 1, 10)) >= DATE '{window_start}'
+                AND DATE(SUBSTR(dr.date, 1, 10)) <= DATE '{window_end}'
+                AND drc.content_attachment_url IS NOT NULL
+            ORDER BY ABS(DATE_DIFF('day', DATE(SUBSTR(dr.date, 1, 10)), DATE '{surgery_date.isoformat()}')) ASC
+            LIMIT 5
+            """
+
+            try:
+                logger.info(f"        Tier 1: Operative Notes: Searching operative notes (±7d from {surgery_date.isoformat()})...")
+                results = query_athena(query, "Tier 1: Query operative notes for EOR", suppress_output=True)
+
+                if not results:
+                    logger.info(f"        Tier 1: Operative Notes: No operative notes found in ±7d window")
+                    logger.info(f"        ❌ Could not find extent of resection for surgery on {surgery_date_str}")
+                    continue
+
+                logger.info(f"        Tier 1: Operative Notes: ✅ Found {len(results)} operative note(s) in ±7d window")
+
+                # Search each operative note for EOR keywords
+                eor_found = None
+                for note in results:
+                    binary_id = note.get('binary_id')
+                    note_date = note.get('doc_date')
+
+                    # Fetch note text from cache or S3
+                    note_text = self._get_cached_binary_text(binary_id)
+
+                    if not note_text:
+                        try:
+                            binary_content = self.binary_agent.stream_binary_from_s3(binary_id)
+                            if binary_content:
+                                text, error = self.binary_agent.extract_text_from_pdf(binary_content)
+                                if not text or len(text.strip()) < 50:
+                                    text, error = self.binary_agent.extract_text_from_html(binary_content)
+                                if not text or len(text.strip()) < 50:
+                                    text, error = self.binary_agent.extract_text_from_image(binary_content)
+
+                                if text and len(text.strip()) > 50:
+                                    note_text = text
+                        except Exception as e:
+                            logger.debug(f"          Could not fetch operative note {binary_id[:30]}: {e}")
+                            continue
+
+                    if not note_text:
+                        continue
+
+                    # Extract EOR from note text using keywords
+                    note_lower = note_text.lower()
+
+                    # EOR keyword patterns (in priority order)
+                    if any(kw in note_lower for kw in ['gross total resection', 'gross-total resection', 'complete resection', 'gtr']):
+                        eor_found = 'GTR'
+                    elif any(kw in note_lower for kw in ['subtotal resection', 'sub-total resection', 'str', 'near total']):
+                        eor_found = 'STR'
+                    elif any(kw in note_lower for kw in ['partial resection', 'debulking']):
+                        eor_found = 'Partial'
+                    elif any(kw in note_lower for kw in ['biopsy only', 'stereotactic biopsy', 'needle biopsy']):
+                        eor_found = 'Biopsy'
+
+                    if eor_found:
+                        logger.info(f"        💡 Tier 1: Operative Notes: Found EOR='{eor_found}' in note dated {note_date}")
+                        surg_event['extent_of_resection'] = eor_found
+                        filled_count += 1
+                        logger.info(f"        ✅ Found extent of resection: {eor_found} for surgery on {surgery_date_str}")
+                        break
+
+                if not eor_found:
+                    logger.info(f"        ❌ Could not extract EOR keywords from {len(results)} operative note(s) for surgery on {surgery_date_str}")
+
+            except Exception as e:
+                logger.debug(f"        Tier 1 operative notes query failed: {e}")
+                logger.info(f"        ❌ Could not find extent of resection for surgery on {surgery_date_str} (query failed)")
+
+        total_missing = len(surgery_events)
+        logger.info(f"   📊 Extent of Resection Remediation Summary:")
+        logger.info(f"      Total missing: {total_missing}")
+        logger.info(f"      Successfully filled: {filled_count} ({100*filled_count/total_missing if total_missing > 0 else 0:.1f}%)")
+        logger.info(f"      Still missing: {total_missing - filled_count}")
+        if filled_count > 0:
+            logger.info(f"     ✅ Found {filled_count} extent of resection values")
 
         return filled_count
 
