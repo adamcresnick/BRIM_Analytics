@@ -65,6 +65,9 @@ except ImportError as e:
     logger.warning(f"Could not import agents: {e}")
     AGENTS_AVAILABLE = False
 
+# V4.8: Import chemotherapy date adjudication module
+from orchestration.chemotherapy_date_adjudication import adjudicate_chemotherapy_dates, parse_dosage_duration
+
 # V4.1: Import tumor location and institution tracking
 try:
     from lib.tumor_location_extractor import TumorLocationExtractor
@@ -2387,33 +2390,62 @@ Return ONLY the JSON object, no additional text.
         if surgery_count == 0 and self.who_2021_classification.get('who_2021_diagnosis'):
             print(f"    ⚠️  WARNING: No surgeries found for patient with {self.who_2021_classification.get('who_2021_diagnosis')}")
 
-        # STAGE 3: Chemotherapy episodes
-        print("  Stage 3: Chemotherapy episodes")
+        # STAGE 3: Chemotherapy episodes with V4.8 intelligent date adjudication
+        print("  Stage 3: Chemotherapy episodes (V4.8: Intelligent date adjudication)")
         chemo_episode_count = 0
+        chemo_adjudication_log = []
+
         for record in self.structured_data.get('chemotherapy', []):
-            # Start event
-            events.append({
-                'event_type': 'chemotherapy_start',
-                'event_date': record.get('episode_start_datetime', '').split()[0] if record.get('episode_start_datetime') else '',
-                'stage': 3,
-                'source': 'v_chemo_treatment_episodes',
-                'description': f"Chemotherapy started: {record.get('episode_drug_names', '')}",
-                'episode_drug_names': record.get('episode_drug_names'),
-                'episode_start_datetime': record.get('episode_start_datetime'),
-                'episode_end_datetime': record.get('episode_end_datetime')
+            # V4.8: Intelligently adjudicate start/end dates using ALL available fields
+            start_date, end_date, adjud_log = adjudicate_chemotherapy_dates(record)
+
+            # Log adjudication decision
+            drug_names = record.get('episode_drug_names', '') or record.get('medication_name', 'Unknown')
+            logger.info(f"    V4.8 Adjudication: {drug_names} - {adjud_log}")
+            chemo_adjudication_log.append({
+                'drug': drug_names,
+                'start_date': start_date,
+                'end_date': end_date,
+                'adjudication': adjud_log
             })
-            # End event
-            if record.get('episode_end_datetime'):
+
+            # Only create events if we have at least a start date
+            if start_date:
+                # Start event
                 events.append({
-                    'event_type': 'chemotherapy_end',
-                    'event_date': record.get('episode_end_datetime', '').split()[0] if record.get('episode_end_datetime') else '',
+                    'event_type': 'chemotherapy_start',
+                    'event_date': start_date,
                     'stage': 3,
                     'source': 'v_chemo_treatment_episodes',
-                    'description': f"Chemotherapy ended: {record.get('episode_drug_names', '')}",
-                    'episode_drug_names': record.get('episode_drug_names')
+                    'description': f"Chemotherapy started: {drug_names}",
+                    'episode_drug_names': drug_names,
+                    'episode_start_datetime': start_date,
+                    'episode_end_datetime': end_date,
+                    'medication_dosage_instructions': record.get('medication_dosage_instructions'),
+                    'v48_adjudication': adjud_log  # V4.8: Include adjudication provenance
                 })
-            chemo_episode_count += 1
-        print(f"    ✅ Added {chemo_episode_count} chemotherapy episodes")
+
+                # End event (if end date available)
+                if end_date:
+                    events.append({
+                        'event_type': 'chemotherapy_end',
+                        'event_date': end_date,
+                        'stage': 3,
+                        'source': 'v_chemo_treatment_episodes',
+                        'description': f"Chemotherapy ended: {drug_names}",
+                        'episode_drug_names': drug_names,
+                        'v48_adjudication': adjud_log  # V4.8: Include adjudication provenance
+                    })
+
+                chemo_episode_count += 1
+            else:
+                logger.warning(f"    ⚠️  Skipping chemotherapy record - no start date found for {drug_names}")
+
+        print(f"    ✅ Added {chemo_episode_count} chemotherapy episodes (V4.8: Used intelligent date adjudication)")
+
+        # V4.8: Log summary of adjudication decisions
+        if chemo_adjudication_log:
+            logger.info(f"    V4.8: Adjudicated {len(chemo_adjudication_log)} chemotherapy records using 5-tier fallback hierarchy")
 
         # Validate against expected paradigm
         expected_chemo = self.who_2021_classification.get('recommended_protocols', {}).get('chemotherapy')
