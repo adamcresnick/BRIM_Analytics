@@ -310,26 +310,42 @@ def create_timeline_from_json(
         )
     )
 
-    # Add stage boundary markers (vertical lines)
+    # Add stage boundary markers (vertical lines) - use add_shape instead of add_vline to avoid Timestamp issues
     stage_transitions = df.groupby('Stage')['Start'].min().sort_values()
     stage_colors = {
-        '0': 'rgba(200, 200, 200, 0.2)',
-        '1': 'rgba(173, 216, 230, 0.2)',
-        '2': 'rgba(144, 238, 144, 0.2)',
-        '3': 'rgba(255, 255, 224, 0.2)',
-        '4': 'rgba(240, 128, 128, 0.2)',
-        '5': 'rgba(255, 182, 193, 0.2)',
-        '6': 'rgba(230, 230, 250, 0.2)'
+        '0': 'rgba(200, 200, 200, 0.5)',
+        '1': 'rgba(173, 216, 230, 0.5)',
+        '2': 'rgba(144, 238, 144, 0.5)',
+        '3': 'rgba(255, 255, 224, 0.5)',
+        '4': 'rgba(240, 128, 128, 0.5)',
+        '5': 'rgba(255, 182, 193, 0.5)',
+        '6': 'rgba(230, 230, 250, 0.5)'
     }
 
     for stage, start_date in stage_transitions.items():
         stage_str = str(stage)
-        fig.add_vline(
+        fig.add_shape(
+            type="line",
+            x0=start_date, x1=start_date,
+            y0=0, y1=1,
+            yref="paper",
+            line=dict(
+                color=stage_colors.get(stage_str, 'gray'),
+                width=2,
+                dash="dash"
+            )
+        )
+        # Add annotation separately
+        fig.add_annotation(
             x=start_date,
-            line_dash="dash",
-            line_color=stage_colors.get(stage_str, 'gray'),
-            annotation_text=f"Stage {stage}",
-            annotation_position="top"
+            y=1.02,
+            yref="paper",
+            text=f"Stage {stage}",
+            showarrow=False,
+            font=dict(size=10),
+            bgcolor="white",
+            bordercolor=stage_colors.get(stage_str, 'gray'),
+            borderwidth=1
         )
 
     # --- Output ---
