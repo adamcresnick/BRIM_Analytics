@@ -7205,13 +7205,23 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
             results = query_athena(query, "Tier 2: Query post-op imaging", suppress_output=True)
 
             if not results:
-                # V4.7.3: Invoke Investigation Engine to validate empty result
+                # V4.7.5: Invoke Investigation Engine with patient_context for clinical validation
                 logger.warning(f"        ⚠️  Tier 2: Post-op Imaging: No post-operative imaging found - invoking Investigation Engine")
+
+                # V4.7.5: Build patient_context for clinical protocol validation
+                patient_context = {
+                    'who_diagnosis': self.who_2021_classification.get('who_2021_diagnosis', 'Unknown') if self.who_2021_classification else 'Unknown',
+                    'tumor_type': self.who_2021_classification.get('who_grade', 'Unknown') if self.who_2021_classification else 'Unknown',
+                    'molecular_markers': self.who_2021_classification.get('molecular_markers', {}) if self.who_2021_classification else {},
+                    'surgeries': [],  # Not needed for no_postop_imaging validation
+                    'timeline_events': []  # Not needed for no_postop_imaging validation
+                }
 
                 investigation = self.investigation_engine.investigate_gap_filling_failure(
                     gap_type='no_postop_imaging',
                     event={'surgery_date': surgery_date.isoformat(), 'patient_id': self.athena_patient_id},
-                    reason=f"v_imaging query returned 0 results for {surgery_date.isoformat()} (1-5 day post-op window)"
+                    reason=f"v_imaging query returned 0 results for {surgery_date.isoformat()} (1-5 day post-op window)",
+                    patient_context=patient_context  # V4.7.5: Pass patient_context for clinical validation
                 )
 
                 logger.info(f"        💡 Investigation Engine: {investigation['explanation']}")
@@ -7220,6 +7230,16 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                     criticality = alt.get('criticality', '')
                     crit_marker = f" [{criticality}]" if criticality else ""
                     logger.info(f"          - {alt['method']}: {alt['description']}{crit_marker} (confidence: {alt['confidence']*100:.0f}%)")
+
+                # V4.7.5: Log clinical validation results if present
+                if investigation.get('clinical_validation'):
+                    clinical = investigation['clinical_validation']
+                    if not clinical['is_clinically_plausible']:
+                        logger.warning(f"        🩺 CLINICAL PROTOCOL VIOLATION: {clinical['standard_of_care_violation']}")
+                        logger.info(f"        🩺 Clinical Rationale: {clinical['clinical_rationale']}")
+                        logger.info(f"        🩺 Expected Protocol: {clinical['expected_protocol']}")
+                    else:
+                        logger.info(f"        🩺 Clinical Assessment: {clinical['clinical_rationale']}")
 
                 return None
 
