@@ -568,6 +568,242 @@ class InvestigationEngine:
 
         return investigation
 
+    def investigate_phase1_data_loading(self, loaded_data: Dict) -> Dict:
+        """
+        V4.7: Investigate Phase 1 data loading for completeness issues.
+
+        Checks:
+        - Empty result sets (0 records loaded)
+        - Unexpectedly small result sets
+        - NULL/missing critical fields
+        - Missing encounters that should exist
+
+        Args:
+            loaded_data: Dictionary with counts from each data source
+                {
+                    'demographics': {...},
+                    'pathology_count': int,
+                    'procedures_count': int,
+                    'chemotherapy_count': int,
+                    'radiation_count': int,
+                    'imaging_count': int,
+                    ...
+                }
+
+        Returns:
+            Investigation result with issues_found and suggestions
+        """
+        investigation = {
+            'phase': 'Phase 1',
+            'issues_found': [],
+            'suggestions': [],
+            'statistics': {
+                'data_sources_loaded': 0,
+                'empty_sources': 0,
+                'low_count_sources': 0
+            }
+        }
+
+        # Count total data sources
+        count_fields = [k for k in loaded_data.keys() if k.endswith('_count')]
+        investigation['statistics']['data_sources_loaded'] = len(count_fields)
+
+        # Check demographics
+        if not loaded_data.get('demographics'):
+            investigation['issues_found'].append('No demographics loaded')
+            investigation['statistics']['empty_sources'] += 1
+            investigation['suggestions'].append({
+                'method': 'retry_demographics_query',
+                'description': 'Retry patient demographics query with expanded search',
+                'confidence': 0.9
+            })
+
+        # Check pathology
+        pathology_count = loaded_data.get('pathology_count', 0)
+        if pathology_count == 0:
+            investigation['issues_found'].append('No pathology records found')
+            investigation['statistics']['empty_sources'] += 1
+            investigation['suggestions'].append({
+                'method': 'query_alternative_pathology_sources',
+                'description': 'Search v_observations_lab for tumor markers or alternative pathology tables',
+                'confidence': 0.7
+            })
+
+        # Check procedures
+        procedures_count = loaded_data.get('procedures_count', 0)
+        if procedures_count == 0:
+            investigation['issues_found'].append('No procedures found')
+            investigation['statistics']['empty_sources'] += 1
+            investigation['suggestions'].append({
+                'method': 'query_encounters_for_surgical_context',
+                'description': 'Look for surgical encounters without Procedure resources',
+                'confidence': 0.8
+            })
+
+        # Check chemotherapy
+        chemotherapy_count = loaded_data.get('chemotherapy_count', 0)
+        if chemotherapy_count == 0:
+            investigation['issues_found'].append('No chemotherapy episodes found - may not have received chemotherapy')
+            investigation['statistics']['empty_sources'] += 1
+            # Don't suggest remediation - absence may be clinically accurate
+
+        # Check radiation
+        radiation_count = loaded_data.get('radiation_count', 0)
+        if radiation_count == 0:
+            investigation['issues_found'].append('No radiation episodes found - may not have received radiation')
+            investigation['statistics']['empty_sources'] += 1
+            # Don't suggest remediation - absence may be clinically accurate
+
+        # Check imaging
+        imaging_count = loaded_data.get('imaging_count', 0)
+        if imaging_count == 0:
+            investigation['issues_found'].append('No imaging studies found')
+            investigation['statistics']['empty_sources'] += 1
+            investigation['suggestions'].append({
+                'method': 'query_diagnostic_report_by_category',
+                'description': 'Search DiagnosticReport by category (RAD, CT, MRI, imaging)',
+                'confidence': 0.9
+            })
+        elif imaging_count < 3:
+            # Low count - may want to expand search
+            investigation['issues_found'].append(f'Only {imaging_count} imaging studies found - consider expanding search')
+            investigation['statistics']['low_count_sources'] += 1
+            investigation['suggestions'].append({
+                'method': 'expand_imaging_date_range',
+                'description': 'Expand imaging search date range beyond standard window',
+                'confidence': 0.6
+            })
+
+        return investigation
+
+    def investigate_phase4_medgemma_extraction(self, extractions: List[Dict]) -> Dict:
+        """
+        V4.7: Investigate Phase 4 MedGemma extractions for quality issues.
+
+        Checks:
+        - Low confidence scores (< 0.5)
+        - Validation failures
+        - Empty/NULL extracted values
+        - Extraction timeout/errors
+
+        Args:
+            extractions: List of extraction results
+                [
+                    {
+                        'field_name': str,
+                        'confidence_score': float,
+                        'validation_passed': bool,
+                        'extracted_value': Any,
+                        'extraction_time_seconds': float,
+                        ...
+                    },
+                    ...
+                ]
+
+        Returns:
+            Investigation result with quality metrics and suggestions
+        """
+        investigation = {
+            'phase': 'Phase 4',
+            'issues_found': [],
+            'suggestions': [],
+            'statistics': {
+                'total_extractions': len(extractions),
+                'validation_failures': 0,
+                'low_confidence': 0,
+                'average_confidence': 0.0,
+                'null_extractions': 0,
+                'timeouts': 0
+            }
+        }
+
+        if not extractions:
+            investigation['issues_found'].append('No MedGemma extractions performed')
+            return investigation
+
+        confidences = []
+        low_confidence_fields = []
+        validation_failed_fields = []
+        null_fields = []
+
+        for extraction in extractions:
+            field_name = extraction.get('field_name', 'unknown')
+            confidence = extraction.get('confidence_score', 0)
+            confidences.append(confidence)
+
+            # Check for low confidence
+            if confidence < 0.5:
+                investigation['statistics']['low_confidence'] += 1
+                low_confidence_fields.append(f"{field_name} ({confidence:.2f})")
+
+            # Check for validation failures
+            if not extraction.get('validation_passed', True):
+                investigation['statistics']['validation_failures'] += 1
+                validation_failed_fields.append(field_name)
+
+            # Check for null/empty extractions
+            extracted_value = extraction.get('extracted_value')
+            if extracted_value is None or extracted_value == '':
+                investigation['statistics']['null_extractions'] += 1
+                null_fields.append(field_name)
+
+            # Check for timeouts
+            if extraction.get('timeout', False) or extraction.get('error') == 'timeout':
+                investigation['statistics']['timeouts'] += 1
+
+        # Calculate average confidence
+        if confidences:
+            investigation['statistics']['average_confidence'] = sum(confidences) / len(confidences)
+
+        # Generate issue reports
+        if low_confidence_fields:
+            investigation['issues_found'].append(
+                f"{len(low_confidence_fields)} low confidence extractions: {', '.join(low_confidence_fields[:3])}"
+                + (f" and {len(low_confidence_fields) - 3} more" if len(low_confidence_fields) > 3 else "")
+            )
+            investigation['suggestions'].append({
+                'method': 'retry_with_refined_prompt',
+                'description': f'Retry extractions for {len(low_confidence_fields)} low-confidence fields with more specific prompts',
+                'confidence': 0.7
+            })
+
+        if validation_failed_fields:
+            investigation['issues_found'].append(
+                f"{len(validation_failed_fields)} validation failures: {', '.join(validation_failed_fields[:3])}"
+                + (f" and {len(validation_failed_fields) - 3} more" if len(validation_failed_fields) > 3 else "")
+            )
+            investigation['suggestions'].append({
+                'method': 'use_alternative_documents',
+                'description': 'Retry with higher quality documents (treatment summaries vs progress notes)',
+                'confidence': 0.8
+            })
+
+        if null_fields:
+            investigation['issues_found'].append(
+                f"{len(null_fields)} null/empty extractions: {', '.join(null_fields[:3])}"
+                + (f" and {len(null_fields) - 3} more" if len(null_fields) > 3 else "")
+            )
+
+        if investigation['statistics']['timeouts'] > 0:
+            investigation['issues_found'].append(f"{investigation['statistics']['timeouts']} extraction timeouts")
+            investigation['suggestions'].append({
+                'method': 'increase_timeout_or_simplify_prompt',
+                'description': 'Increase MedGemma timeout or simplify extraction prompt',
+                'confidence': 0.9
+            })
+
+        # Overall quality assessment
+        avg_confidence = investigation['statistics']['average_confidence']
+        if avg_confidence < 0.6:
+            investigation['issues_found'].append(f'Low average confidence: {avg_confidence:.2f}')
+            investigation['suggestions'].append({
+                'method': 'review_document_quality',
+                'description': 'Review quality of source documents - may be scanned images or incomplete notes',
+                'confidence': 0.7
+            })
+
+        return investigation
+
 
 if __name__ == '__main__':
     # Test the investigation engine
