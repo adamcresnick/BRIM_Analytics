@@ -7205,7 +7205,22 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
             results = query_athena(query, "Tier 2: Query post-op imaging", suppress_output=True)
 
             if not results:
-                logger.info(f"        Tier 2: Post-op Imaging: No post-operative imaging found")
+                # V4.7.3: Invoke Investigation Engine to validate empty result
+                logger.warning(f"        ⚠️  Tier 2: Post-op Imaging: No post-operative imaging found - invoking Investigation Engine")
+
+                investigation = self.investigation_engine.investigate_gap_filling_failure(
+                    gap_type='no_postop_imaging',
+                    event={'surgery_date': surgery_date.isoformat(), 'patient_id': self.athena_patient_id},
+                    reason=f"v_imaging query returned 0 results for {surgery_date.isoformat()} (1-5 day post-op window)"
+                )
+
+                logger.info(f"        💡 Investigation Engine: {investigation['explanation']}")
+                logger.info(f"        💡 Investigation suggests {len(investigation['suggested_alternatives'])} alternatives:")
+                for alt in investigation['suggested_alternatives'][:3]:  # Show top 3
+                    criticality = alt.get('criticality', '')
+                    crit_marker = f" [{criticality}]" if criticality else ""
+                    logger.info(f"          - {alt['method']}: {alt['description']}{crit_marker} (confidence: {alt['confidence']*100:.0f}%)")
+
                 return None
 
             logger.info(f"        Tier 2: Post-op Imaging: ✅ Found {len(results)} post-op imaging study(ies)")

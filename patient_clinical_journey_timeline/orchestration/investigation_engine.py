@@ -565,6 +565,43 @@ class InvestigationEngine:
                     'confidence': 0.85
                 }
             ]
+        elif gap_type == 'no_postop_imaging':
+            # V4.7.3: Investigate Phase 3.5 query failures (empty imaging results)
+            investigation['explanation'] = (
+                "Phase 3.5 v_imaging query returned 0 results for post-operative imaging. "
+                "This could be: (1) Query bug (wrong column, syntax error), "
+                "(2) Legitimate absence (patient has no post-op imaging), "
+                "(3) Data quality issue (imaging in different table/format), or "
+                "(4) Schema evolution (column renamed, table restructured)."
+            )
+            investigation['suggested_alternatives'] = [
+                {
+                    'method': 'verify_query_schema',
+                    'description': 'Validate all column names exist in v_imaging (check for renamed/missing columns like imaging_type → imaging_modality)',
+                    'confidence': 0.95,
+                    'criticality': 'HIGH - Query failures often due to schema mismatches'
+                },
+                {
+                    'method': 'expand_imaging_window',
+                    'description': 'Expand post-op window from 1-5 days to 1-14 days (imaging may be delayed)',
+                    'confidence': 0.75
+                },
+                {
+                    'method': 'query_v_imaging_results',
+                    'description': 'Try alternative table v_imaging_results for additional imaging data',
+                    'confidence': 0.70
+                },
+                {
+                    'method': 'query_all_imaging_modalities',
+                    'description': 'Remove MRI/CT filter - check if imaging exists with different modality codes',
+                    'confidence': 0.60
+                },
+                {
+                    'method': 'check_external_institution',
+                    'description': 'Patient may have had post-op imaging at external institution (not in FHIR data)',
+                    'confidence': 0.50
+                }
+            ]
 
         return investigation
 
