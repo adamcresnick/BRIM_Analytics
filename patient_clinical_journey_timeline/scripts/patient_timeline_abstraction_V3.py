@@ -7872,6 +7872,46 @@ def main():
     )
     artifact = abstractor.run(resume=args.resume)
 
+    # V4.8: Generate visualization and clinical summary
+    print()
+    print("="*80)
+    print("V4.8: GENERATING VISUALIZATION & CLINICAL SUMMARY")
+    print("="*80)
+
+    try:
+        import subprocess
+        artifact_path = output_dir / f"{args.patient_id}_timeline_artifact.json"
+
+        # Generate interactive timeline visualization
+        print("\n  📊 Generating interactive timeline visualization...")
+        viz_result = subprocess.run(
+            ["python3", "scripts/create_timeline_enhanced.py", str(artifact_path)],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if viz_result.returncode == 0:
+            print("  ✅ Timeline visualization created")
+        else:
+            print(f"  ⚠️  Visualization generation failed: {viz_result.stderr}")
+
+        # Generate clinical summary
+        print("\n  📝 Generating clinical summary...")
+        summary_result = subprocess.run(
+            ["python3", "scripts/generate_clinical_summary.py", str(artifact_path)],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if summary_result.returncode == 0:
+            print("  ✅ Clinical summary created")
+        else:
+            print(f"  ⚠️  Clinical summary generation failed: {summary_result.stderr}")
+
+    except Exception as e:
+        print(f"  ⚠️  V4.8 post-processing error: {e}")
+        print("     Timeline artifact is still available for manual visualization")
+
     print()
     print("="*80)
     print("ABSTRACTION COMPLETE")
