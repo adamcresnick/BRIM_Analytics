@@ -2842,8 +2842,63 @@ Return ONLY the JSON object, no additional text.
             except Exception as e:
                 logger.warning(f"V2 Tier 5 failed: {e}")
 
-        # All 5 tiers failed
-        logger.warning(f"V2: No operative note or clinical note found (all 5 tiers exhausted)")
+        # TIER 6: Direct document_reference query with comprehensive keyword matching (bypasses encounter join)
+        # This catches cases where documents exist but aren't properly linked via encounter junction table
+        if surgery_date:
+            try:
+                logger.debug(f"V2 Tier 6: Querying document_reference source table directly for {surgery_date}")
+                query = f"""
+                SELECT
+                    drc.content_attachment_url as binary_id,
+                    dr.type_text as doc_type_text,
+                    dr.date as doc_date,
+                    ABS(DATE_DIFF('day', CAST(dr.date AS DATE), DATE '{surgery_date}')) as days_from_surgery
+                FROM fhir_prd_db.document_reference dr
+                JOIN fhir_prd_db.document_reference_content drc
+                    ON dr.id = drc.document_reference_id
+                WHERE dr.subject_reference = '{self.patient_id}'
+                    AND (
+                        LOWER(dr.type_text) LIKE '%operative%'
+                        OR LOWER(dr.type_text) LIKE '%op%note%'
+                        OR LOWER(dr.type_text) LIKE '%op note%'
+                        OR LOWER(dr.type_text) LIKE '%surgical%'
+                        OR LOWER(dr.type_text) LIKE '%procedure%note%'
+                        OR dr.type_text = 'Operative Record'
+                        OR dr.type_text = 'External Operative Note'
+                    )
+                    AND ABS(DATE_DIFF('day', CAST(dr.date AS DATE), DATE '{surgery_date}')) <= 7
+                    AND drc.content_attachment_url IS NOT NULL
+                ORDER BY
+                    CASE
+                        WHEN LOWER(dr.type_text) LIKE '%op%note%complete%' THEN 1
+                        WHEN LOWER(dr.type_text) LIKE '%operative%complete%' THEN 2
+                        WHEN LOWER(dr.type_text) LIKE '%op%note%' THEN 3
+                        WHEN LOWER(dr.type_text) LIKE '%operative%' THEN 4
+                        WHEN LOWER(dr.type_text) LIKE '%surgical%' THEN 5
+                        ELSE 6
+                    END,
+                    days_from_surgery ASC
+                LIMIT 1
+                """
+
+                results = query_athena(query, f"V2 Tier 6: Direct document_reference query for {surgery_date}", suppress_output=True)
+
+                if results and results[0].get('binary_id'):
+                    binary_id = results[0]['binary_id']
+                    doc_type = results[0].get('doc_type_text', 'unknown')
+                    days_diff = results[0].get('days_from_surgery', '?')
+                    tier_used = "v2_tier6_direct_source_table"
+                    logger.info(f"V2 Tier 6 ✓: Found operative note {binary_id} (type: {doc_type}) via direct source table query ({days_diff} days from surgery)")
+                    logger.info(f"V2 Tier 6: This document was missing from encounter-based queries - possible encounter mismatch or junction table gap")
+                    if hasattr(self, 'v2_document_discovery_stats'):
+                        self.v2_document_discovery_stats[tier_used] = self.v2_document_discovery_stats.get(tier_used, 0) + 1
+                    return binary_id
+
+            except Exception as e:
+                logger.warning(f"V2 Tier 6 failed: {e}")
+
+        # All 6 tiers failed
+        logger.warning(f"V2: No operative note or clinical note found (all 6 tiers exhausted)")
         if hasattr(self, 'v2_document_discovery_stats'):
             self.v2_document_discovery_stats['v2_not_found'] = self.v2_document_discovery_stats.get('v2_not_found', 0) + 1
         return None
