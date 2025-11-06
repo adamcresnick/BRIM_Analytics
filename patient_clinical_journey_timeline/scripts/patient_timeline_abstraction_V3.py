@@ -6074,7 +6074,10 @@ Return JSON:
 
         results = query_athena(query, f"Priority radiation docs for {radiation_date}", suppress_output=True)
         if results:
-            doc_ids = [row.get('document_id', row.get('binary_id', '')) for row in results if row.get('document_id') or row.get('binary_id')]
+            # V4.6.1 FIX: Prioritize binary_id over document_id for Binary resource fetch
+            # binary_id format: "Binary/XXX" (correct for BinaryFileAgent)
+            # document_id format: "DocumentReference/XXX" (wrong - not a Binary resource)
+            doc_ids = [row.get('binary_id', row.get('document_id', '')) for row in results if row.get('binary_id') or row.get('document_id')]
             logger.info(f"        ✅ Found {len(doc_ids)} priority radiation documents")
             return doc_ids
         return []
