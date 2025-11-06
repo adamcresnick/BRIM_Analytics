@@ -6864,12 +6864,83 @@ Return JSON:
 
         return filled_count
 
+    def _search_postop_imaging_for_eor(self, surgery_date) -> Optional[str]:
+        """
+        V4.6.4 TIER 2: Search post-operative imaging for EOR assessment
+
+        Post-operative MRI/CT (typically within 24-72 hours) provides objective
+        assessment of residual tumor and can confirm/contradict surgeon's operative note.
+
+        Args:
+            surgery_date: Date object of surgery
+
+        Returns:
+            EOR string ('GTR', 'STR', 'Partial', None) or None
+        """
+        from datetime import timedelta
+
+        # Search for imaging within 1-5 days post-surgery (typical post-op MRI window)
+        window_start = (surgery_date + timedelta(days=1)).isoformat()
+        window_end = (surgery_date + timedelta(days=5)).isoformat()
+
+        query = f"""
+        SELECT
+            imaging_date,
+            report_conclusion,
+            result_information
+        FROM fhir_prd_db.v_imaging
+        WHERE patient_fhir_id = '{self.athena_patient_id}'
+            AND imaging_date >= DATE '{window_start}'
+            AND imaging_date <= DATE '{window_end}'
+            AND (LOWER(imaging_type) LIKE '%mri%' OR LOWER(imaging_type) LIKE '%ct%')
+            AND (report_conclusion IS NOT NULL OR result_information IS NOT NULL)
+        ORDER BY imaging_date ASC
+        LIMIT 3
+        """
+
+        try:
+            logger.info(f"        Tier 2: Post-op Imaging: Searching post-operative imaging (1-5d after {surgery_date.isoformat()})...")
+            results = query_athena(query, "Tier 2: Query post-op imaging", suppress_output=True)
+
+            if not results:
+                logger.info(f"        Tier 2: Post-op Imaging: No post-operative imaging found")
+                return None
+
+            logger.info(f"        Tier 2: Post-op Imaging: ✅ Found {len(results)} post-op imaging study(ies)")
+
+            # Search each imaging report for EOR assessment keywords
+            for img in results:
+                img_date = img.get('imaging_date')
+                report_text = (img.get('report_conclusion', '') or img.get('result_information', '')).lower()
+
+                if not report_text or len(report_text) < 20:
+                    continue
+
+                # EOR keywords in radiology reports (different from surgical notes)
+                if any(kw in report_text for kw in ['no residual', 'no enhancing', 'complete resection', 'no enhancement', 'post-operative changes only']):
+                    logger.info(f"        💡 Tier 2: Post-op Imaging: Found EOR='GTR' in imaging dated {img_date}")
+                    return 'GTR'
+                elif any(kw in report_text for kw in ['minimal residual', 'small amount', 'near-complete']):
+                    logger.info(f"        Tier 2: Post-op Imaging: Found EOR='STR' in imaging dated {img_date}")
+                    return 'STR'
+                elif any(kw in report_text for kw in ['residual enhancement', 'residual tumor', 'persistent', 'remaining']):
+                    logger.info(f"        💡 Tier 2: Post-op Imaging: Found EOR='Partial' in imaging dated {img_date}")
+                    return 'Partial'
+
+            logger.info(f"        Tier 2: Post-op Imaging: No clear EOR assessment found in {len(results)} imaging report(s)")
+            return None
+
+        except Exception as e:
+            logger.debug(f"        Tier 2 post-op imaging query failed: {e}")
+            return None
+
     def _remediate_missing_extent_of_resection(self) -> int:
         """
         V4.6.4 PHASE 2.2: Remediate missing extent of resection
 
-        Strategy:
-        - Use Tier 6 operative notes (already found in V4.6.2)
+        Multi-source strategy:
+        - Tier 1: Operative notes (surgeon's assessment)
+        - Tier 2: Post-operative imaging (objective radiological assessment)
         - Extract EOR keywords: GTR, STR, biopsy, partial resection, etc.
         - Map to standard values
         """
@@ -6992,6 +7063,14 @@ Return JSON:
             except Exception as e:
                 logger.debug(f"        Tier 1 operative notes query failed: {e}")
                 logger.info(f"        ❌ Could not find extent of resection for surgery on {surgery_date_str} (query failed)")
+
+            # TIER 2: Post-operative imaging (if Tier 1 failed)
+            if not eor_found:
+                eor_found = self._search_postop_imaging_for_eor(surgery_date)
+                if eor_found:
+                    surg_event['extent_of_resection'] = eor_found
+                    filled_count += 1
+                    logger.info(f"        ✅ Found extent of resection: {eor_found} for surgery on {surgery_date_str}")
 
         total_missing = len(surgery_events)
         logger.info(f"   📊 Extent of Resection Remediation Summary:")
