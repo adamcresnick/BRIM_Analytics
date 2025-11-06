@@ -647,6 +647,91 @@ def _enrich_eor_from_v_imaging(self) -> int:
 - **Budget-Friendly**: Doesn't consume --max-extractions quota
 - **Adjudication-Ready**: Phase 4 can now adjudicate operative note vs imaging
 
+### V4.6.6-V4.7: 3-Tier Intelligent EOR Extraction
+
+**ENHANCEMENT** (Nov 6, 2025): Phase 3.5 now uses 3-tier progressive reasoning cascade to extract EOR from imaging reports.
+
+#### Tier 2A: Enhanced Keyword Search
+**Purpose**: Fast first-pass extraction using explicit medical terminology
+
+**Keywords**:
+- **GTR**: 'no residual', 'complete resection', 'gross total', 'no enhancement'
+- **STR**: 'minimal residual', 'near-complete', 'subtotal', 'small residual'
+- **Partial**: 'residual tumor', 'partial debulk', 'debulking', 'incomplete resection', 'tumor remnant'
+- **Biopsy**: 'biopsy only', 'diagnostic biopsy', 'no resection'
+
+**Critical Fix**: Added surgical terminology ('debulking', 'partial resection') in addition to radiological assessment terms
+
+**Performance**: <100ms per report
+
+#### Tier 2B: MedGemma Clinical Reasoning (V4.6.6)
+**Purpose**: TRUE LLM clinical inference for reports that lack explicit keywords
+
+**Capabilities**:
+- **Clinical Inference**: "Post-operative changes in resection cavity" → Infer GTR if no residual mentioned
+- **Contextual Understanding**: "Debulking procedure" → Classify as Partial
+- **Ambiguity Resolution**: Favor conservative classification when unclear
+- **Terminology Mapping**: Translate varied terms to standard EOR classifications
+
+**When Used**: Only if Tier 2A (keywords) fails
+
+**Performance**: 2-5 seconds per report
+
+**Output**: `{extent_of_resection, clinical_reasoning, confidence}`
+
+#### Tier 2C: Investigation Engine Meta-Reasoning (V4.7)
+**Purpose**: Comprehensive system knowledge fallback + alternative source identification
+
+**Comprehensive System Knowledge**:
+- ALL Athena views (v_imaging, v_imaging_results, v_procedures_tumor, v_clinical_notes, v_pathology_diagnostics, v_binary_files)
+- ALL FHIR resources (DocumentReference, Binary, Observation, DiagnosticReport)
+- Complete workflow (Phase 1-6)
+- Data quality patterns (external institution gaps, truncated reports)
+- Clinical domain knowledge (neurosurgical protocols, temporal expectations)
+
+**Capabilities**:
+1. **Failure Analysis**: Diagnose WHY Tier 2B (MedGemma) failed
+2. **Alternative Source Identification**: Suggest v_clinical_notes, v_procedures_tumor, v_binary_files
+3. **Fallback Reasoning Rules**:
+   - Rule 1: "Resection cavity" without residual tumor → Likely GTR
+   - Rule 2: Surgery occurred but unclear → Conservative "Partial"
+   - Rule 3: >7 days post-op → Unreliable for EOR (may show recurrence)
+   - Rule 4: Pre-operative report → Not applicable
+   - Rule 5: Cross-view inference (radiation dose >54 Gy suggests residual disease)
+   - Rule 6: External institution → Flag for transferred records search
+4. **Data Quality Flagging**: Truncated text, contradictory information, missing documentation
+
+**When Used**: Only if both Tier 2A and 2B fail
+
+**Performance**: 5-10 seconds per report
+
+**Output**: `{extent_of_resection, failure_analysis, alternative_data_sources[], fallback_reasoning, clinical_clues[], data_quality_flags[], confidence}`
+
+#### Architectural Principles
+
+**Additive Enhancement (NOT Replacement)**:
+- Tier 2A ALWAYS runs first (fastest path)
+- Tier 2B only runs if Tier 2A fails
+- Tier 2C only runs if Tier 2B fails
+- Early exit on success maximizes performance
+
+**LLM Reasoning vs Keyword Matching**:
+- Tier 2A: Pattern matching (`if 'debulking' in text`)
+- Tier 2B: Clinical inference ("Report describes resection cavity with minimal enhancement → STR")
+- Tier 2C: Meta-reasoning ("Why did MedGemma fail? What alternative sources should we check?")
+
+**Full Audit Trail**:
+- Each tier logs reasoning process
+- Investigation Engine logs failure analysis + alternative sources
+- Complete traceability for clinical validation
+
+**Backward Compatibility**:
+- New JSON fields use `.get()` with defaults
+- Existing functionality preserved
+- Old prompts still work
+
+**Reference**: See [`docs/TIERED_REASONING_ARCHITECTURE.md`](TIERED_REASONING_ARCHITECTURE.md) for complete architecture details
+
 ### Output Example
 ```
 PHASE 3.5: ENRICH EOR FROM V_IMAGING STRUCTURED DATA
