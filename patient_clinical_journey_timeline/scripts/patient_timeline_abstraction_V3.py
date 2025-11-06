@@ -6522,15 +6522,31 @@ Return JSON:
 
     def _find_response_imaging(self, chemo_start_event: Dict) -> List[str]:
         """Find response imaging (first imaging >30 days after chemo end)."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         end_date_str = self._find_chemo_end_date(chemo_start_event)
         if not end_date_str:
             return []
+
+        # Parse end date and ensure timezone-aware
         end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+
         response_window_start = end_date + timedelta(days=30)
-        imaging_events = [e for e in self.timeline_events
-                         if e.get('event_type') == 'imaging'
-                         and datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) >= response_window_start]
+
+        # Filter imaging events with safe timezone handling
+        imaging_events = []
+        for e in self.timeline_events:
+            if e.get('event_type') == 'imaging':
+                try:
+                    event_date = datetime.fromisoformat(e['event_date'].replace('Z', '+00:00'))
+                    if event_date.tzinfo is None:
+                        event_date = event_date.replace(tzinfo=timezone.utc)
+                    if event_date >= response_window_start:
+                        imaging_events.append(e)
+                except (ValueError, KeyError):
+                    continue
+
         imaging_events.sort(key=lambda x: x.get('event_date', ''))
         return [imaging_events[0].get('event_id', imaging_events[0].get('fhir_id', ''))] if imaging_events else []
 
@@ -6546,13 +6562,29 @@ Return JSON:
 
     def _find_simulation_imaging(self, radiation_start_event: Dict) -> List[str]:
         """Find simulation/planning imaging (±7 days before radiation start)."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
+
+        # Parse radiation start date and ensure timezone-aware
         start_date = datetime.fromisoformat(radiation_start_event['event_date'].replace('Z', '+00:00'))
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+
         window_start = start_date - timedelta(days=7)
         window_end = start_date + timedelta(days=7)
-        imaging_events = [e for e in self.timeline_events
-                         if e.get('event_type') == 'imaging'
-                         and window_start <= datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) <= window_end]
+
+        # Filter imaging events with safe timezone handling
+        imaging_events = []
+        for e in self.timeline_events:
+            if e.get('event_type') == 'imaging':
+                try:
+                    event_date = datetime.fromisoformat(e['event_date'].replace('Z', '+00:00'))
+                    if event_date.tzinfo is None:
+                        event_date = event_date.replace(tzinfo=timezone.utc)
+                    if window_start <= event_date <= window_end:
+                        imaging_events.append(e)
+                except (ValueError, KeyError):
+                    continue
+
         return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
 
     def _remediate_missing_chemo_end_dates(self) -> int:
