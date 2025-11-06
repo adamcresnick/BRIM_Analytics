@@ -5731,7 +5731,34 @@ INSTRUCTIONS:
                     for alt in investigation['suggested_alternatives']:
                         logger.info(f"      - {alt.get('method', 'unknown')}: {alt.get('description', '')} (confidence: {alt.get('confidence', 0):.0%})")
 
-            logger.info("  ℹ️  Note: Investigation suggestions logged for future implementation of remediation strategies")
+            # V4.6.3 PHASE 2.2: EXECUTE REMEDIATION STRATEGIES
+            logger.info("\n🔧 V4.6.3 PHASE 2.2: Core Timeline Gap Remediation")
+            logger.info("  Executing Investigation Engine suggestions...")
+
+            remediation_count = 0
+
+            # Remediate missing chemotherapy end dates
+            if validation['chemotherapy']['missing_end_dates'] > 0:
+                logger.info(f"  → Remediating {validation['chemotherapy']['missing_end_dates']} missing chemotherapy end dates...")
+                filled = self._remediate_missing_chemo_end_dates()
+                remediation_count += filled
+                if filled > 0:
+                    logger.info(f"    ✅ Found {filled} chemotherapy end dates")
+                    validation['chemotherapy']['missing_end_dates'] -= filled
+
+            # Remediate missing radiation end dates
+            if validation['radiation']['missing_end_dates'] > 0:
+                logger.info(f"  → Remediating {validation['radiation']['missing_end_dates']} missing radiation end dates...")
+                filled = self._remediate_missing_radiation_end_dates()
+                remediation_count += filled
+                if filled > 0:
+                    logger.info(f"    ✅ Found {filled} radiation end dates")
+                    validation['radiation']['missing_end_dates'] -= filled
+
+            if remediation_count > 0:
+                logger.info(f"\n  ✅ V4.6.3: Remediated {remediation_count} missing end dates")
+            else:
+                logger.info(f"\n  ⚠️  V4.6.3: No end dates found via remediation")
 
         return validation
 
@@ -6448,6 +6475,374 @@ Return JSON:
                          if e.get('event_type') == 'imaging'
                          and window_start <= datetime.fromisoformat(e['event_date'].replace('Z', '+00:00')) <= window_end]
         return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
+
+    def _remediate_missing_chemo_end_dates(self) -> int:
+        """
+        V4.6.3 PHASE 2.2: Remediate missing chemotherapy end dates
+
+        Multi-tier strategy with intelligent note prioritization and adaptive expansion:
+        - Tier 1: Progress Notes (most likely to mention "completed chemotherapy")
+        - Tier 2: Encounter Summary / Discharge Notes
+        - Tier 3: Transfer Notes
+        - Tier 4: H&P / Consult Notes
+
+        Adaptive expansion: Start with ±30 days, expand to ±60/±90 if keywords found
+        """
+        from datetime import datetime, timedelta
+
+        filled_count = 0
+
+        # Find all chemotherapy events missing end dates
+        chemo_events = [e for e in self.timeline_events
+                       if e.get('event_type') == 'chemotherapy_start'
+                       and not e.get('therapy_end_date')]
+
+        if not chemo_events:
+            return 0
+
+        for chemo_event in chemo_events:
+            start_date_str = chemo_event.get('event_date')
+            if not start_date_str:
+                continue
+
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
+            agent_names = chemo_event.get('agent_names', [])
+
+            logger.debug(f"      Searching for end date for chemo starting {start_date_str}")
+
+            end_date = None
+
+            # TIER 1: Progress Notes (highest priority)
+            end_date = self._search_notes_for_treatment_end(
+                start_date=start_date,
+                treatment_type='chemotherapy',
+                agent_names=agent_names,
+                note_types=['Progress Notes'],
+                tier_name="Tier 1: Progress Notes"
+            )
+
+            # TIER 2: Encounter Summary / Discharge Notes
+            if not end_date:
+                end_date = self._search_notes_for_treatment_end(
+                    start_date=start_date,
+                    treatment_type='chemotherapy',
+                    agent_names=agent_names,
+                    note_types=['Encounter Summary'],
+                    tier_name="Tier 2: Encounter Summary"
+                )
+
+            # TIER 3: Transfer Notes
+            if not end_date:
+                end_date = self._search_notes_for_treatment_end(
+                    start_date=start_date,
+                    treatment_type='chemotherapy',
+                    agent_names=agent_names,
+                    note_types=['Transfer Note'],
+                    tier_name="Tier 3: Transfer Notes"
+                )
+
+            # TIER 4: H&P / Consult Notes
+            if not end_date:
+                end_date = self._search_notes_for_treatment_end(
+                    start_date=start_date,
+                    treatment_type='chemotherapy',
+                    agent_names=agent_names,
+                    note_types=['H&P', 'Consult Note'],
+                    tier_name="Tier 4: H&P/Consult"
+                )
+
+            if end_date:
+                chemo_event['therapy_end_date'] = end_date
+                filled_count += 1
+                logger.info(f"        ✅ Found chemo end date: {end_date} for treatment starting {start_date_str}")
+
+        return filled_count
+
+    def _remediate_missing_radiation_end_dates(self) -> int:
+        """
+        V4.6.3 PHASE 2.2: Remediate missing radiation end dates
+
+        Multi-tier strategy optimized for radiation:
+        - Tier 1: v_radiation_documents (treatment summaries, completion reports)
+        - Tier 2: Progress Notes mentioning "completed radiation"
+        - Tier 3: Calculate from start date + fractions (if available)
+        """
+        from datetime import datetime, timedelta
+
+        filled_count = 0
+
+        # Find all radiation events missing end dates
+        radiation_events = [e for e in self.timeline_events
+                           if e.get('event_type') == 'radiation_start'
+                           and not e.get('date_at_radiation_stop')]
+
+        if not radiation_events:
+            return 0
+
+        for rad_event in radiation_events:
+            start_date_str = rad_event.get('event_date')
+            if not start_date_str:
+                continue
+
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
+
+            logger.debug(f"      Searching for end date for radiation starting {start_date_str}")
+
+            end_date = None
+
+            # TIER 1: Query v_radiation_documents for completion summaries
+            end_date = self._search_radiation_documents_for_end_date(start_date)
+
+            # TIER 2: Progress Notes
+            if not end_date:
+                end_date = self._search_notes_for_treatment_end(
+                    start_date=start_date,
+                    treatment_type='radiation',
+                    agent_names=[],
+                    note_types=['Progress Notes'],
+                    tier_name="Tier 2: Progress Notes"
+                )
+
+            # TIER 3: Calculate from fractions
+            if not end_date:
+                total_fractions = rad_event.get('total_fractions')
+                if total_fractions and isinstance(total_fractions, (int, float)) and total_fractions > 0:
+                    # Assume 5 fractions per week (Mon-Fri)
+                    weeks = int(total_fractions / 5)
+                    extra_days = total_fractions % 5
+                    estimated_end = start_date + timedelta(weeks=weeks, days=extra_days)
+                    end_date = estimated_end.isoformat()
+                    logger.info(f"        💡 Tier 3: Calculated end date from {total_fractions} fractions: {end_date}")
+
+            if end_date:
+                rad_event['date_at_radiation_stop'] = end_date
+                filled_count += 1
+                logger.info(f"        ✅ Found radiation end date: {end_date} for treatment starting {start_date_str}")
+
+        return filled_count
+
+    def _search_notes_for_treatment_end(self, start_date, treatment_type: str, agent_names: List[str],
+                                        note_types: List[str], tier_name: str) -> Optional[str]:
+        """
+        Search clinical notes for treatment completion/end date with adaptive expansion
+
+        Args:
+            start_date: Treatment start date
+            treatment_type: 'chemotherapy' or 'radiation'
+            agent_names: List of chemo agents (for chemotherapy)
+            note_types: List of note types to search
+            tier_name: Name for logging
+
+        Returns:
+            End date string (YYYY-MM-DD) or None
+        """
+        from datetime import timedelta
+        import re
+
+        # Adaptive search windows: start narrow, expand if keywords found
+        search_windows = [30, 60, 90]  # days
+
+        for window_days in search_windows:
+            window_start = (start_date - timedelta(days=window_days)).isoformat()
+            window_end = (start_date + timedelta(days=window_days)).isoformat()
+
+            # Build note type filter
+            note_type_conditions = " OR ".join([f"type_text = '{nt}'" for nt in note_types])
+
+            query = f"""
+            SELECT
+                drc.content_attachment_url as binary_id,
+                dr.type_text,
+                dr.date as note_date
+            FROM fhir_prd_db.document_reference dr
+            JOIN fhir_prd_db.document_reference_content drc
+                ON dr.id = drc.document_reference_id
+            WHERE dr.subject_reference = '{self.patient_id}'
+                AND ({note_type_conditions})
+                AND dr.date >= DATE '{window_start}'
+                AND dr.date <= DATE '{window_end}'
+                AND drc.content_attachment_url IS NOT NULL
+            ORDER BY ABS(DATE_DIFF('day', dr.date, DATE '{start_date.isoformat()}')) ASC
+            LIMIT 10
+            """
+
+            try:
+                results = query_athena(query, f"{tier_name}: Query notes (±{window_days}d)", suppress_output=True)
+
+                if not results:
+                    continue
+
+                logger.debug(f"        {tier_name}: Found {len(results)} notes in ±{window_days}d window")
+
+                # Search each note for completion keywords and dates
+                for note in results:
+                    binary_id = note.get('binary_id')
+                    note_date = note.get('note_date')
+
+                    # Fetch note text
+                    note_text = self._get_cached_binary_text(binary_id)
+
+                    if not note_text:
+                        # Fetch from S3
+                        try:
+                            binary_content = self.binary_file_agent.stream_binary_from_s3(binary_id)
+                            if binary_content:
+                                # Try PDF extraction
+                                text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                                if not text or len(text.strip()) < 50:
+                                    # Try HTML
+                                    text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+
+                                if text and len(text.strip()) > 50:
+                                    note_text = text
+                                    # Cache it
+                                    if not hasattr(self, 'binary_extractions'):
+                                        self.binary_extractions = []
+                                    self.binary_extractions.append({
+                                        'binary_id': binary_id,
+                                        'extracted_text': text,
+                                        'content_type': 'application/pdf',
+                                        'extraction_method': 'phase_2_2_remediation',
+                                        'text_length': len(text)
+                                    })
+                        except Exception as e:
+                            logger.debug(f"          Could not fetch note {binary_id[:20]}: {e}")
+                            continue
+
+                    if not note_text:
+                        continue
+
+                    # Search for completion keywords
+                    completion_keywords = [
+                        'complet', 'finish', 'last dose', 'final', 'end',
+                        'discontinu', 'stopp', 'conclude'
+                    ]
+
+                    note_lower = note_text.lower()
+
+                    # Check if note mentions completion
+                    has_completion_keyword = any(kw in note_lower for kw in completion_keywords)
+
+                    if not has_completion_keyword:
+                        continue
+
+                    # For chemotherapy: check if agent names are mentioned
+                    if treatment_type == 'chemotherapy' and agent_names:
+                        agent_mentioned = any(agent.lower() in note_lower for agent in agent_names)
+                        if not agent_mentioned:
+                            continue
+
+                    # For radiation: check for radiation keywords
+                    if treatment_type == 'radiation':
+                        radiation_mentioned = any(kw in note_lower for kw in ['radiation', 'radiotherapy', 'xrt', 'rt'])
+                        if not radiation_mentioned:
+                            continue
+
+                    # Found a relevant note! Try to extract specific end date
+                    # Look for date patterns near completion keywords
+                    date_patterns = [
+                        r'complet.*?(\d{4}-\d{2}-\d{2})',
+                        r'finish.*?(\d{4}-\d{2}-\d{2})',
+                        r'last dose.*?(\d{4}-\d{2}-\d{2})',
+                        r'final.*?(\d{4}-\d{2}-\d{2})',
+                        r'(\d{4}-\d{2}-\d{2}).*?complet',
+                        r'(\d{4}-\d{2}-\d{2}).*?finish',
+                        r'cycle \d+ of \d+.*?(\d{4}-\d{2}-\d{2})'
+                    ]
+
+                    extracted_date = None
+                    for pattern in date_patterns:
+                        matches = re.findall(pattern, note_lower)
+                        if matches:
+                            extracted_date = matches[0]
+                            break
+
+                    # If we found a specific date, use it
+                    if extracted_date:
+                        logger.info(f"        💡 {tier_name}: Found end date '{extracted_date}' in note dated {note_date}")
+                        return extracted_date
+
+                    # Otherwise, use the note date as proxy for end date
+                    logger.info(f"        💡 {tier_name}: Using note date {note_date} as end date (mentions completion)")
+                    return note_date
+
+            except Exception as e:
+                logger.debug(f"        {tier_name} query failed: {e}")
+                continue
+
+        return None
+
+    def _search_radiation_documents_for_end_date(self, start_date) -> Optional[str]:
+        """
+        Search v_radiation_documents for completion summaries
+        """
+        from datetime import timedelta
+
+        window_start = (start_date - timedelta(days=60)).isoformat()
+        window_end = (start_date + timedelta(days=60)).isoformat()
+
+        query = f"""
+        SELECT
+            docc_attachment_url as binary_id,
+            doc_type_text,
+            doc_date
+        FROM fhir_prd_db.v_radiation_documents
+        WHERE patient_fhir_id = '{self.athena_patient_id}'
+            AND doc_date >= DATE '{window_start}'
+            AND doc_date <= DATE '{window_end}'
+            AND (
+                LOWER(doc_type_text) LIKE '%complet%'
+                OR LOWER(doc_type_text) LIKE '%summary%'
+                OR LOWER(doc_type_text) LIKE '%discharge%'
+            )
+            AND docc_attachment_url IS NOT NULL
+        ORDER BY ABS(DATE_DIFF('day', doc_date, DATE '{start_date.isoformat()}')) ASC
+        LIMIT 5
+        """
+
+        try:
+            results = query_athena(query, "Tier 1: Query radiation completion documents", suppress_output=True)
+
+            if not results:
+                return None
+
+            logger.debug(f"        Tier 1: Found {len(results)} radiation documents")
+
+            # Search documents for end date
+            for doc in results:
+                binary_id = doc.get('binary_id')
+                doc_date = doc.get('doc_date')
+
+                doc_text = self._get_cached_binary_text(binary_id)
+
+                if not doc_text:
+                    try:
+                        binary_content = self.binary_file_agent.stream_binary_from_s3(binary_id)
+                        if binary_content:
+                            text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                            if not text or len(text.strip()) < 50:
+                                text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+
+                            if text and len(text.strip()) > 50:
+                                doc_text = text
+                    except Exception as e:
+                        logger.debug(f"          Could not fetch radiation doc {binary_id[:20]}: {e}")
+                        continue
+
+                if not doc_text:
+                    continue
+
+                # Look for completion keywords and dates
+                doc_lower = doc_text.lower()
+                if any(kw in doc_lower for kw in ['complet', 'finish', 'final', 'end', 'last fraction']):
+                    # Use document date as end date
+                    logger.info(f"        💡 Tier 1: Using radiation document date {doc_date} as end date")
+                    return doc_date
+
+        except Exception as e:
+            logger.debug(f"        Tier 1 radiation documents query failed: {e}")
+
+        return None
 
     def _classify_imaging_response(self, report_text: str) -> Dict:
         """V4.6 GAP #5: Classify imaging response using RANO keywords."""
