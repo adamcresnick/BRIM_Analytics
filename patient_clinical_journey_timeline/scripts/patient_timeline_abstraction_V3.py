@@ -7194,7 +7194,7 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         WHERE patient_fhir_id = '{self.athena_patient_id}'
             AND imaging_date >= DATE '{window_start}'
             AND imaging_date <= DATE '{window_end}'
-            AND (LOWER(imaging_type) LIKE '%mri%' OR LOWER(imaging_type) LIKE '%ct%')
+            AND (LOWER(imaging_modality) LIKE '%mri%' OR LOWER(imaging_modality) LIKE '%ct%')
             AND (report_conclusion IS NOT NULL OR result_information IS NOT NULL)
         ORDER BY imaging_date ASC
         LIMIT 3
