@@ -6634,6 +6634,14 @@ Return JSON:
                 chemo_event['therapy_end_date'] = end_date
                 filled_count += 1
                 logger.info(f"        ✅ Found chemo end date: {end_date} for treatment starting {start_date_str}")
+            else:
+                logger.info(f"        ❌ Could not find end date for chemo starting {start_date_str} (searched all tiers)")
+
+        total_missing = len(chemo_events)
+        logger.info(f"   📊 Chemotherapy End Date Remediation Summary:")
+        logger.info(f"      Total missing: {total_missing}")
+        logger.info(f"      Successfully filled: {filled_count} ({100*filled_count/total_missing if total_missing > 0 else 0:.1f}%)")
+        logger.info(f"      Still missing: {total_missing - filled_count}")
 
         return filled_count
 
@@ -6697,6 +6705,14 @@ Return JSON:
                 rad_event['date_at_radiation_stop'] = end_date
                 filled_count += 1
                 logger.info(f"        ✅ Found radiation end date: {end_date} for treatment starting {start_date_str}")
+            else:
+                logger.info(f"        ❌ Could not find end date for radiation starting {start_date_str} (searched all tiers)")
+
+        total_missing = len(radiation_events)
+        logger.info(f"   📊 Radiation End Date Remediation Summary:")
+        logger.info(f"      Total missing: {total_missing}")
+        logger.info(f"      Successfully filled: {filled_count} ({100*filled_count/total_missing if total_missing > 0 else 0:.1f}%)")
+        logger.info(f"      Still missing: {total_missing - filled_count}")
 
         return filled_count
 
@@ -6728,6 +6744,8 @@ Return JSON:
             # Build note type filter
             note_type_conditions = " OR ".join([f"type_text = '{nt}'" for nt in note_types])
 
+            # CRITICAL FIX: dr.date contains timestamp strings like "2021-10-30T16:56:59Z"
+            # Must use SUBSTR to extract date portion, same as Tier 6 operative note fix
             query = f"""
             SELECT
                 drc.content_attachment_url as binary_id,
@@ -6737,21 +6755,25 @@ Return JSON:
             JOIN fhir_prd_db.document_reference_content drc
                 ON dr.id = drc.document_reference_id
             WHERE dr.subject_reference = '{self.patient_id}'
+                AND dr.date IS NOT NULL
+                AND LENGTH(dr.date) >= 10
                 AND ({note_type_conditions})
-                AND dr.date >= DATE '{window_start}'
-                AND dr.date <= DATE '{window_end}'
+                AND DATE(SUBSTR(dr.date, 1, 10)) >= DATE '{window_start}'
+                AND DATE(SUBSTR(dr.date, 1, 10)) <= DATE '{window_end}'
                 AND drc.content_attachment_url IS NOT NULL
-            ORDER BY ABS(DATE_DIFF('day', dr.date, DATE '{start_date.isoformat()}')) ASC
+            ORDER BY ABS(DATE_DIFF('day', DATE(SUBSTR(dr.date, 1, 10)), DATE '{start_date.isoformat()}')) ASC
             LIMIT 10
             """
 
             try:
-                results = query_athena(query, f"{tier_name}: Query notes (±{window_days}d)", suppress_output=True)
+                logger.info(f"        {tier_name}: Searching {', '.join(note_types)} (±{window_days}d from {start_date.isoformat()})...")
+                results = query_athena(query, f"{tier_name}: Query notes", suppress_output=True)
 
                 if not results:
+                    logger.info(f"        {tier_name}: No notes found in ±{window_days}d window")
                     continue
 
-                logger.debug(f"        {tier_name}: Found {len(results)} notes in ±{window_days}d window")
+                logger.info(f"        {tier_name}: ✅ Found {len(results)} note(s) in ±{window_days}d window")
 
                 # Search each note for completion keywords and dates
                 for note in results:
