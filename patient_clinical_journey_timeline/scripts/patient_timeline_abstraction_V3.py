@@ -7023,14 +7023,24 @@ Return null for extent_of_resection ONLY if the report genuinely does not contai
             logger.debug(f"        Tier 2C: Report text too short for meaningful analysis ({len(report_text)} chars)")
             return None
 
-        # INVESTIGATION ENGINE META-REASONING PROMPT
-        # This is NOT just extraction - it's ANALYSIS of why extraction failed
+        # INVESTIGATION ENGINE META-REASONING PROMPT WITH COMPREHENSIVE SYSTEM KNOWLEDGE
+        # This leverages deep understanding of data architecture to leave NO STONE UNTURNED
         prompt = f"""You are the Investigation Engine performing a SECONDARY REVIEW after the primary extraction agent (MedGemma) failed to extract extent of resection from this post-operative imaging report.
+
+**CRITICAL - Your Comprehensive System Knowledge**:
+You have deep understanding of the ENTIRE data architecture:
+- **Athena Views**: v_imaging, v_imaging_results, v_procedures_tumor, v_clinical_notes, v_pathology_diagnostics, v_binary_files
+- **FHIR Resources**: DocumentReference (operative notes, discharge summaries), Binary (PDFs), Observation (structured findings), DiagnosticReport
+- **Workflow**: Phase 1 (structured data) → Phase 3.5 (v_imaging EOR enrichment) → Phase 4 (binary extraction) → Phase 5 (gap-filling) → Phase 6 (artifact)
+- **Data Quality Patterns**: External institution data gaps, truncated reports, alternative terminology
+- **Clinical Domain**: Standard neurosurgical protocols, temporal expectations for post-op imaging
+
+Your mission: LEAVE NO STONE UNTURNED in finding EOR information.
 
 **Context**:
 - Surgery Date: {surgery_date}
 - Imaging Date: {img_date}
-- Primary extraction attempt: FAILED (returned null or insufficient confidence)
+- Primary extraction attempt (MedGemma): FAILED (returned null or insufficient confidence)
 
 **Your Meta-Reasoning Task**:
 
@@ -7039,22 +7049,33 @@ Return null for extent_of_resection ONLY if the report genuinely does not contai
    - Is the terminology too ambiguous?
    - Is EOR information genuinely absent?
    - Was the report pre-operative (not post-op)?
+   - Is this the wrong data source for EOR?
 
-2. **Apply Fallback Reasoning Rules**:
-   - **Rule 1 (Implicit GTR)**: If report describes "resection cavity" or "post-op changes" WITHOUT mentioning residual tumor/enhancement → Likely GTR
-   - **Rule 2 (Conservative Default)**: If surgery occurred but no clear EOR indicators → Default to "Partial" (most conservative)
-   - **Rule 3 (Temporal Check)**: If imaging is >7 days post-op, may show tumor recurrence (not reliable for EOR)
-   - **Rule 4 (Pre-op Detection)**: If report describes "planned surgery" or "pre-operative" → Not applicable for EOR
+2. **Identify Alternative Data Sources** (leave no stone unturned):
+   - Should we check v_imaging_results instead of v_imaging?
+   - Should we look for discharge summary in v_clinical_notes (often contains EOR)?
+   - Should we search v_binary_files for operative note PDFs?
+   - Should we check v_procedures_tumor for structured EOR field?
+   - Are there temporal clinical notes within 72h of surgery mentioning debulking/resection?
 
-3. **Generate Investigation Report**:
+3. **Apply Fallback Reasoning Rules**:
+   - **Rule 1 (Implicit GTR)**: "Resection cavity" or "post-op changes" WITHOUT residual tumor → Likely GTR
+   - **Rule 2 (Conservative Default)**: Surgery occurred but unclear EOR → "Partial" (most conservative)
+   - **Rule 3 (Temporal Check)**: >7 days post-op → Unreliable for EOR (may show recurrence)
+   - **Rule 4 (Pre-op Detection)**: "Planned surgery" or "pre-operative" → Not applicable
+   - **Rule 5 (Cross-view Inference)**: If radiation dose >54 Gy documented elsewhere → Suggests residual disease (STR/Partial)
+   - **Rule 6 (External Institution)**: Missing standard documentation → Flag for transferred records search
+
+4. **Generate Investigation Report**:
    - Document your reasoning process
    - Explain what clinical clues you used
+   - **List alternative data sources to check**
    - Note any assumptions made
-   - Provide confidence assessment
+   - Flag data quality issues
 
-4. **Make Final Determination**:
+5. **Make Final Determination**:
    - Based on fallback reasoning rules
-   - Only return null if genuinely no surgical information present
+   - Only return null if genuinely no surgical information AND no alternative sources available
 
 **Report Text**:
 {report_text}
@@ -7064,17 +7085,22 @@ Return null for extent_of_resection ONLY if the report genuinely does not contai
 {{
     "extent_of_resection": "GTR" | "STR" | "Partial" | "Biopsy" | null,
     "failure_analysis": "Why did primary extraction fail? (1-2 sentences)",
+    "alternative_data_sources": ["v_clinical_notes for discharge summary", "v_procedures_tumor for structured EOR field"],
     "fallback_reasoning": "What reasoning rules were applied? (1-2 sentences)",
     "clinical_clues": ["List 2-3 specific text phrases that informed your decision"],
     "confidence": "HIGH" | "MEDIUM" | "LOW",
-    "investigation_notes": "Any additional context or warnings"
+    "investigation_notes": "Any additional context, warnings, or data quality flags",
+    "data_quality_flags": ["List any issues: truncated text, external institution, missing docs"]
 }}
 
-Return null ONLY if:
+Return null for extent_of_resection ONLY if:
 - Report is pre-operative (not post-op)
 - Report is from >7 days post-surgery (unreliable for EOR)
 - Report is genuinely about a different procedure/body part
 - Text is too corrupted to interpret
+- AND no alternative data sources identified
+
+CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no stone unturned!
 """
 
         try:
@@ -7105,11 +7131,21 @@ Return null ONLY if:
             confidence = data.get('confidence', 'UNKNOWN')
             investigation_notes = data.get('investigation_notes', '')
 
+            # V4.7: New comprehensive system knowledge fields (backward compatible)
+            alternative_sources = data.get('alternative_data_sources', [])
+            data_quality_flags = data.get('data_quality_flags', [])
+
             # Log investigation report
             logger.info(f"        Tier 2C (Investigation): Analysis complete")
             logger.info(f"           Failure Analysis: {failure_analysis}")
             logger.info(f"           Fallback Reasoning: {fallback_reasoning}")
             logger.info(f"           Clinical Clues: {', '.join(clinical_clues)}")
+
+            # V4.7: Log comprehensive system knowledge outputs
+            if alternative_sources:
+                logger.info(f"           Alternative Sources: {', '.join(alternative_sources)}")
+            if data_quality_flags:
+                logger.warning(f"           Data Quality Flags: {', '.join(data_quality_flags)}")
 
             if investigation_notes:
                 logger.info(f"           Notes: {investigation_notes}")
