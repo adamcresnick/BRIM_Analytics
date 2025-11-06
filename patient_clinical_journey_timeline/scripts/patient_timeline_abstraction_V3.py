@@ -6592,6 +6592,111 @@ Return JSON:
 
         return [e.get('event_id', e.get('fhir_id', '')) for e in imaging_events]
 
+    def _check_still_on_therapy(self, start_date, treatment_type: str, agent_names: List[str]) -> bool:
+        """
+        V4.6.5: Check if patient is still on active therapy
+
+        Searches recent progress notes (last 30 days from timeline end) for evidence
+        that patient is currently receiving treatment. This prevents false negatives
+        where missing end dates are actually ongoing therapy.
+
+        Args:
+            start_date: Treatment start date
+            treatment_type: 'chemotherapy' or 'radiation'
+            agent_names: List of chemo agents (for chemotherapy)
+
+        Returns:
+            True if evidence suggests patient is still on therapy, False otherwise
+        """
+        from datetime import datetime, timedelta
+
+        # Get the most recent event date in the timeline as proxy for "current" date
+        timeline_dates = [e.get('event_date') for e in self.timeline_events if e.get('event_date')]
+        if not timeline_dates:
+            return False
+
+        most_recent_date_str = max(timeline_dates)
+        most_recent_date = datetime.fromisoformat(most_recent_date_str.replace('Z', '+00:00')).date()
+
+        # Search for recent progress notes (last 30 days of timeline)
+        window_start = (most_recent_date - timedelta(days=30)).isoformat()
+        window_end = most_recent_date.isoformat()
+
+        query = f"""
+        SELECT
+            drc.content_attachment_url as binary_id,
+            dr.type_text,
+            dr.date as note_date
+        FROM fhir_prd_db.document_reference dr
+        JOIN fhir_prd_db.document_reference_content drc
+            ON dr.id = drc.document_reference_id
+        WHERE dr.subject_reference = '{self.patient_id}'
+            AND dr.date IS NOT NULL
+            AND LENGTH(dr.date) >= 10
+            AND type_text = 'Progress Notes'
+            AND DATE(SUBSTR(dr.date, 1, 10)) >= DATE '{window_start}'
+            AND DATE(SUBSTR(dr.date, 1, 10)) <= DATE '{window_end}'
+            AND drc.content_attachment_url IS NOT NULL
+        ORDER BY DATE(SUBSTR(dr.date, 1, 10)) DESC
+        LIMIT 5
+        """
+
+        try:
+            results = query_athena(query, "Check still on therapy", suppress_output=True)
+            if not results:
+                return False
+
+            # Keywords indicating ongoing therapy
+            ongoing_keywords = [
+                'continuing', 'ongoing', 'current', 'still receiving',
+                'remains on', 'maintained on', 'tolerating', 'cycle',
+                'next dose', 'will continue', 'plan to continue'
+            ]
+
+            # Check each recent note for ongoing therapy mentions
+            for note in results:
+                binary_id = note.get('binary_id')
+                note_text = self._get_cached_binary_text(binary_id)
+
+                if not note_text:
+                    try:
+                        binary_content = self.binary_agent.stream_binary_from_s3(binary_id)
+                        if binary_content:
+                            text, error = self.binary_agent.extract_text_from_pdf(binary_content)
+                            if not text or len(text.strip()) < 50:
+                                text, error = self.binary_agent.extract_text_from_html(binary_content)
+                            if text and len(text.strip()) > 50:
+                                note_text = text
+                    except Exception:
+                        continue
+
+                if not note_text:
+                    continue
+
+                note_lower = note_text.lower()
+
+                # Check for treatment type + ongoing keywords
+                if treatment_type == 'chemotherapy':
+                    # Check if any agent is mentioned with ongoing keywords
+                    for agent in agent_names:
+                        if agent.lower() in note_lower:
+                            if any(kw in note_lower for kw in ongoing_keywords):
+                                logger.info(f"          ℹ️  Evidence of ongoing therapy: '{agent}' mentioned with ongoing keywords in recent note")
+                                return True
+
+                elif treatment_type == 'radiation':
+                    rad_keywords = ['radiation', 'radiotherapy', 'xrt', 'rt']
+                    if any(kw in note_lower for kw in rad_keywords):
+                        if any(kw in note_lower for kw in ongoing_keywords):
+                            logger.info(f"          ℹ️  Evidence of ongoing radiation therapy in recent note")
+                            return True
+
+            return False
+
+        except Exception as e:
+            logger.debug(f"Still on therapy check failed: {e}")
+            return False
+
     def _remediate_missing_chemo_end_dates(self) -> int:
         """
         V4.6.3 PHASE 2.2: Remediate missing chemotherapy end dates
@@ -6672,7 +6777,13 @@ Return JSON:
                 filled_count += 1
                 logger.info(f"        ✅ Found chemo end date: {end_date} for treatment starting {start_date_str}")
             else:
-                logger.info(f"        ❌ Could not find end date for chemo starting {start_date_str} (searched all tiers)")
+                # V4.6.5: Check if patient is still on active therapy
+                still_on_therapy = self._check_still_on_therapy(start_date, 'chemotherapy', agent_names)
+                if still_on_therapy:
+                    chemo_event['therapy_status'] = 'ongoing'
+                    logger.info(f"        ℹ️  Patient appears to still be on active therapy for chemo starting {start_date_str}")
+                else:
+                    logger.info(f"        ❌ Could not find end date for chemo starting {start_date_str} (searched all tiers)")
 
         total_missing = len(chemo_events)
         logger.info(f"   📊 Chemotherapy End Date Remediation Summary:")
