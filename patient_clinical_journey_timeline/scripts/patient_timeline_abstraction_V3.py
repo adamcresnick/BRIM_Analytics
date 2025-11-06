@@ -1594,6 +1594,21 @@ Return ONLY the JSON object, no additional text.
             self._phase1_5_validate_schema_coverage()
             print()
 
+        # V4.7: PHASE 1 INVESTIGATION
+        if self.investigation_engine:
+            # Collect Phase 1 data loading statistics
+            phase1_data = {
+                'demographics': self.patient_demographics,
+                'pathology_count': len(self.structured_data.get('pathology', [])),
+                'procedures_count': len(self.structured_data.get('procedures', [])),
+                'chemotherapy_count': len(self.structured_data.get('chemotherapy', [])),
+                'radiation_count': len(self.structured_data.get('radiation', [])),
+                'imaging_count': len(self.structured_data.get('imaging', []))
+            }
+
+            investigation = self.investigation_engine.investigate_phase1_data_loading(phase1_data)
+            self._log_investigation_results('Phase 1', investigation)
+
         # PHASE 2: Construct initial timeline
         if self._should_skip_phase(Phase.PHASE_2_TIMELINE_CONSTRUCTION, start_phase):
             print("⏭️  SKIPPING PHASE 2 (already completed)")
@@ -1658,6 +1673,13 @@ Return ONLY the JSON object, no additional text.
             self._phase4_5_assess_extraction_completeness()
             print()
             self._save_checkpoint(Phase.PHASE_4_5_COMPLETENESS_ASSESSMENT)
+
+        # V4.7: PHASE 4 INVESTIGATION (MedGemma extraction quality)
+        if self.investigation_engine and hasattr(self, 'binary_extractions'):
+            investigation = self.investigation_engine.investigate_phase4_medgemma_extraction(
+                self.binary_extractions
+            )
+            self._log_investigation_results('Phase 4', investigation)
 
         # PHASE 5: Protocol validation
         if self._should_skip_phase(Phase.PHASE_5_PROTOCOL_VALIDATION, start_phase):
@@ -1864,6 +1886,61 @@ Return ONLY the JSON object, no additional text.
         }
 
         self.checkpoint_manager.save_checkpoint(phase_name, state)
+
+    def _log_investigation_results(self, phase_name: str, investigation: Dict):
+        """
+        V4.7: Log investigation results in a formatted way
+
+        Args:
+            phase_name: Name of the phase investigated (e.g., "Phase 1", "Phase 4")
+            investigation: Investigation result dictionary with issues_found, suggestions, statistics
+        """
+        if not investigation:
+            return
+
+        # Store investigation for final report
+        if not hasattr(self, 'v47_investigations'):
+            self.v47_investigations = {}
+        self.v47_investigations[phase_name] = investigation
+
+        issues = investigation.get('issues_found', [])
+        suggestions = investigation.get('suggestions', [])
+        statistics = investigation.get('statistics', {})
+
+        if not issues and not suggestions:
+            logger.info(f"\n🔍 V4.7 {phase_name.upper()} INVESTIGATION: ✅ No issues found")
+            return
+
+        logger.info(f"\n🔍 V4.7 {phase_name.upper()} INVESTIGATION")
+        logger.info(f"  Status: {'⚠️  Issues found' if issues else '✅ No issues'}")
+
+        # Log statistics if available
+        if statistics:
+            logger.info(f"  Statistics:")
+            for key, value in statistics.items():
+                if isinstance(value, float):
+                    logger.info(f"    - {key}: {value:.2f}")
+                else:
+                    logger.info(f"    - {key}: {value}")
+
+        # Log issues
+        if issues:
+            logger.info(f"  Issues Found ({len(issues)}):")
+            for issue in issues[:5]:  # Show first 5
+                logger.info(f"    - {issue}")
+            if len(issues) > 5:
+                logger.info(f"    ... and {len(issues) - 5} more")
+
+        # Log suggestions
+        if suggestions:
+            logger.info(f"  Remediation Suggestions ({len(suggestions)}):")
+            for suggestion in suggestions[:5]:  # Show first 5
+                method = suggestion.get('method', 'unknown')
+                description = suggestion.get('description', '')
+                confidence = suggestion.get('confidence', 0)
+                logger.info(f"    - {method}: {description} ({confidence:.0%} confidence)")
+            if len(suggestions) > 5:
+                logger.info(f"    ... and {len(suggestions) - 5} more")
 
     def _track_extraction_attempt(self, gap: Dict, document: Dict, result: Dict):
         """
