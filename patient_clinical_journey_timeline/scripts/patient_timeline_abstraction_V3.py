@@ -1648,6 +1648,18 @@ Return ONLY the JSON object, no additional text.
             print()
             self._save_checkpoint(Phase.PHASE_3_GAP_IDENTIFICATION)
 
+        # PHASE 3.5: Enrich EOR from v_imaging (before Phase 4 binary extraction)
+        print("PHASE 3.5: ENRICH EOR FROM V_IMAGING STRUCTURED DATA")
+        print("-"*80)
+        print("  Querying v_imaging for post-op MRI/CT reports (fast structured query)")
+        eor_enriched = self._enrich_eor_from_v_imaging()
+        if eor_enriched > 0:
+            print(f"  ✅ Enriched {eor_enriched} EOR values from v_imaging")
+            print(f"  📊 Phase 4 will adjudicate operative notes vs imaging using EOROrchestrator")
+        else:
+            print(f"  ℹ️  No post-op imaging EOR found in v_imaging")
+        print()
+
         # PHASE 4: Prioritize and extract from binaries (REAL MEDGEMMA INTEGRATION)
         if self._should_skip_phase(Phase.PHASE_4_BINARY_EXTRACTION, start_phase):
             print("⏭️  SKIPPING PHASE 4 (already completed)")
@@ -6933,6 +6945,60 @@ Return JSON:
         except Exception as e:
             logger.debug(f"        Tier 2 post-op imaging query failed: {e}")
             return None
+
+    def _enrich_eor_from_v_imaging(self) -> int:
+        """
+        V4.6.4 PHASE 3.5: Proactively enrich EOR from v_imaging structured data
+
+        This runs BEFORE Phase 4 binary extraction to leverage fast structured queries.
+        Uses same logic as remediation Tier 2 but runs proactively.
+
+        Benefits:
+        - Fast: Structured query vs binary download
+        - Reliable: Text already extracted
+        - Budget-friendly: Doesn't count against --max-extractions
+        - Feeds Phase 4: Results available for EOROrchestrator adjudication
+
+        Returns:
+            Number of EOR values enriched from v_imaging
+        """
+        from datetime import datetime, timedelta
+
+        enriched_count = 0
+
+        # Find all surgery events (regardless of whether EOR exists)
+        surgery_events = [e for e in self.timeline_events if e.get('event_type') == 'surgery']
+
+        if not surgery_events:
+            logger.info("    No surgeries found - skipping v_imaging EOR enrichment")
+            return 0
+
+        logger.info(f"    Enriching EOR from v_imaging for {len(surgery_events)} surgeries...")
+
+        for surg_event in surgery_events:
+            event_date_str = surg_event.get('event_date')
+            if not event_date_str:
+                continue
+
+            try:
+                surgery_date = datetime.fromisoformat(event_date_str.replace('Z', '+00:00')).date()
+            except (ValueError, AttributeError):
+                continue
+
+            # Query v_imaging for post-op MRI/CT (1-5 days post-surgery)
+            eor_from_imaging = self._search_postop_imaging_for_eor(surgery_date)
+
+            if eor_from_imaging:
+                # Store in event as imaging-derived EOR
+                # Phase 4 EOROrchestrator will adjudicate operative note vs imaging
+                if 'v_imaging_eor' not in surg_event:
+                    surg_event['v_imaging_eor'] = eor_from_imaging
+                    surg_event['v_imaging_eor_date'] = event_date_str
+                    enriched_count += 1
+                    logger.info(f"      ✅ Enriched v_imaging EOR={eor_from_imaging} for surgery on {event_date_str[:10]}")
+
+        logger.info(f"    📊 V_imaging EOR enrichment: {enriched_count}/{len(surgery_events)} surgeries enriched")
+        return enriched_count
 
     def _remediate_missing_extent_of_resection(self) -> int:
         """
