@@ -2929,11 +2929,13 @@ Return ONLY the JSON object, no additional text.
                     drc.content_attachment_url as binary_id,
                     dr.type_text as doc_type_text,
                     dr.date as doc_date,
-                    ABS(DATE_DIFF('day', CAST(dr.date AS DATE), DATE '{surgery_date}')) as days_from_surgery
+                    ABS(DATE_DIFF('day', DATE(SUBSTR(dr.date, 1, 10)), DATE '{surgery_date}')) as days_from_surgery
                 FROM fhir_prd_db.document_reference dr
                 JOIN fhir_prd_db.document_reference_content drc
                     ON dr.id = drc.document_reference_id
                 WHERE dr.subject_reference = '{self.patient_id}'
+                    AND dr.date IS NOT NULL
+                    AND LENGTH(dr.date) >= 10
                     AND (
                         LOWER(dr.type_text) LIKE '%operative%'
                         OR LOWER(dr.type_text) LIKE '%op%note%'
@@ -2943,7 +2945,7 @@ Return ONLY the JSON object, no additional text.
                         OR dr.type_text = 'Operative Record'
                         OR dr.type_text = 'External Operative Note'
                     )
-                    AND ABS(DATE_DIFF('day', CAST(dr.date AS DATE), DATE '{surgery_date}')) <= 7
+                    AND ABS(DATE_DIFF('day', DATE(SUBSTR(dr.date, 1, 10)), DATE '{surgery_date}')) <= 7
                     AND drc.content_attachment_url IS NOT NULL
                 ORDER BY
                     CASE
