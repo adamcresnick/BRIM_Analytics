@@ -6116,7 +6116,7 @@ Return JSON:
 
             try:
                 # Stream Binary resource from S3
-                binary_content = self.binary_file_agent.stream_binary_from_s3(doc_id)
+                binary_content = self.binary_agent.stream_binary_from_s3(doc_id)
 
                 if not binary_content:
                     logger.warning(f"        ⚠️  Could not fetch Binary resource for {doc_id[:20]}")
@@ -6127,7 +6127,7 @@ Return JSON:
                 extraction_error = None
 
                 # Try PDF extraction
-                text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                text, error = self.binary_agent.extract_text_from_pdf(binary_content)
                 if text and len(text.strip()) > 50:
                     extracted_text = text
                     content_type = 'application/pdf'
@@ -6137,7 +6137,7 @@ Return JSON:
 
                 # If PDF failed, try HTML extraction
                 if not extracted_text:
-                    text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+                    text, error = self.binary_agent.extract_text_from_html(binary_content)
                     if text and len(text.strip()) > 50:
                         extracted_text = text
                         content_type = 'text/html'
@@ -6145,7 +6145,7 @@ Return JSON:
                 # If text-based formats failed, try TIFF/image extraction
                 if not extracted_text:
                     logger.info(f"        📸 Attempting OCR extraction for {doc_id[:20]}...")
-                    text, error = self.binary_file_agent.extract_text_from_image(binary_content)
+                    text, error = self.binary_agent.extract_text_from_image(binary_content)
                     if text and len(text.strip()) > 50:
                         extracted_text = text
                         content_type = 'image/tiff'
@@ -6762,13 +6762,13 @@ Return JSON:
                     if not note_text:
                         # Fetch from S3
                         try:
-                            binary_content = self.binary_file_agent.stream_binary_from_s3(binary_id)
+                            binary_content = self.binary_agent.stream_binary_from_s3(binary_id)
                             if binary_content:
                                 # Try PDF extraction
-                                text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                                text, error = self.binary_agent.extract_text_from_pdf(binary_content)
                                 if not text or len(text.strip()) < 50:
                                     # Try HTML
-                                    text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+                                    text, error = self.binary_agent.extract_text_from_html(binary_content)
 
                                 if text and len(text.strip()) > 50:
                                     note_text = text
@@ -6894,11 +6894,11 @@ Return JSON:
 
                 if not doc_text:
                     try:
-                        binary_content = self.binary_file_agent.stream_binary_from_s3(binary_id)
+                        binary_content = self.binary_agent.stream_binary_from_s3(binary_id)
                         if binary_content:
-                            text, error = self.binary_file_agent.extract_text_from_pdf(binary_content)
+                            text, error = self.binary_agent.extract_text_from_pdf(binary_content)
                             if not text or len(text.strip()) < 50:
-                                text, error = self.binary_file_agent.extract_text_from_html(binary_content)
+                                text, error = self.binary_agent.extract_text_from_html(binary_content)
 
                             if text and len(text.strip()) > 50:
                                 doc_text = text
