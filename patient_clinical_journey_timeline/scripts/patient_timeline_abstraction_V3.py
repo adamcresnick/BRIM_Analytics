@@ -2097,12 +2097,27 @@ Return ONLY the JSON object, no additional text.
             'chemotherapy': f"""
                 SELECT
                     patient_fhir_id,
+                    episode_id,
                     episode_start_datetime,
                     episode_end_datetime,
-                    episode_drug_names
+                    episode_drug_names,
+                    -- V4.8: ALL available date fields for intelligent adjudication
+                    medication_start_datetime,
+                    medication_stop_datetime,
+                    raw_medication_start_date,
+                    raw_medication_stop_date,
+                    raw_medication_authored_date,
+                    medication_name,
+                    medication_dosage_instructions,
+                    medication_route,
+                    medication_status,
+                    medications_with_stop_date,
+                    has_medications_without_stop_date,
+                    medication_request_fhir_id,
+                    medication_fhir_id
                 FROM fhir_prd_db.v_chemo_treatment_episodes
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
-                ORDER BY episode_start_datetime
+                ORDER BY COALESCE(episode_start_datetime, raw_medication_start_date, medication_start_datetime)
             """,
             'radiation': f"""
                 SELECT
