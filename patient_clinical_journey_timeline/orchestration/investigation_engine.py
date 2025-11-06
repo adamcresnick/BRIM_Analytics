@@ -37,6 +37,9 @@ class InvestigationEngine:
         self.schema = schema_loader
         self.database = 'fhir_prd_db'
 
+        # V4.7.4: WHO CNS Clinical Protocol Knowledge Base
+        self._init_clinical_protocols()
+
     def investigate_query_failure(
         self,
         query_id: str,
@@ -428,21 +431,31 @@ class InvestigationEngine:
         self,
         gap_type: str,
         event: Dict,
-        reason: str
+        reason: str,
+        patient_context: Optional[Dict] = None
     ) -> Dict:
         """
         V4.6 GAP #1: Investigate why gap-filling failed (no source documents available).
+        V4.7.4 ENHANCEMENT: Added clinical protocol validation via patient_context.
 
         This method is called when Phase 4.5 gap-filling can't find source_document_ids,
         typically because MedGemma extraction in Phase 4 failed validation.
 
         Args:
-            gap_type: Type of gap (surgery_eor, radiation_dose, imaging_conclusion)
+            gap_type: Type of gap (surgery_eor, radiation_dose, imaging_conclusion, no_postop_imaging)
             event: The event missing data
             reason: Why gap-filling failed
+            patient_context: Optional patient context for clinical validation
+                {
+                    'who_diagnosis': str,
+                    'tumor_type': str,
+                    'molecular_markers': Dict,
+                    'surgeries': List[Dict],
+                    'timeline_events': List[Dict]
+                }
 
         Returns:
-            Dict with suggested alternative document sources
+            Dict with suggested alternative document sources + clinical validation
         """
         logger.info(f"Investigating gap-filling failure for {gap_type}: {reason}")
 
@@ -452,7 +465,8 @@ class InvestigationEngine:
             'reason': reason,
             'root_cause': 'MedGemma extraction failed validation, so source_document_ids not populated',
             'explanation': None,
-            'suggested_alternatives': []
+            'suggested_alternatives': [],
+            'clinical_validation': None  # V4.7.4: Clinical protocol validation
         }
 
         # Suggest alternative document sources based on gap type
@@ -603,7 +617,263 @@ class InvestigationEngine:
                 }
             ]
 
+        # V4.7.4: Clinical Protocol Validation
+        # If patient_context provided, validate if missing event violates standard-of-care
+        if patient_context is not None:
+            clinical_validation = self.validate_clinical_protocol(
+                gap_type=gap_type,
+                patient_context=patient_context,
+                event=event
+            )
+            investigation['clinical_validation'] = clinical_validation
+
+            # Log clinical assessment if protocol violation detected
+            if not clinical_validation['is_clinically_plausible']:
+                logger.warning(
+                    f"⚠️  CLINICAL PROTOCOL VIOLATION: {clinical_validation['standard_of_care_violation']}"
+                )
+                logger.info(f"Clinical Rationale: {clinical_validation['clinical_rationale']}")
+                logger.info(f"Expected Protocol: {clinical_validation['expected_protocol']}")
+
         return investigation
+
+    def _init_clinical_protocols(self):
+        """
+        V4.7.4: Initialize WHO 2021 CNS Clinical Protocol Knowledge Base.
+
+        References:
+        - WHO_2021_CLINICAL_CONTEXTUALIZATION_FRAMEWORK.md
+        - Comprehensive Pediatric CNS Tumor Reference (WHO 2021 Classification & Treatment Guide).pdf
+
+        Standard-of-care protocols by tumor type for clinical validation.
+        """
+        self.clinical_protocols = {
+            # High-Grade Gliomas (WHO Grade 3-4)
+            'high_grade_glioma': {
+                'tumor_types': ['glioblastoma', 'high-grade glioma', 'diffuse midline glioma', 'anaplastic astrocytoma'],
+                'expected_events': [
+                    {
+                        'event_type': 'surgery',
+                        'timing': 'diagnosis',
+                        'required': True,
+                        'description': 'Maximal safe resection'
+                    },
+                    {
+                        'event_type': 'postop_imaging',
+                        'timing': '24-72 hours post-surgery',
+                        'required': True,
+                        'description': 'Baseline post-operative MRI for extent of resection assessment',
+                        'clinical_rationale': 'Standard-of-care for brain tumor surgery requires post-op imaging within 24-72h to assess extent of resection and surgical complications'
+                    },
+                    {
+                        'event_type': 'radiation',
+                        'timing': '28-35 days post-surgery',
+                        'required': True,
+                        'description': 'Radiation therapy 54-60 Gy in 1.8-2 Gy fractions',
+                        'protocol_deviations': {
+                            '<21 days': 'Early radiation (insufficient surgical healing)',
+                            '>42 days': 'Delayed radiation (tumor regrowth risk)'
+                        }
+                    },
+                    {
+                        'event_type': 'chemotherapy',
+                        'timing': 'concurrent with radiation',
+                        'required': True,
+                        'description': 'Temozolomide or clinical trial agent'
+                    }
+                ]
+            },
+
+            # Low-Grade Gliomas (WHO Grade 1-2)
+            'low_grade_glioma': {
+                'tumor_types': ['pilocytic astrocytoma', 'ganglioglioma', 'low-grade glioma', 'pleomorphic xanthoastrocytoma'],
+                'expected_events': [
+                    {
+                        'event_type': 'surgery',
+                        'timing': 'diagnosis',
+                        'required': True,
+                        'description': 'Gross total resection (GTR) if feasible'
+                    },
+                    {
+                        'event_type': 'postop_imaging',
+                        'timing': '24-72 hours post-surgery',
+                        'required': True,
+                        'description': 'Baseline post-operative MRI for extent of resection',
+                        'clinical_rationale': 'GTR vs STR determines need for adjuvant therapy'
+                    },
+                    {
+                        'event_type': 'surveillance_imaging',
+                        'timing': '3-6 months intervals',
+                        'required': True,
+                        'description': 'Watch-and-wait with surveillance MRI if GTR achieved'
+                    }
+                ]
+            },
+
+            # Medulloblastoma
+            'medulloblastoma': {
+                'tumor_types': ['medulloblastoma', 'embryonal tumor'],
+                'expected_events': [
+                    {
+                        'event_type': 'surgery',
+                        'timing': 'diagnosis',
+                        'required': True,
+                        'description': 'Maximal safe resection'
+                    },
+                    {
+                        'event_type': 'postop_imaging',
+                        'timing': '24-48 hours post-surgery',
+                        'required': True,
+                        'description': 'Baseline MRI brain + spine for residual disease and metastases',
+                        'clinical_rationale': 'Medulloblastoma requires spine imaging for CSF dissemination assessment'
+                    },
+                    {
+                        'event_type': 'radiation',
+                        'timing': '28-35 days post-surgery',
+                        'required': True,
+                        'description': 'Craniospinal irradiation (CSI) + posterior fossa boost'
+                    },
+                    {
+                        'event_type': 'chemotherapy',
+                        'timing': 'concurrent and adjuvant',
+                        'required': True,
+                        'description': 'Multi-agent chemotherapy (vincristine, cisplatin, cyclophosphamide)'
+                    }
+                ]
+            },
+
+            # Ependymoma
+            'ependymoma': {
+                'tumor_types': ['ependymoma'],
+                'expected_events': [
+                    {
+                        'event_type': 'surgery',
+                        'timing': 'diagnosis',
+                        'required': True,
+                        'description': 'Gross total resection critical for outcomes'
+                    },
+                    {
+                        'event_type': 'postop_imaging',
+                        'timing': '24-72 hours post-surgery',
+                        'required': True,
+                        'description': 'Baseline post-operative MRI to confirm GTR',
+                        'clinical_rationale': 'GTR is most important prognostic factor for ependymoma'
+                    },
+                    {
+                        'event_type': 'radiation',
+                        'timing': '28-42 days post-surgery if residual disease',
+                        'required': 'conditional',
+                        'description': 'Focal radiation 54-59.4 Gy'
+                    }
+                ]
+            },
+
+            # ATRT (Atypical Teratoid/Rhabdoid Tumor)
+            'atrt': {
+                'tumor_types': ['atypical teratoid', 'rhabdoid tumor', 'ATRT'],
+                'expected_events': [
+                    {
+                        'event_type': 'surgery',
+                        'timing': 'diagnosis',
+                        'required': True,
+                        'description': 'Maximal safe resection'
+                    },
+                    {
+                        'event_type': 'postop_imaging',
+                        'timing': '24-48 hours post-surgery',
+                        'required': True,
+                        'description': 'Baseline MRI brain + spine',
+                        'clinical_rationale': 'ATRT has high metastatic potential requiring spine imaging'
+                    },
+                    {
+                        'event_type': 'intensive_chemotherapy',
+                        'timing': 'immediate post-surgery',
+                        'required': True,
+                        'description': 'Intensive multi-agent chemotherapy'
+                    }
+                ]
+            }
+        }
+
+    def validate_clinical_protocol(
+        self,
+        gap_type: str,
+        patient_context: Dict,
+        event: Dict
+    ) -> Dict:
+        """
+        V4.7.4: Validate if missing event violates standard clinical practice.
+
+        Args:
+            gap_type: Type of missing data (e.g., 'no_postop_imaging')
+            patient_context: Patient diagnosis and treatment context
+                {
+                    'who_diagnosis': str,
+                    'tumor_type': str,
+                    'molecular_markers': Dict,
+                    'surgeries': List[Dict],
+                    'timeline_events': List[Dict]
+                }
+            event: The specific event context (e.g., surgery date)
+
+        Returns:
+            Dict with clinical validation assessment
+        """
+        validation = {
+            'is_clinically_plausible': True,
+            'standard_of_care_violation': None,
+            'clinical_rationale': None,
+            'expected_protocol': None,
+            'confidence': 0.0
+        }
+
+        # Extract tumor type from WHO diagnosis
+        tumor_type_match = None
+        who_diagnosis = patient_context.get('who_diagnosis', '').lower()
+
+        for protocol_key, protocol in self.clinical_protocols.items():
+            for tumor_keyword in protocol['tumor_types']:
+                if tumor_keyword.lower() in who_diagnosis:
+                    tumor_type_match = protocol_key
+                    break
+            if tumor_type_match:
+                break
+
+        # If no matching protocol, return uncertain
+        if not tumor_type_match:
+            validation['clinical_rationale'] = f"No standard protocol found for diagnosis: {who_diagnosis}"
+            validation['confidence'] = 0.3
+            return validation
+
+        protocol = self.clinical_protocols[tumor_type_match]
+
+        # Validate specific gap types
+        if gap_type == 'no_postop_imaging':
+            # Find post-op imaging requirement in protocol
+            postop_imaging_req = None
+            for expected_event in protocol['expected_events']:
+                if expected_event['event_type'] == 'postop_imaging':
+                    postop_imaging_req = expected_event
+                    break
+
+            if postop_imaging_req and postop_imaging_req['required']:
+                validation['is_clinically_plausible'] = False
+                validation['standard_of_care_violation'] = (
+                    f"Post-operative imaging is REQUIRED within {postop_imaging_req['timing']} "
+                    f"for {tumor_type_match.replace('_', ' ').title()}"
+                )
+                validation['clinical_rationale'] = postop_imaging_req.get(
+                    'clinical_rationale',
+                    postop_imaging_req['description']
+                )
+                validation['expected_protocol'] = f"Surgery → Post-op MRI ({postop_imaging_req['timing']}) → EOR assessment"
+                validation['confidence'] = 0.95
+            else:
+                validation['is_clinically_plausible'] = True
+                validation['clinical_rationale'] = "Post-op imaging not strictly required for this tumor type"
+                validation['confidence'] = 0.7
+
+        return validation
 
     def investigate_phase1_data_loading(self, loaded_data: Dict) -> Dict:
         """
