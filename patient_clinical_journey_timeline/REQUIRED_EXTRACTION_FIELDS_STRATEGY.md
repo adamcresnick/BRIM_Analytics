@@ -110,16 +110,10 @@ From SQL-aligned radiation terminology (`patient_timeline_abstraction_V2.py:1818
 
 **No keyword filtering on alternatives** - rely on temporal proximity + document type + MedGemma validation
 
-### Implementation Status: ✅ IMPLEMENTED
-- **Location**: `patient_timeline_abstraction_V2.py:1876-1881`
-- **Stop date added**: Line 1878 (2025-11-01 update)
-- **Comprehensive keywords**: Lines 1818-1836
 
 ---
 
 ## 3. Imaging: RANO Response Assessment
-
-### Gap Type: `vague_imaging_conclusion`
 
 ### Required Fields (2)
 
@@ -192,7 +186,7 @@ From SQL-aligned radiation terminology (`patient_timeline_abstraction_V2.py:1818
 **Agent names**: temozolomide, vincristine, carboplatin, cisplatin, etoposide, cyclophosphamide, lomustine
 **Change indicators**: changed, modified, discontinued, stopped, held, dose reduction, escalation, toxicity, progression
 
-**Minimum keywords required**: 2
+
 
 ### Escalation Strategy (Proposed)
 
@@ -213,7 +207,7 @@ From SQL-aligned radiation terminology (`patient_timeline_abstraction_V2.py:1818
 | Discharge summaries | 4 | Comprehensive treatment history | ±30 days |
 | Treatment plans | 5 | Protocol enrollment, consent forms | ±60 days |
 
-### Implementation Status: ❌ NOT IMPLEMENTED
+
 
 **Blocked by**:
 - Phase 3 gap identification logic not implemented
