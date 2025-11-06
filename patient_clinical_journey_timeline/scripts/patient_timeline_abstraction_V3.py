@@ -6881,7 +6881,12 @@ Return JSON:
         V4.6.5 TIER 2B: MedGemma intelligent freetext interpretation of imaging reports
 
         Uses MedGemma to intelligently interpret radiology report text that may not
-        contain explicit EOR keywords.
+        contain explicit EOR keywords. This leverages TRUE LLM reasoning:
+
+        - Clinical inference: Interpret indirect descriptions
+        - Contextual understanding: Connect post-op changes to surgical extent
+        - Ambiguity resolution: Make clinical judgment on unclear reports
+        - Medical terminology mapping: Translate varied terminology to standard EOR
 
         Args:
             report_text: Full imaging report text
@@ -6891,12 +6896,98 @@ Return JSON:
         Returns:
             EOR string ('GTR', 'STR', 'Partial', 'Biopsy') or None
         """
-        # TODO: Implement MedGemma-based intelligent interpretation
-        # This will use the existing MedGemma agent to extract EOR from freetext
-        # with prompts like: "Based on this radiology report, classify the extent of
-        # tumor resection as: GTR (gross total), STR (subtotal), Partial, or Biopsy"
-        logger.debug(f"        TODO: MedGemma interpretation not yet implemented (report length: {len(report_text)})")
-        return None
+        if not self.medgemma_agent:
+            logger.debug(f"        Tier 2B: MedGemma agent not available")
+            return None
+
+        if len(report_text) < 50:
+            logger.debug(f"        Tier 2B: Report text too short ({len(report_text)} chars)")
+            return None
+
+        # LLM REASONING PROMPT: Asks for clinical inference, not keyword matching
+        prompt = f"""You are reviewing a post-operative radiology report from {img_date} for a brain tumor surgery performed on {surgery_date}.
+
+**Your Task**: Use your clinical reasoning to classify the extent of tumor resection based on this radiology report.
+
+**Classification Schema**:
+- **GTR (Gross Total Resection)**: No evidence of residual enhancing tumor on imaging
+- **STR (Subtotal Resection)**: Minimal residual tumor (typically <10% remaining)
+- **Partial**: Significant residual tumor present (>10% remaining)
+- **Biopsy**: Only tissue sampling performed, no resection attempt
+
+**Clinical Reasoning Instructions**:
+
+1. **Inference from Indirect Descriptions**:
+   - "Post-operative changes in the resection cavity" → Infer surgery occurred
+   - "Improved mass effect compared to pre-op" → Infer significant tissue removal
+   - "Resection cavity with fluid and blood products" → Infer GTR if no enhancement mentioned
+
+2. **Contextual Understanding**:
+   - If report mentions "debulking" → Classify as Partial (incomplete resection)
+   - If report describes "near-complete resection" → Classify as STR
+   - If report notes "residual enhancement along margins" → Classify as STR or Partial based on extent
+
+3. **Ambiguity Resolution**:
+   - If unclear, favor more conservative classification (e.g., STR over GTR)
+   - If report is contradictory, note in reasoning and make best clinical judgment
+   - If truly insufficient information, return null
+
+4. **Terminology Mapping**:
+   - "Complete removal" → GTR
+   - "Near-total" / "Subtotal" → STR
+   - "Debulking" / "Incomplete" → Partial
+   - "Biopsy site" / "No resection" → Biopsy
+
+**Report Text**:
+{report_text}
+
+**IMPORTANT**: Return ONLY a valid JSON object in this EXACT format:
+
+{{
+    "extent_of_resection": "GTR" | "STR" | "Partial" | "Biopsy" | null,
+    "clinical_reasoning": "Explain your interpretation and inference process in 1-2 sentences",
+    "confidence": "HIGH" | "MEDIUM" | "LOW"
+}}
+
+Return null for extent_of_resection ONLY if the report genuinely does not contain sufficient information about resection extent.
+"""
+
+        try:
+            logger.info(f"        Tier 2B (MedGemma): Applying clinical reasoning to report...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.2)
+
+            if not result or not result.success:
+                logger.warning(f"        Tier 2B (MedGemma): Extraction failed: {result.error if result else 'No result'}")
+                return None
+
+            # Parse JSON response
+            try:
+                data = json.loads(result.raw_response)
+            except json.JSONDecodeError:
+                # Try to extract JSON from response if wrapped in other text
+                import re
+                json_match = re.search(r'\{.*\}', result.raw_response, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group(0))
+                else:
+                    logger.warning(f"        Tier 2B (MedGemma): Could not parse JSON response")
+                    return None
+
+            eor = data.get('extent_of_resection')
+            reasoning = data.get('clinical_reasoning', 'No reasoning provided')
+            confidence = data.get('confidence', 'UNKNOWN')
+
+            if eor and eor in ['GTR', 'STR', 'Partial', 'Biopsy']:
+                logger.info(f"        ✅ Tier 2B (MedGemma): Extracted EOR='{eor}' (confidence: {confidence})")
+                logger.info(f"           Reasoning: {reasoning}")
+                return eor
+            else:
+                logger.info(f"        Tier 2B (MedGemma): Could not determine EOR (returned: {eor})")
+                return None
+
+        except Exception as e:
+            logger.error(f"        Tier 2B (MedGemma): Error during extraction: {e}")
+            return None
 
     def _investigation_engine_review_imaging_for_eor(self, report_text: str, surgery_date, img_date) -> Optional[str]:
         """
@@ -6913,6 +7004,9 @@ Return JSON:
         engine reviews and assesses this document to confirm the document does not contain
         the required information."
 
+        This is TRUE META-REASONING: Analyzing WHY extraction failed and applying
+        fallback logic that goes beyond what the primary extraction agent attempted.
+
         Args:
             report_text: Full imaging report text
             surgery_date: Date of surgery
@@ -6921,14 +7015,115 @@ Return JSON:
         Returns:
             EOR string ('GTR', 'STR', 'Partial', 'Biopsy') or None
         """
-        # TODO: Implement Investigation Engine reasoning
-        # This will:
-        # 1. Analyze WHY MedGemma failed (corrupted text? ambiguous language? missing info?)
-        # 2. Apply reasoning rules (e.g., "resection cavity" implies resection occurred)
-        # 3. Generate investigation report for audit trail
-        # 4. Make final determination with confidence score
-        logger.debug(f"        TODO: Investigation Engine reasoning not yet implemented (report length: {len(report_text)})")
-        return None
+        if not self.medgemma_agent:
+            logger.debug(f"        Tier 2C: MedGemma agent not available for reasoning")
+            return None
+
+        if len(report_text) < 30:
+            logger.debug(f"        Tier 2C: Report text too short for meaningful analysis ({len(report_text)} chars)")
+            return None
+
+        # INVESTIGATION ENGINE META-REASONING PROMPT
+        # This is NOT just extraction - it's ANALYSIS of why extraction failed
+        prompt = f"""You are the Investigation Engine performing a SECONDARY REVIEW after the primary extraction agent (MedGemma) failed to extract extent of resection from this post-operative imaging report.
+
+**Context**:
+- Surgery Date: {surgery_date}
+- Imaging Date: {img_date}
+- Primary extraction attempt: FAILED (returned null or insufficient confidence)
+
+**Your Meta-Reasoning Task**:
+
+1. **Analyze WHY Primary Extraction Failed**:
+   - Is the text corrupted or unreadable?
+   - Is the terminology too ambiguous?
+   - Is EOR information genuinely absent?
+   - Was the report pre-operative (not post-op)?
+
+2. **Apply Fallback Reasoning Rules**:
+   - **Rule 1 (Implicit GTR)**: If report describes "resection cavity" or "post-op changes" WITHOUT mentioning residual tumor/enhancement → Likely GTR
+   - **Rule 2 (Conservative Default)**: If surgery occurred but no clear EOR indicators → Default to "Partial" (most conservative)
+   - **Rule 3 (Temporal Check)**: If imaging is >7 days post-op, may show tumor recurrence (not reliable for EOR)
+   - **Rule 4 (Pre-op Detection)**: If report describes "planned surgery" or "pre-operative" → Not applicable for EOR
+
+3. **Generate Investigation Report**:
+   - Document your reasoning process
+   - Explain what clinical clues you used
+   - Note any assumptions made
+   - Provide confidence assessment
+
+4. **Make Final Determination**:
+   - Based on fallback reasoning rules
+   - Only return null if genuinely no surgical information present
+
+**Report Text**:
+{report_text}
+
+**IMPORTANT**: Return ONLY a valid JSON object in this EXACT format:
+
+{{
+    "extent_of_resection": "GTR" | "STR" | "Partial" | "Biopsy" | null,
+    "failure_analysis": "Why did primary extraction fail? (1-2 sentences)",
+    "fallback_reasoning": "What reasoning rules were applied? (1-2 sentences)",
+    "clinical_clues": ["List 2-3 specific text phrases that informed your decision"],
+    "confidence": "HIGH" | "MEDIUM" | "LOW",
+    "investigation_notes": "Any additional context or warnings"
+}}
+
+Return null ONLY if:
+- Report is pre-operative (not post-op)
+- Report is from >7 days post-surgery (unreliable for EOR)
+- Report is genuinely about a different procedure/body part
+- Text is too corrupted to interpret
+"""
+
+        try:
+            logger.info(f"        Tier 2C (Investigation): Performing meta-reasoning analysis...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.3)  # Slightly higher temp for reasoning
+
+            if not result or not result.success:
+                logger.warning(f"        Tier 2C (Investigation): Meta-reasoning failed: {result.error if result else 'No result'}")
+                return None
+
+            # Parse JSON response
+            try:
+                data = json.loads(result.raw_response)
+            except json.JSONDecodeError:
+                # Try to extract JSON from response if wrapped in other text
+                import re
+                json_match = re.search(r'\{.*\}', result.raw_response, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group(0))
+                else:
+                    logger.warning(f"        Tier 2C (Investigation): Could not parse JSON response")
+                    return None
+
+            eor = data.get('extent_of_resection')
+            failure_analysis = data.get('failure_analysis', 'No analysis provided')
+            fallback_reasoning = data.get('fallback_reasoning', 'No reasoning provided')
+            clinical_clues = data.get('clinical_clues', [])
+            confidence = data.get('confidence', 'UNKNOWN')
+            investigation_notes = data.get('investigation_notes', '')
+
+            # Log investigation report
+            logger.info(f"        Tier 2C (Investigation): Analysis complete")
+            logger.info(f"           Failure Analysis: {failure_analysis}")
+            logger.info(f"           Fallback Reasoning: {fallback_reasoning}")
+            logger.info(f"           Clinical Clues: {', '.join(clinical_clues)}")
+
+            if investigation_notes:
+                logger.info(f"           Notes: {investigation_notes}")
+
+            if eor and eor in ['GTR', 'STR', 'Partial', 'Biopsy']:
+                logger.info(f"        ✅ Tier 2C (Investigation): Reasoned EOR='{eor}' (confidence: {confidence})")
+                return eor
+            else:
+                logger.info(f"        Tier 2C (Investigation): Confirmed document does not contain EOR (returned: {eor})")
+                return None
+
+        except Exception as e:
+            logger.error(f"        Tier 2C (Investigation): Error during meta-reasoning: {e}")
+            return None
 
     def _search_postop_imaging_for_eor(self, surgery_date) -> Optional[str]:
         """
