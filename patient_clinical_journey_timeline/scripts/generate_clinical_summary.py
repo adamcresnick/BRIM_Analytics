@@ -156,18 +156,34 @@ def generate_patient_summary(artifact_path: Path) -> str:
     if chemo_starts:
         for i, chemo in enumerate(chemo_starts, 1):
             start_date = format_date(chemo.get('event_date'))
-            # V4.8: Use episode_drug_names from V4.8 chemotherapy extraction
-            agents_str = chemo.get('episode_drug_names') or chemo.get('agent_names') or 'Unknown agents'
+
+            # V4.8.1: Use comprehensive drug name fields with fallback hierarchy
+            # Prefer: chemo_preferred_name > episode_drug_names > medication_name > agent_names
+            agents_str = (chemo.get('chemo_preferred_name') or
+                         chemo.get('episode_drug_names') or
+                         chemo.get('medication_name') or
+                         chemo.get('agent_names') or
+                         'Unknown agents')
+
             # Handle both string and list formats
             if isinstance(agents_str, list):
                 agents_display = ', '.join(agents_str)
             else:
                 agents_display = agents_str
+
+            # V4.8.1: Extract drug category and care plan (protocol) information
+            drug_category = chemo.get('chemo_drug_category') or chemo.get('episode_drug_categories')
+            care_plan = chemo.get('episode_care_plan_title')
+
             end_date = format_date(chemo.get('therapy_end_date'))
             status = chemo.get('therapy_status')
             treatment_line = chemo.get('relationships', {}).get('ordinality', {}).get('treatment_line', 'Unknown')
 
             md.append(f"### Course #{i} (Line {treatment_line}): {agents_display}")
+            if drug_category:
+                md.append(f"- **Drug Category:** {drug_category}")
+            if care_plan:
+                md.append(f"- **Protocol/Care Plan:** {care_plan}")
             md.append(f"- **Start Date:** {start_date}")
             if status == 'ongoing':
                 md.append(f"- **Status:** **ONGOING** (patient appears to still be on active therapy)")
@@ -193,7 +209,14 @@ def generate_patient_summary(artifact_path: Path) -> str:
             dose = rad.get('total_dose_gy', 'Unknown')
             course = rad.get('relationships', {}).get('ordinality', {}).get('radiation_course', 'Unknown')
 
+            # V4.8.1: Extract care plan (protocol) and appointment information
+            care_plan = rad.get('care_plan_titles')
+            appointment_count = rad.get('total_appointments')
+            fulfillment_rate = rad.get('appointment_fulfillment_rate_pct')
+
             md.append(f"### Course #{i} (Radiation Course {course})")
+            if care_plan:
+                md.append(f"- **Protocol/Care Plan:** {care_plan}")
             md.append(f"- **Start Date:** {start_date}")
             if status == 'ongoing':
                 md.append(f"- **Status:** **ONGOING** (patient appears to still be on active therapy)")
@@ -203,6 +226,10 @@ def generate_patient_summary(artifact_path: Path) -> str:
                 md.append(f"- **End Date:** **MISSING**")
             md.append(f"- **Total Fractions:** {fractions}")
             md.append(f"- **Total Dose:** {dose} Gy")
+            if appointment_count:
+                md.append(f"- **Appointments:** {appointment_count} scheduled")
+                if fulfillment_rate:
+                    md.append(f"- **Fulfillment Rate:** {fulfillment_rate}%")
             md.append(f"")
     else:
         md.append("*No radiation therapy documented.*")

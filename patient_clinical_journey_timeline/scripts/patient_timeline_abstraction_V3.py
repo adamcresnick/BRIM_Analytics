@@ -2099,25 +2099,50 @@ Return ONLY the JSON object, no additional text.
             """,
             'chemotherapy': f"""
                 SELECT
+                    -- Episode identifiers
                     patient_fhir_id,
                     episode_id,
+                    episode_encounter_reference,
+                    -- V4.8: ALL date fields for intelligent adjudication
                     episode_start_datetime,
                     episode_end_datetime,
-                    episode_drug_names,
-                    -- V4.8: ALL available date fields for intelligent adjudication
+                    episode_duration_days,
                     medication_start_datetime,
                     medication_stop_datetime,
                     raw_medication_start_date,
                     raw_medication_stop_date,
                     raw_medication_authored_date,
+                    -- V4.8.1: COMPREHENSIVE drug name fields (RxNorm, preferred names, categories)
+                    episode_drug_names,
+                    episode_drug_categories,
+                    chemo_drug_id,
+                    chemo_preferred_name,
+                    chemo_drug_category,
                     medication_name,
+                    -- Episode metadata
+                    medication_count,
+                    unique_drug_count,
+                    medications_with_stop_date,
+                    has_medications_without_stop_date,
+                    -- Medication details
                     medication_dosage_instructions,
                     medication_route,
                     medication_status,
-                    medications_with_stop_date,
-                    has_medications_without_stop_date,
+                    episode_routes,
+                    episode_medication_statuses,
+                    -- Clinical context
+                    medication_notes,
+                    medication_reason,
+                    has_medication_notes,
+                    -- Care plan context (protocol information)
+                    episode_care_plan_id,
+                    episode_care_plan_title,
+                    episode_care_plan_status,
+                    -- FHIR references
                     medication_request_fhir_id,
-                    medication_fhir_id
+                    medication_fhir_id,
+                    encounter_fhir_id,
+                    medication_encounter_reference
                 FROM fhir_prd_db.v_chemo_treatment_episodes
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
                 ORDER BY COALESCE(
@@ -2128,11 +2153,62 @@ Return ONLY the JSON object, no additional text.
             """,
             'radiation': f"""
                 SELECT
+                    -- Episode identifiers
                     patient_fhir_id,
+                    episode_id,
+                    episode_detection_method,
+                    -- Episode dates and duration
                     episode_start_date,
                     episode_end_date,
+                    episode_duration_days,
+                    -- Dose information
                     total_dose_cgy,
-                    radiation_fields
+                    radiation_fields,
+                    radiation_site_codes,
+                    num_dose_records,
+                    has_structured_dose,
+                    -- Document availability
+                    num_documents,
+                    has_documents,
+                    highest_priority_available,
+                    nlp_extraction_priority,
+                    -- V4.8.1: COMPREHENSIVE appointment enrichment
+                    total_appointments,
+                    fulfilled_appointments,
+                    booked_appointments,
+                    pre_treatment_appointments,
+                    during_treatment_appointments,
+                    post_treatment_appointments,
+                    early_followup_appointments,
+                    late_followup_appointments,
+                    appointment_types,
+                    first_appointment_date,
+                    last_appointment_date,
+                    first_pre_treatment_appointment,
+                    first_during_treatment_appointment,
+                    first_post_treatment_appointment,
+                    first_followup_appointment,
+                    appointment_fulfillment_rate_pct,
+                    has_appointment_enrichment,
+                    -- V4.8.1: COMPREHENSIVE care plan enrichment (protocol information)
+                    total_care_plans,
+                    care_plans_with_dates,
+                    care_plans_intent_plan,
+                    care_plans_intent_proposal,
+                    care_plans_intent_order,
+                    care_plans_active,
+                    care_plans_completed,
+                    care_plans_draft,
+                    care_plan_titles,
+                    care_plan_parent_references,
+                    has_parent_care_plans,
+                    earliest_care_plan_start,
+                    latest_care_plan_end,
+                    has_care_plan_enrichment,
+                    -- Data quality metrics
+                    enrichment_score,
+                    data_completeness_tier,
+                    treatment_phase_coverage
                 FROM fhir_prd_db.v_radiation_episode_enrichment
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
                 ORDER BY episode_start_date
