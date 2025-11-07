@@ -7543,14 +7543,38 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                     # Extract EOR from note text using keywords
                     note_lower = note_text.lower()
 
-                    # EOR keyword patterns (in priority order)
-                    if any(kw in note_lower for kw in ['gross total resection', 'gross-total resection', 'complete resection', 'gtr']):
+                    # EOR keyword patterns (in priority order - most specific first)
+                    # GTR keywords
+                    if any(kw in note_lower for kw in [
+                        'gross total resection', 'gross-total resection', 'complete resection',
+                        'total resection', 'radical resection', 'en bloc resection',
+                        ' gtr ', 'gtr.', 'gtr,', 'gtr:', 'gtr;',  # GTR with word boundaries
+                        'complete removal', 'total removal', 'complete excision',
+                        'no residual tumor', 'no residual'
+                    ]):
                         eor_found = 'GTR'
-                    elif any(kw in note_lower for kw in ['subtotal resection', 'sub-total resection', 'str', 'near total']):
+                    # STR keywords
+                    elif any(kw in note_lower for kw in [
+                        'subtotal resection', 'sub-total resection', 'near total resection',
+                        'near-total resection', 'near complete resection',
+                        ' str ', 'str.', 'str,', 'str:', 'str;',  # STR with word boundaries
+                        'maximum safe resection', 'maximal safe resection',
+                        'residual tumor', 'residual disease', 'incomplete resection'
+                    ]):
                         eor_found = 'STR'
-                    elif any(kw in note_lower for kw in ['partial resection', 'debulking']):
+                    # Partial resection keywords
+                    elif any(kw in note_lower for kw in [
+                        'partial resection', 'partial removal', 'partial excision',
+                        'debulking', 'de-bulking', 'cytoreduction', 'cyto-reduction',
+                        'significant residual', 'substantial residual'
+                    ]):
                         eor_found = 'Partial'
-                    elif any(kw in note_lower for kw in ['biopsy only', 'stereotactic biopsy', 'needle biopsy']):
+                    # Biopsy keywords
+                    elif any(kw in note_lower for kw in [
+                        'biopsy only', 'stereotactic biopsy', 'needle biopsy',
+                        'open biopsy', 'incisional biopsy', 'diagnostic biopsy',
+                        'tissue sampling only', 'sample obtained'
+                    ]):
                         eor_found = 'Biopsy'
 
                     if eor_found:

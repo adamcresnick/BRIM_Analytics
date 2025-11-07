@@ -156,12 +156,18 @@ def generate_patient_summary(artifact_path: Path) -> str:
     if chemo_starts:
         for i, chemo in enumerate(chemo_starts, 1):
             start_date = format_date(chemo.get('event_date'))
-            agents = chemo.get('agent_names', ['Unknown agents'])
+            # V4.8: Use episode_drug_names from V4.8 chemotherapy extraction
+            agents_str = chemo.get('episode_drug_names') or chemo.get('agent_names') or 'Unknown agents'
+            # Handle both string and list formats
+            if isinstance(agents_str, list):
+                agents_display = ', '.join(agents_str)
+            else:
+                agents_display = agents_str
             end_date = format_date(chemo.get('therapy_end_date'))
             status = chemo.get('therapy_status')
             treatment_line = chemo.get('relationships', {}).get('ordinality', {}).get('treatment_line', 'Unknown')
 
-            md.append(f"### Course #{i} (Line {treatment_line}): {', '.join(agents)}")
+            md.append(f"### Course #{i} (Line {treatment_line}): {agents_display}")
             md.append(f"- **Start Date:** {start_date}")
             if status == 'ongoing':
                 md.append(f"- **Status:** **ONGOING** (patient appears to still be on active therapy)")
