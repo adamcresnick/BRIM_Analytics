@@ -2120,7 +2120,11 @@ Return ONLY the JSON object, no additional text.
                     medication_fhir_id
                 FROM fhir_prd_db.v_chemo_treatment_episodes
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
-                ORDER BY COALESCE(episode_start_datetime, raw_medication_start_date, medication_start_datetime)
+                ORDER BY COALESCE(
+                    episode_start_datetime,
+                    CAST(raw_medication_start_date AS timestamp),
+                    medication_start_datetime
+                )
             """,
             'radiation': f"""
                 SELECT
