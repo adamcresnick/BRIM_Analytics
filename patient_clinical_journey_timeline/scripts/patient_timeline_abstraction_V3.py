@@ -7232,8 +7232,9 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         """
         from datetime import timedelta
 
-        # Search for imaging within 1-5 days post-surgery (typical post-op MRI window)
-        window_start = (surgery_date + timedelta(days=1)).isoformat()
+        # Search for imaging within 0-5 days post-surgery (same day to 5 days after)
+        # Post-op imaging often occurs same-day (hours after surgery) or within 24-72h
+        window_start = surgery_date.isoformat()
         window_end = (surgery_date + timedelta(days=5)).isoformat()
 
         query = f"""
@@ -7252,7 +7253,7 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         """
 
         try:
-            logger.info(f"        Tier 2: Post-op Imaging: Searching post-operative imaging (1-5d after {surgery_date.isoformat()})...")
+            logger.info(f"        Tier 2: Post-op Imaging: Searching post-operative imaging (0-5d from {surgery_date.isoformat()})...")
             results = query_athena(query, "Tier 2: Query post-op imaging", suppress_output=True)
 
             if not results:

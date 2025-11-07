@@ -597,7 +597,7 @@ class InvestigationEngine:
                 },
                 {
                     'method': 'expand_imaging_window',
-                    'description': 'Expand post-op window from 1-5 days to 1-14 days (imaging may be delayed)',
+                    'description': 'Expand post-op window from 0-5 days to 0-14 days (imaging may be delayed)',
                     'confidence': 0.75
                 },
                 {
