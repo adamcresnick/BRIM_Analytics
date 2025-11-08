@@ -301,11 +301,13 @@ class BinaryFileAgent:
             doc.close()
 
             extracted_text = "\n\n".join(text_parts)
+            logger.info(f"✅ PDF extraction successful: {len(extracted_text)} chars extracted")
             return extracted_text.strip(), None
 
         except Exception as e:
-            error_msg = f"PDF extraction error: {str(e)}"
-            logger.error(error_msg)
+            # This is EXPECTED for HTML content - fallback to HTML extraction will be tried
+            error_msg = f"Content is not valid PDF format ({str(e)})"
+            logger.debug(error_msg + " - will try HTML extraction fallback")
             return "", error_msg
 
     def extract_text_from_html(self, html_content: bytes) -> Tuple[str, Optional[str]]:
@@ -318,6 +320,7 @@ class BinaryFileAgent:
         Returns:
             Tuple of (extracted_text, error_message)
         """
+        logger.debug(f"Attempting HTML extraction from {len(html_content)} bytes")
         try:
             # Try different encodings
             for encoding in ['utf-8', 'latin-1', 'windows-1252']:
@@ -344,6 +347,7 @@ class BinaryFileAgent:
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             text = '\n'.join(chunk for chunk in chunks if chunk)
 
+            logger.info(f"✅ HTML extraction successful: {len(text)} chars extracted")
             return text, None
 
         except Exception as e:

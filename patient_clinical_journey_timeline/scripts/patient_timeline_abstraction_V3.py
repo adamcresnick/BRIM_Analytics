@@ -7787,14 +7787,17 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                         try:
                             binary_content = self.binary_agent.stream_binary_from_s3(binary_id)
                             if binary_content:
-                                # Try PDF extraction
+                                # Try PDF extraction first
                                 text, error = self.binary_agent.extract_text_from_pdf(binary_content)
+
                                 if not text or len(text.strip()) < 50:
-                                    # Try HTML
+                                    # PDF failed or returned minimal text - try HTML fallback
+                                    logger.debug(f"          PDF extraction failed/insufficient, trying HTML fallback...")
                                     text, error = self.binary_agent.extract_text_from_html(binary_content)
 
                                 if text and len(text.strip()) > 50:
                                     note_text = text
+                                    logger.debug(f"          ✅ Successfully extracted {len(text)} chars from note")
                                     # Cache it
                                     if not hasattr(self, 'binary_extractions'):
                                         self.binary_extractions = []
