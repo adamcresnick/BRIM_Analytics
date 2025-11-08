@@ -7828,39 +7828,136 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                         if not radiation_mentioned:
                             continue
 
-                    # Found a relevant note! Try to extract specific end date
-                    # Look for date patterns near completion keywords
-                    date_patterns = [
-                        r'complet.*?(\d{4}-\d{2}-\d{2})',
-                        r'finish.*?(\d{4}-\d{2}-\d{2})',
-                        r'last dose.*?(\d{4}-\d{2}-\d{2})',
-                        r'final.*?(\d{4}-\d{2}-\d{2})',
-                        r'(\d{4}-\d{2}-\d{2}).*?complet',
-                        r'(\d{4}-\d{2}-\d{2}).*?finish',
-                        r'cycle \d+ of \d+.*?(\d{4}-\d{2}-\d{2})'
-                    ]
+                    # Found a relevant note! Use MedGemma reasoning to extract end date
+                    # V4.8.2: Replace regex patterns with LLM reasoning for better accuracy
+                    extracted_date = self._extract_therapy_end_date_with_medgemma(
+                        note_text=note_text,
+                        treatment_type=treatment_type,
+                        agent_names=agent_names,
+                        start_date=start_date.isoformat(),
+                        tier_name=tier_name
+                    )
 
-                    extracted_date = None
-                    for pattern in date_patterns:
-                        matches = re.findall(pattern, note_lower)
-                        if matches:
-                            extracted_date = matches[0]
-                            break
-
-                    # If we found a specific date, use it
                     if extracted_date:
-                        logger.info(f"        💡 {tier_name}: Found end date '{extracted_date}' in note dated {note_date}")
+                        logger.info(f"        ✅ {tier_name}: Found end date '{extracted_date}' via MedGemma reasoning")
                         return extracted_date
 
-                    # Otherwise, use the note date as proxy for end date
-                    logger.info(f"        💡 {tier_name}: Using note date {note_date} as end date (mentions completion)")
-                    return note_date
+                    # V4.8.2: If MedGemma extraction fails, DO NOT fall back to note date
+                    # (Previous behavior: used note_date as proxy, which was incorrect)
+                    logger.info(f"        ⚠️  {tier_name}: MedGemma could not extract end date from note dated {note_date}")
+                    # Continue searching other notes in this tier before giving up
+                    continue
 
             except Exception as e:
                 logger.debug(f"        {tier_name} query failed: {e}")
                 continue
 
         return None
+
+    def _extract_therapy_end_date_with_medgemma(
+        self,
+        note_text: str,
+        treatment_type: str,
+        agent_names: List[str],
+        start_date: str,
+        tier_name: str
+    ) -> Optional[str]:
+        """
+        V4.8.2: Use MedGemma reasoning to extract therapy end date from clinical note.
+
+        This replaces simple regex patterns with medical LLM reasoning, aligning with
+        the two-agent orchestrator-extractor architecture.
+
+        Args:
+            note_text: Full clinical note text
+            treatment_type: 'chemotherapy' or 'radiation'
+            agent_names: List of drug names (for chemotherapy)
+            start_date: Treatment start date (for context)
+            tier_name: Tier name for logging
+
+        Returns:
+            End date string (YYYY-MM-DD) or None if not found
+        """
+        if not self.medgemma_agent:
+            logger.debug(f"        {tier_name}: MedGemma not available, skipping reasoning-based extraction")
+            return None
+
+        # Build context-aware prompt
+        treatment_description = treatment_type
+        if treatment_type == 'chemotherapy' and agent_names:
+            treatment_description = f"{treatment_type} with {', '.join(agent_names)}"
+
+        prompt = f"""You are a medical AI extracting treatment completion information from a clinical note.
+
+TREATMENT CONTEXT:
+- Type: {treatment_description}
+- Start date: {start_date}
+
+TASK:
+Extract the END DATE or COMPLETION DATE for this treatment from the note below.
+
+Look for:
+1. Explicit completion statements (e.g., "completed chemotherapy on 2017-11-16")
+2. "Last dose" dates
+3. "Final cycle" dates
+4. Treatment discontinuation dates
+5. Statements like "finished radiation therapy"
+
+IMPORTANT:
+- Return the ACTUAL TREATMENT END DATE, not the note date/timestamp
+- If multiple dates are mentioned, use the one that indicates treatment completion
+- If the note only mentions ongoing treatment or no completion date, return null
+- Format: YYYY-MM-DD
+
+OUTPUT SCHEMA (JSON):
+{{
+  "end_date": "YYYY-MM-DD" | null,
+  "confidence": "HIGH" | "MEDIUM" | "LOW",
+  "reasoning": "Brief explanation of how you determined the end date"
+}}
+
+CLINICAL NOTE:
+{note_text[:4000]}
+"""
+
+        try:
+            logger.info(f"        {tier_name} (MedGemma): Extracting therapy end date with medical reasoning...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.1)
+
+            if not result or not result.success:
+                logger.warning(f"        {tier_name} (MedGemma): Extraction failed: {result.error if result else 'No result'}")
+                return None
+
+            # Parse JSON response
+            import json
+            try:
+                data = json.loads(result.raw_response)
+            except json.JSONDecodeError:
+                # Try to extract JSON from response if wrapped in other text
+                import re
+                json_match = re.search(r'\{.*\}', result.raw_response, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group(0))
+                else:
+                    logger.warning(f"        {tier_name} (MedGemma): Could not parse JSON response")
+                    return None
+
+            end_date = data.get('end_date')
+            confidence = data.get('confidence', 'UNKNOWN')
+            reasoning = data.get('reasoning', 'No reasoning provided')
+
+            if end_date and end_date != 'null':
+                logger.info(f"        ✅ {tier_name} (MedGemma): Extracted end_date='{end_date}' (confidence: {confidence})")
+                logger.info(f"           Reasoning: {reasoning}")
+                return end_date
+            else:
+                logger.info(f"        {tier_name} (MedGemma): No end date found in note")
+                logger.debug(f"           Reasoning: {reasoning}")
+                return None
+
+        except Exception as e:
+            logger.error(f"        {tier_name} (MedGemma): Error during extraction: {e}")
+            return None
 
     def _search_radiation_documents_for_end_date(self, start_date) -> Optional[str]:
         """

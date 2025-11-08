@@ -155,7 +155,8 @@ def generate_patient_summary(artifact_path: Path) -> str:
     chemo_starts = [e for e in chemo_events if e.get('event_type') == 'chemotherapy_start']
     if chemo_starts:
         for i, chemo in enumerate(chemo_starts, 1):
-            start_date = format_date(chemo.get('event_date'))
+            # V4.8.2: Use episode_start_datetime from V4.8 adjudication as primary source
+            start_date = format_date(chemo.get('episode_start_datetime') or chemo.get('event_date'))
 
             # V4.8.1: Use comprehensive drug name fields with fallback hierarchy
             # Prefer: chemo_preferred_name > episode_drug_names > medication_name > agent_names
@@ -175,7 +176,9 @@ def generate_patient_summary(artifact_path: Path) -> str:
             drug_category = chemo.get('chemo_drug_category') or chemo.get('episode_drug_categories')
             care_plan = chemo.get('episode_care_plan_title')
 
-            end_date = format_date(chemo.get('therapy_end_date'))
+            # V4.8.2: Prefer episode_end_datetime (from V4.8 adjudication) over therapy_end_date (from V4.6.3 note extraction)
+            # V4.8 adjudication uses dosage instructions and is more reliable than note timestamps
+            end_date = format_date(chemo.get('episode_end_datetime') or chemo.get('therapy_end_date'))
             status = chemo.get('therapy_status')
             treatment_line = chemo.get('relationships', {}).get('ordinality', {}).get('treatment_line', 'Unknown')
 
