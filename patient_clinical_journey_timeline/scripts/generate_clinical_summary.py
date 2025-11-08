@@ -178,7 +178,30 @@ def generate_patient_summary(artifact_path: Path) -> str:
 
             # V4.8.2: Prefer episode_end_datetime (from V4.8 adjudication) over therapy_end_date (from V4.6.3 note extraction)
             # V4.8 adjudication uses dosage instructions and is more reliable than note timestamps
-            end_date = format_date(chemo.get('episode_end_datetime') or chemo.get('therapy_end_date'))
+            end_date_raw = chemo.get('episode_end_datetime') or chemo.get('therapy_end_date')
+
+            # V4.8.3: Temporal validation - reject end dates BEFORE start dates
+            end_date = None
+            if end_date_raw:
+                try:
+                    from datetime import datetime
+                    start_dt_str = chemo.get('episode_start_datetime') or chemo.get('event_date')
+                    if start_dt_str and end_date_raw:
+                        start_dt = datetime.fromisoformat(start_dt_str.replace('Z', '+00:00'))
+                        end_dt = datetime.fromisoformat(end_date_raw.replace('Z', '+00:00'))
+
+                        if end_dt < start_dt:
+                            # Data quality issue - end date before start date
+                            # Don't display this invalid end date
+                            pass
+                        else:
+                            end_date = format_date(end_date_raw)
+                    else:
+                        end_date = format_date(end_date_raw)
+                except:
+                    # If parsing fails, use the formatted date
+                    end_date = format_date(end_date_raw)
+
             status = chemo.get('therapy_status')
             treatment_line = chemo.get('relationships', {}).get('ordinality', {}).get('treatment_line', 'Unknown')
 
@@ -206,7 +229,28 @@ def generate_patient_summary(artifact_path: Path) -> str:
     if rad_starts:
         for i, rad in enumerate(rad_starts, 1):
             start_date = format_date(rad.get('event_date'))
-            end_date = format_date(rad.get('date_at_radiation_stop'))
+            end_date_raw = rad.get('date_at_radiation_stop') or rad.get('therapy_end_date')
+
+            # V4.8.3: Temporal validation - reject end dates BEFORE start dates
+            end_date = None
+            if end_date_raw:
+                try:
+                    from datetime import datetime
+                    start_dt_str = rad.get('event_date')
+                    if start_dt_str and end_date_raw:
+                        start_dt = datetime.fromisoformat(start_dt_str.replace('Z', '+00:00'))
+                        end_dt = datetime.fromisoformat(end_date_raw.replace('Z', '+00:00'))
+
+                        if end_dt < start_dt:
+                            # Data quality issue - don't display invalid end date
+                            pass
+                        else:
+                            end_date = format_date(end_date_raw)
+                    else:
+                        end_date = format_date(end_date_raw)
+                except:
+                    end_date = format_date(end_date_raw)
+
             status = rad.get('therapy_status')
             fractions = rad.get('total_fractions', 'Unknown')
             dose = rad.get('total_dose_gy', 'Unknown')

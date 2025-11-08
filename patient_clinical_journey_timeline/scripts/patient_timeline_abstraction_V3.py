@@ -6886,7 +6886,17 @@ Return JSON:
                 continue
 
             start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00')).date()
-            agent_names = chemo_event.get('agent_names', [])
+
+            # V4.8.3: Use episode_drug_names (V4.8.1 field) instead of agent_names
+            # episode_drug_names is a pipe-separated string like "temozolomide | etoposide"
+            drug_names_str = chemo_event.get('episode_drug_names', '')
+            if drug_names_str:
+                agent_names = [name.strip() for name in drug_names_str.split('|')]
+            else:
+                # Fallback to legacy agent_names if episode_drug_names missing
+                agent_names = chemo_event.get('agent_names', [])
+                if isinstance(agent_names, str):
+                    agent_names = [agent_names]
 
             logger.debug(f"      Searching for end date for chemo starting {start_date_str}")
 
@@ -7887,33 +7897,45 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         if treatment_type == 'chemotherapy' and agent_names:
             treatment_description = f"{treatment_type} with {', '.join(agent_names)}"
 
+        # V4.8.3: Build more specific prompt with drug names
+        drug_context = ""
+        if treatment_type == 'chemotherapy' and agent_names:
+            drug_list = ', '.join(agent_names)
+            drug_context = f"""
+SPECIFIC DRUGS TO MATCH:
+- Only extract completion dates for: {drug_list}
+- IGNORE completion dates for other drugs (e.g., if note mentions "completed temozolomide" but we're looking for etoposide, return null)
+"""
+
         prompt = f"""You are a medical AI extracting treatment completion information from a clinical note.
 
 TREATMENT CONTEXT:
 - Type: {treatment_description}
 - Start date: {start_date}
-
+{drug_context}
 TASK:
-Extract the END DATE or COMPLETION DATE for this treatment from the note below.
+Extract the END DATE or COMPLETION DATE for THIS SPECIFIC TREATMENT from the note below.
 
 Look for:
-1. Explicit completion statements (e.g., "completed chemotherapy on 2017-11-16")
-2. "Last dose" dates
+1. Explicit completion statements (e.g., "completed {treatment_description} on 2017-11-16")
+2. "Last dose" dates for the specific drug(s) listed above
 3. "Final cycle" dates
 4. Treatment discontinuation dates
-5. Statements like "finished radiation therapy"
+5. Statements like "finished {treatment_type}"
 
-IMPORTANT:
+CRITICAL VALIDATION:
+- End date MUST be ON OR AFTER start date ({start_date})
+- If you find a completion date BEFORE {start_date}, it's for a DIFFERENT treatment - return null
 - Return the ACTUAL TREATMENT END DATE, not the note date/timestamp
-- If multiple dates are mentioned, use the one that indicates treatment completion
-- If the note only mentions ongoing treatment or no completion date, return null
+- If multiple dates are mentioned, use the one for THIS SPECIFIC DRUG that indicates completion
+- If the note only mentions ongoing treatment or no completion date for THIS DRUG, return null
 - Format: YYYY-MM-DD
 
 OUTPUT SCHEMA (JSON):
 {{
   "end_date": "YYYY-MM-DD" | null,
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "reasoning": "Brief explanation of how you determined the end date"
+  "reasoning": "Brief explanation of how you determined the end date AND which drug it refers to"
 }}
 
 CLINICAL NOTE:
@@ -7947,6 +7969,20 @@ CLINICAL NOTE:
             reasoning = data.get('reasoning', 'No reasoning provided')
 
             if end_date and end_date != 'null':
+                # V4.8.3: Temporal validation - reject end dates BEFORE start dates
+                from datetime import datetime
+                try:
+                    end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+
+                    if end_dt < start_dt:
+                        logger.warning(f"        ❌ {tier_name} (MedGemma): Rejected end_date='{end_date}' - BEFORE start_date '{start_date}'")
+                        logger.warning(f"           Reasoning: {reasoning}")
+                        logger.warning(f"           Likely extracted completion date for DIFFERENT treatment")
+                        return None
+                except Exception as e:
+                    logger.debug(f"        {tier_name}: Could not validate temporal order: {e}")
+
                 logger.info(f"        ✅ {tier_name} (MedGemma): Extracted end_date='{end_date}' (confidence: {confidence})")
                 logger.info(f"           Reasoning: {reasoning}")
                 return end_date
