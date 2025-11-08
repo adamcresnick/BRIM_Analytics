@@ -16,13 +16,12 @@ logger = logging.getLogger(__name__)
 
 def parse_dosage_duration(dosage_instructions: str) -> Optional[int]:
     """
-    V4.8.2: Parse dosage instructions to extract treatment duration in days.
+    V4.8: Parse dosage instructions to extract treatment duration in days.
 
     Examples:
         "for 5 days" -> 5
         "every 24 hours for 5 days" -> 5
         "once daily for 1 week" -> 7
-        "Starting 10/5/2017, Until Thu 11/16/17" -> calculated days
         "twice daily" -> None (ongoing)
 
     Args:
@@ -35,32 +34,6 @@ def parse_dosage_duration(dosage_instructions: str) -> Optional[int]:
         return None
 
     instructions_lower = dosage_instructions.lower()
-
-    # V4.8.2: Pattern: "Starting [date], Until [date]" or "Until [date]"
-    # Example: "Starting 10/5/2017, Until Thu 11/16/17"
-    # Try to extract both dates and calculate duration
-    starting_match = re.search(r'starting\s+(\d{1,2}/\d{1,2}/\d{4})', instructions_lower)
-    until_match = re.search(r'until\s+(?:\w+\s+)?(\d{1,2}/\d{1,2}/\d{2,4})', instructions_lower)
-
-    if starting_match and until_match:
-        try:
-            start_str = starting_match.group(1)
-            until_str = until_match.group(1)
-
-            # Parse dates (handles MM/DD/YYYY and MM/DD/YY formats)
-            start_date = datetime.strptime(start_str, '%m/%d/%Y')
-
-            # Handle 2-digit vs 4-digit year
-            if len(until_str.split('/')[-1]) == 2:
-                until_date = datetime.strptime(until_str, '%m/%d/%y')
-            else:
-                until_date = datetime.strptime(until_str, '%m/%d/%Y')
-
-            duration_days = (until_date - start_date).days
-            if duration_days > 0:
-                return duration_days
-        except Exception as e:
-            logger.debug(f"Could not parse Starting/Until dates: {e}")
 
     # Pattern: "for X days"
     match = re.search(r'for\s+(\d+)\s+days?', instructions_lower)
@@ -77,13 +50,8 @@ def parse_dosage_duration(dosage_instructions: str) -> Optional[int]:
     if match:
         return int(match.group(1)) * 30  # Approximate
 
-    # V4.8.2 FIX: Only match "once" if NOT followed by "a day", "daily", "a week", etc.
-    # This prevents "once a day" from being treated as a single dose
-    if re.search(r'\bonce\b(?!\s+(a\s+)?(day|daily|week|weekly|month|monthly))', instructions_lower):
-        return 1
-
-    # Pattern: "1 dose" (single dose)
-    if re.search(r'\b1\s+dose\b', instructions_lower):
+    # Pattern: "once" or "1 dose" (single dose)
+    if re.search(r'\bonce\b|\b1\s+dose\b', instructions_lower):
         return 1
 
     # If no duration pattern found, return None (ongoing treatment)

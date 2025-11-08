@@ -12,18 +12,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# V4.8.2: Lazy import for ChemotherapyValidator to avoid circular dependencies
-_chemotherapy_validator = None
-
-
-def get_chemotherapy_validator():
-    """Lazy load chemotherapy validator to avoid import cycles"""
-    global _chemotherapy_validator
-    if _chemotherapy_validator is None:
-        from orchestration.chemotherapy_validator import ChemotherapyValidator
-        _chemotherapy_validator = ChemotherapyValidator()
-    return _chemotherapy_validator
-
 
 class InvestigationEngine:
     """
@@ -965,56 +953,6 @@ class InvestigationEngine:
             investigation['issues_found'].append('No chemotherapy episodes found - may not have received chemotherapy')
             investigation['statistics']['empty_sources'] += 1
             # Don't suggest remediation - absence may be clinically accurate
-        elif chemotherapy_count > 0:
-            # V4.8.2: Use reasoning-based validation for chemotherapy data quality
-            logger.info(f"🔍 V4.8.2: Running reasoning-based chemotherapy validation on {chemotherapy_count} episodes...")
-
-            try:
-                validator = get_chemotherapy_validator()
-                chemotherapy_records = loaded_data.get('chemotherapy_records', [])
-
-                if chemotherapy_records:
-                    # Get patient context if available
-                    patient_context = loaded_data.get('demographics', {})
-
-                    validation_result = validator.validate_chemotherapy_episodes(
-                        episodes=chemotherapy_records,
-                        patient_context=patient_context
-                    )
-
-                    # Add validation issues to investigation
-                    if not validation_result.get('validation_passed'):
-                        llm_issues = validation_result.get('issues_found', [])
-                        for issue in llm_issues:
-                            investigation['issues_found'].append(
-                                f"Chemotherapy data quality: {issue.get('description', 'Unknown issue')}"
-                            )
-
-                        # Add LLM recommendations as suggestions
-                        llm_recommendations = validation_result.get('recommendations', [])
-                        for rec in llm_recommendations:
-                            investigation['suggestions'].append({
-                                'method': rec.get('action', 'unknown'),
-                                'description': rec.get('description', ''),
-                                'confidence': rec.get('confidence', 0.7),
-                                'applies_to_episodes': rec.get('applies_to_episodes', [])
-                            })
-
-                        # Store full LLM reasoning for debugging
-                        investigation['chemotherapy_validation'] = {
-                            'llm_reasoning': validation_result.get('reasoning', ''),
-                            'issues': llm_issues,
-                            'recommendations': llm_recommendations
-                        }
-
-                        logger.info(f"✅ V4.8.2: LLM found {len(llm_issues)} data quality issues in chemotherapy episodes")
-                    else:
-                        logger.info(f"✅ V4.8.2: LLM validation passed - no data quality issues found")
-
-            except Exception as e:
-                logger.warning(f"⚠️  V4.8.2: Chemotherapy validation failed: {e}")
-                # Don't fail the entire investigation if validation has issues
-                investigation['issues_found'].append(f'Chemotherapy validation error: {str(e)}')
 
         # Check radiation
         radiation_count = loaded_data.get('radiation_count', 0)
