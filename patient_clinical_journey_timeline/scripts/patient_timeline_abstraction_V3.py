@@ -2502,7 +2502,17 @@ Return ONLY the JSON object, no additional text.
                     'episode_start_datetime': start_date,
                     'episode_end_datetime': end_date,
                     'medication_dosage_instructions': record.get('medication_dosage_instructions'),
-                    'v48_adjudication': adjud_log  # V4.8: Include adjudication provenance
+                    'v48_adjudication': adjud_log,  # V4.8: Include adjudication provenance
+                    # V4.8.1: COMPREHENSIVE FIELDS - Include RxNorm, drug categories, protocols
+                    'chemo_preferred_name': record.get('chemo_preferred_name'),
+                    'chemo_drug_id': record.get('chemo_drug_id'),
+                    'chemo_drug_category': record.get('chemo_drug_category'),
+                    'episode_drug_categories': record.get('episode_drug_categories'),
+                    'episode_care_plan_title': record.get('episode_care_plan_title'),
+                    'episode_care_plan_id': record.get('episode_care_plan_id'),
+                    'episode_care_plan_status': record.get('episode_care_plan_status'),
+                    'medication_count': record.get('medication_count'),
+                    'unique_drug_count': record.get('unique_drug_count')
                 })
 
                 # End event (if end date available)
@@ -2548,7 +2558,17 @@ Return ONLY the JSON object, no additional text.
                 'total_dose_cgy': record.get('total_dose_cgy'),
                 'radiation_fields': record.get('radiation_fields'),
                 'episode_start_date': record.get('episode_start_date'),
-                'episode_end_date': record.get('episode_end_date')
+                'episode_end_date': record.get('episode_end_date'),
+                # V4.8.1: COMPREHENSIVE FIELDS - Include appointment data, care plans, quality metrics
+                'total_appointments': record.get('total_appointments'),
+                'fulfilled_appointments': record.get('fulfilled_appointments'),
+                'booked_appointments': record.get('booked_appointments'),
+                'appointment_fulfillment_rate_pct': record.get('appointment_fulfillment_rate_pct'),
+                'care_plan_titles': record.get('care_plan_titles'),
+                'total_care_plans': record.get('total_care_plans'),
+                'enrichment_score': record.get('enrichment_score'),
+                'data_completeness_tier': record.get('data_completeness_tier'),
+                'treatment_phase_coverage': record.get('treatment_phase_coverage')
             })
             # End event
             if record.get('episode_end_date'):
