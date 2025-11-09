@@ -53,14 +53,14 @@ def generate_patient_summary(artifact_path: Path) -> str:
         artifact = json.load(f)
 
     patient_id = artifact.get('patient_id', 'Unknown')
-    demographics = artifact.get('demographics', {})
-    who_diagnosis = artifact.get('who_diagnosis', {})
+    demographics = artifact.get('patient_demographics', {})
+    who_diagnosis = artifact.get('who_2021_classification', {})
     timeline_events = artifact.get('timeline_events', [])
 
     # Extract key information
-    age = demographics.get('age_at_diagnosis', 'Unknown')
-    gender = demographics.get('gender', 'Unknown')
-    who_dx = who_diagnosis.get('diagnosis', 'Unknown')
+    age = demographics.get('pd_age_years', 'Unknown')
+    gender = demographics.get('pd_gender', 'Unknown')
+    who_dx = who_diagnosis.get('who_2021_diagnosis', 'Unknown')
     who_grade = who_diagnosis.get('grade', 'Unknown')
     dx_date = format_date(who_diagnosis.get('classification_date'))
 
@@ -123,7 +123,8 @@ def generate_patient_summary(artifact_path: Path) -> str:
     md.append(f"- **Grade:** {who_grade}")
     md.append(f"- **Classification Date:** {dx_date}")
     if who_diagnosis.get('key_markers'):
-        md.append(f"- **Key Molecular Markers:** {', '.join(who_diagnosis['key_markers'])}")
+        # key_markers is a string, not a list
+        md.append(f"- **Key Molecular Markers:** {who_diagnosis['key_markers']}")
     md.append(f"- **Method:** {who_diagnosis.get('classification_method', 'Unknown')}")
     md.append(f"- **Confidence:** {who_diagnosis.get('confidence', 'Unknown')}")
     md.append(f"")
@@ -184,7 +185,6 @@ def generate_patient_summary(artifact_path: Path) -> str:
             end_date = None
             if end_date_raw:
                 try:
-                    from datetime import datetime
                     start_dt_str = chemo.get('episode_start_datetime') or chemo.get('event_date')
                     if start_dt_str and end_date_raw:
                         start_dt = datetime.fromisoformat(start_dt_str.replace('Z', '+00:00'))
@@ -235,7 +235,6 @@ def generate_patient_summary(artifact_path: Path) -> str:
             end_date = None
             if end_date_raw:
                 try:
-                    from datetime import datetime
                     start_dt_str = rad.get('event_date')
                     if start_dt_str and end_date_raw:
                         start_dt = datetime.fromisoformat(start_dt_str.replace('Z', '+00:00'))
