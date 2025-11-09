@@ -47,6 +47,13 @@ import boto3
 import time
 from typing import Dict, List, Any, Optional, Tuple
 
+# V5.0: Import therapeutic approach abstractor
+try:
+    from therapeutic_approach_abstractor import build_therapeutic_approach
+except ImportError:
+    # If import fails, V5.0 will be skipped
+    build_therapeutic_approach = None
+
 # Add parent directory to path for agent imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -8423,6 +8430,24 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
             'binary_extractions': self.binary_extractions,
             'protocol_validations': self.protocol_validations
         }
+
+        # V5.0: Build therapeutic approach from timeline events
+        if build_therapeutic_approach is not None:
+            try:
+                print()
+                print("  🧬 V5.0: Building therapeutic approach...")
+                therapeutic_approach = build_therapeutic_approach(artifact)
+                if therapeutic_approach:
+                    artifact['therapeutic_approach'] = therapeutic_approach
+                    print(f"     ✅ Detected {len(therapeutic_approach.get('lines_of_therapy', []))} treatment line(s)")
+                else:
+                    print("     ⚠️  No therapeutic approach generated (insufficient data)")
+            except Exception as e:
+                print(f"     ⚠️  V5.0 therapeutic approach generation failed: {e}")
+                print("     V4.8 timeline artifact will still be saved")
+        else:
+            print()
+            print("  ℹ️  V5.0 therapeutic approach abstractor not available (module import failed)")
 
         # Save to file
         safe_patient_id = self.patient_id.replace('/', '_')
