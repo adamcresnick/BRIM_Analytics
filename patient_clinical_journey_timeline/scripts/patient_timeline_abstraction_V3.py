@@ -54,6 +54,18 @@ except ImportError:
     # If import fails, V5.0 will be skipped
     build_therapeutic_approach = None
 
+# V5.0.1: Import protocol knowledge base for binary extraction enhancement
+try:
+    from protocol_knowledge_base import (
+        ALL_PROTOCOLS,
+        get_all_signature_agents,
+        get_protocol_statistics
+    )
+    PROTOCOL_KB_AVAILABLE = True
+except ImportError:
+    PROTOCOL_KB_AVAILABLE = False
+    ALL_PROTOCOLS = {}
+
 # Add parent directory to path for agent imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -5107,10 +5119,17 @@ CRITICAL VALIDATION:
         return prompt
 
     def _generate_radiation_summary_prompt(self, gap: Dict) -> str:
-        """Generate prompt for comprehensive radiation details extraction"""
+        """
+        Generate prompt for comprehensive radiation details extraction
+
+        V5.0.1 Enhancement: Now includes protocol-specific radiation signatures
+        """
 
         who_dx = self.who_2021_classification.get('who_2021_diagnosis', 'Unknown')
         expected_radiation = self.who_2021_classification.get('recommended_protocols', {}).get('radiation', 'Unknown')
+
+        # V5.0.1: Add protocol-specific radiation signature guidance
+        radiation_signature_guidance = self._get_radiation_signature_guidance()
 
         prompt = f"""CRITICAL: You MUST return ONLY valid JSON in the exact schema specified below. Do NOT include any explanatory text, narrative summaries, or clinical note formatting. ONLY return the JSON object.
 
@@ -5216,23 +5235,33 @@ EXTRACTION CONFIDENCE CRITERIA:
 - MEDIUM: Most fields present but some require inference (e.g., stop date calculated from start + duration)
 - LOW: Missing critical fields (e.g., no stop date, unclear total dose) or document quality poor
 
+{radiation_signature_guidance}
+
 CRITICAL VALIDATION:
 - total_dose_cgy is REQUIRED (cannot be null)
 - date_at_radiation_start is REQUIRED (cannot be null)
 - If you cannot find these fields, set extraction_confidence to "LOW" and provide your best estimate
 - Use null only for truly absent information, not for information you're uncertain about
+- If document mentions a protocol name (e.g., "ACNS0332", "SJMB12"), include it in any_other_radiation_treatments_not_captured
 """
 
         return prompt
 
     def _generate_chemotherapy_prompt(self, gap: Dict) -> str:
-        """Generate chemotherapy extraction prompt"""
+        """
+        Generate chemotherapy extraction prompt
+
+        V5.0.1 Enhancement: Now includes comprehensive protocol examples from 42-protocol knowledge base
+        """
+
+        # V5.0.1: Generate protocol examples from knowledge base
+        protocol_examples = self._get_protocol_examples_for_prompt()
 
         prompt = f"""Extract chemotherapy protocol and treatment information from this clinical document.
 
 OUTPUT FORMAT - RETURN ONLY THIS JSON:
 {{
-  "protocol_name": "e.g., COG ACNS0126, SJMB12, or null",
+  "protocol_name": "e.g., COG ACNS0332, SJMB12, AALL0434, ANBL0532, or null",
   "on_protocol_status": "enrolled, treated_as_per_protocol, treated_like_protocol, or off_protocol",
   "agent_names": ["Drug1", "Drug2"] or [],
   "start_date": "YYYY-MM-DD or null",
@@ -5242,13 +5271,161 @@ OUTPUT FORMAT - RETURN ONLY THIS JSON:
 }}
 
 INSTRUCTIONS:
-- protocol_name: Look for "per protocol", "COG", "ACNS", "SJMB", study numbers
+- protocol_name: Look for protocol identifiers like:
+  {protocol_examples}
 - on_protocol_status: Distinguish enrolled vs. treated "as per" or "like" protocol
-- agent_names: List ALL chemotherapy drugs mentioned
+- agent_names: List ALL chemotherapy drugs mentioned (including signature agents like nelarabine, isotretinoin, dinutuximab, carboplatin, etc.)
 - change_in_therapy_reason: Extract if therapy was modified and why
 - Set confidence LOW if information is incomplete
+
+SIGNATURE AGENTS (highly specific to protocols):
+- Nelarabine → T-cell ALL protocols (AALL0434)
+- Carboplatin during radiation → High-risk medulloblastoma (ACNS0332)
+- Isotretinoin for brain tumor → ACNS0332
+- Isotretinoin for solid tumor → Neuroblastoma (ANBL0532)
+- Dinutuximab (anti-GD2) → High-risk neuroblastoma (ANBL0532)
+- Bevacizumab for DIPG → DIPG-BATS or PNOC trials
+- Vorinostat with radiation → ACNS0621 or PBTC-030 (DIPG)
+- Lomustine (CCNU) + Temozolomide → ACNS0423 (high-grade glioma)
+
+IMPORTANT: If you see a signature agent, include it in agent_names and note the likely protocol.
 """
         return prompt
+
+    def _get_protocol_examples_for_prompt(self) -> str:
+        """
+        Generate protocol examples string for extraction prompts
+
+        V5.0.1: Uses expanded protocol knowledge base (42 protocols)
+
+        Returns:
+            Formatted string with protocol examples
+        """
+        if not PROTOCOL_KB_AVAILABLE or not ALL_PROTOCOLS:
+            # Fallback to original examples
+            return """
+  COG protocols: ACNS0331, ACNS0332, ACNS0334, ACNS0423, ACNS0822, ACNS0831, etc.
+  St. Jude protocols: SJMB12, SJMB03, SJYC07, SJ-DIPG-BATS
+  Leukemia protocols: AALL0434 (T-ALL), ANHL0131 (NHL)
+  Neuroblastoma: ANBL0532, ANBL0531
+  Consortium: PNOC003, PNOC007, PNOC013, PBTC-026, PBTC-027, Head Start II/III"""
+
+        # Generate comprehensive examples from knowledge base
+        protocol_examples = []
+
+        # Group protocols by category
+        cog_cns = []
+        cog_leuk_lymph = []
+        cog_neuro = []
+        st_jude = []
+        consortium = []
+
+        for protocol_id, protocol in ALL_PROTOCOLS.items():
+            trial_id = protocol.get('trial_id', '')
+            if trial_id and trial_id != 'N/A':
+                if trial_id.startswith('ACNS'):
+                    cog_cns.append(trial_id)
+                elif trial_id.startswith('AALL') or trial_id.startswith('ANHL') or trial_id.startswith('AAHOD'):
+                    cog_leuk_lymph.append(trial_id)
+                elif trial_id.startswith('ANBL') or trial_id.startswith('AREN'):
+                    cog_neuro.append(trial_id)
+                elif trial_id.startswith('SJ'):
+                    st_jude.append(trial_id)
+                elif trial_id.startswith('PNOC') or trial_id.startswith('PBTC') or 'Head Start' in trial_id:
+                    consortium.append(trial_id)
+
+        if cog_cns:
+            protocol_examples.append(f"COG CNS: {', '.join(sorted(set(cog_cns)))}")
+        if cog_leuk_lymph:
+            protocol_examples.append(f"COG Leukemia/Lymphoma: {', '.join(sorted(set(cog_leuk_lymph)))}")
+        if cog_neuro:
+            protocol_examples.append(f"COG Solid Tumors: {', '.join(sorted(set(cog_neuro)))}")
+        if st_jude:
+            protocol_examples.append(f"St. Jude: {', '.join(sorted(set(st_jude)))}")
+        if consortium:
+            protocol_examples.append(f"Consortium: {', '.join(sorted(set(consortium)))}")
+
+        return "\n  ".join(protocol_examples) if protocol_examples else "COG, St. Jude, PBTC, PNOC protocols"
+
+    def _get_radiation_signature_guidance(self) -> str:
+        """
+        Generate protocol-specific radiation signature guidance for extraction prompts
+
+        V5.0.1: Uses expanded protocol knowledge base to identify protocol-specific radiation doses
+
+        Returns:
+            Formatted string with radiation signature guidance
+        """
+        if not PROTOCOL_KB_AVAILABLE or not ALL_PROTOCOLS:
+            # Fallback to basic guidance
+            return """
+PROTOCOL-SPECIFIC RADIATION SIGNATURES (if mentioned in document):
+- CSI 23.4 Gy → Standard-risk medulloblastoma (ACNS0331)
+- CSI 36 Gy → High-risk medulloblastoma (ACNS0332)
+- Focal 54-60 Gy → High-grade glioma (various protocols)
+"""
+
+        guidance = []
+        guidance.append("\nPROTOCOL-SPECIFIC RADIATION SIGNATURES (if mentioned in document):")
+
+        # Extract unique radiation signatures from protocol knowledge base
+        radiation_signatures = {}
+        for protocol_id, protocol in ALL_PROTOCOLS.items():
+            signature_radiation = protocol.get('signature_radiation', {})
+            if not signature_radiation:
+                continue
+
+            trial_id = protocol.get('trial_id', '')
+            name = protocol.get('name', '')
+
+            # CSI doses
+            if 'csi_dose_gy' in signature_radiation:
+                dose = signature_radiation['csi_dose_gy']
+                key = f"CSI {dose} Gy"
+                if key not in radiation_signatures:
+                    radiation_signatures[key] = []
+                radiation_signatures[key].append(f"{name} ({trial_id})")
+
+            # Focal doses
+            elif 'dose_gy' in signature_radiation:
+                dose_range = signature_radiation['dose_gy']
+                if isinstance(dose_range, list):
+                    key = f"Focal {dose_range[0]}-{dose_range[1]} Gy"
+                elif isinstance(dose_range, (int, float)):
+                    key = f"Focal {dose_range} Gy"
+                else:
+                    continue
+
+                if key not in radiation_signatures:
+                    radiation_signatures[key] = []
+                radiation_signatures[key].append(f"{name} ({trial_id})")
+
+            # Whole-ventricular doses
+            elif 'wv_dose_gy' in signature_radiation:
+                dose = signature_radiation['wv_dose_gy']
+                key = f"Whole-ventricular {dose} Gy"
+                if key not in radiation_signatures:
+                    radiation_signatures[key] = []
+                radiation_signatures[key].append(f"{name} ({trial_id})")
+
+        # Add special signatures (very distinctive)
+        special_signatures = [
+            ("CSI 18 Gy", "SJMB12 WNT stratum (very rare, only on trial!)"),
+            ("CSI 23.4 Gy", "ACNS0331 standard-risk medulloblastoma"),
+            ("CSI 36 Gy", "ACNS0332 high-risk medulloblastoma"),
+            ("Whole-ventricular 18 Gy + boost", "ACNS0232 germinoma"),
+            ("Focal 54-59.4 Gy", "High-grade glioma protocols (ACNS0423, ACNS0822, Stupp)")
+        ]
+
+        for dose_pattern, protocol_info in special_signatures:
+            guidance.append(f"- {dose_pattern} → {protocol_info}")
+
+        # Add from radiation_signatures dict
+        for dose_pattern, protocols in sorted(radiation_signatures.items()):
+            if len(protocols) <= 3:
+                guidance.append(f"- {dose_pattern} → {', '.join(protocols)}")
+
+        return "\n".join(guidance) if len(guidance) > 1 else ""
 
     def _generate_generic_prompt(self, gap: Dict) -> str:
         """Generate generic extraction prompt"""
@@ -5414,17 +5591,49 @@ OUTPUT FORMAT (JSON):
         """
         Generate patient-specific chemotherapy keywords based on schema-extracted drug names
 
+        V5.0.1 Enhancement: Now includes protocol trial IDs from expanded knowledge base (42 protocols)
+
         Returns:
-            List of chemotherapy keywords including patient's actual drug names
+            List of chemotherapy keywords including patient's actual drug names and protocol IDs
         """
         keywords = [
-            # Protocol terms
-            'protocol', 'trial', 'study', 'enrolled', 'enrollment', 'consent', 'cog', 'acns', 'sjmb', 'pog',
+            # Protocol terms (generic)
+            'protocol', 'trial', 'study', 'enrolled', 'enrollment', 'consent', 'regimen',
+            # Major consortia
+            'cog', 'pog', 'pbtc', 'pnoc', 'ccg',
             # Chemotherapy terms
-            'chemotherapy', 'chemo', 'agent', 'drug', 'cycle', 'course', 'regimen', 'infusion',
+            'chemotherapy', 'chemo', 'agent', 'drug', 'cycle', 'course', 'infusion',
             # Change indicators
             'changed', 'modified', 'discontinued', 'stopped', 'held', 'dose reduction', 'escalation', 'toxicity', 'progression'
         ]
+
+        # V5.0.1: Add specific protocol trial IDs from knowledge base
+        if PROTOCOL_KB_AVAILABLE and ALL_PROTOCOLS:
+            # Extract trial IDs from all 42 protocols
+            for protocol_id, protocol in ALL_PROTOCOLS.items():
+                trial_id = protocol.get('trial_id', '')
+                if trial_id and trial_id != 'N/A':
+                    keywords.append(trial_id.lower())
+
+                # Also add common acronyms (e.g., "ACNS0332" → "acns0332", "acns", "0332")
+                if trial_id.startswith('ACNS') or trial_id.startswith('ANBL') or trial_id.startswith('ANHL'):
+                    keywords.append(trial_id[:4].lower())  # Add "acns", "anbl", etc.
+
+                # Add protocol name components
+                name = protocol.get('name', '')
+                if 'SJMB' in name:
+                    keywords.extend(['sjmb', 'sjmb12', 'sjmb03', 'sjmb96'])
+                if 'Head Start' in name:
+                    keywords.extend(['head start', 'headstart'])
+                if 'DIPG' in name or 'dipg' in name.lower():
+                    keywords.extend(['dipg', 'dipg-bats'])
+
+            # Add signature agents (highly specific protocol fingerprints)
+            try:
+                signature_agents = get_all_signature_agents()
+                keywords.extend([agent.lower() for agent in signature_agents])
+            except:
+                pass  # Fail silently if function not available
 
         # Add patient-specific drug names from schema-extracted chemotherapy data
         for event in self.timeline_events:
