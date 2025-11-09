@@ -30,6 +30,23 @@ def format_date(date_str: Optional[str]) -> str:
         return date_str
 
 
+def _is_better_response(new_response: str, current_best: str) -> bool:
+    """Determine if new_response is better than current_best (CR > PR > SD > PD)."""
+    response_hierarchy = {
+        'complete_response': 4,
+        'complete response': 4,
+        'partial_response': 3,
+        'partial response': 3,
+        'stable_disease': 2,
+        'stable disease': 2,
+        'progressive_disease': 1,
+        'progressive disease': 1
+    }
+    new_score = response_hierarchy.get(new_response.lower(), 0)
+    current_score = response_hierarchy.get(current_best.lower(), 0)
+    return new_score > current_score
+
+
 def generate_patient_summary(artifact_path: Path) -> str:
     """
     Generate resident-style clinical handoff summary.
@@ -56,6 +73,7 @@ def generate_patient_summary(artifact_path: Path) -> str:
     demographics = artifact.get('patient_demographics', {})
     who_diagnosis = artifact.get('who_2021_classification', {})
     timeline_events = artifact.get('timeline_events', [])
+    therapeutic_approach = artifact.get('therapeutic_approach')  # V5.0
 
     # Extract key information
     age = demographics.get('pd_age_years', 'Unknown')
@@ -299,6 +317,83 @@ def generate_patient_summary(artifact_path: Path) -> str:
             img_type = img.get('imaging_type', 'Unknown')
             rano = img.get('rano_assessment', 'Not assessed')
             md.append(f"- **{img_date}:** {img_type} - RANO: {rano}")
+        md.append(f"")
+
+    # V5.0: THERAPEUTIC APPROACH SUMMARY
+    if therapeutic_approach:
+        md.append(f"## Treatment Summary (V5.0 Therapeutic Approach)")
+        md.append(f"")
+
+        lines_of_therapy = therapeutic_approach.get('lines_of_therapy', [])
+        clinical_endpoints = therapeutic_approach.get('clinical_endpoints', {})
+
+        md.append(f"**Number of Treatment Lines:** {len(lines_of_therapy)}")
+
+        overall_metrics = clinical_endpoints.get('overall_metrics', {})
+        if overall_metrics.get('time_to_first_progression_days'):
+            md.append(f"**Time to First Progression:** {overall_metrics['time_to_first_progression_days']} days")
+
+        md.append(f"")
+
+        for line in lines_of_therapy:
+            line_num = line.get('line_number')
+            line_name = line.get('line_name', f"Line {line_num}")
+            start_date = format_date(line.get('start_date'))
+            end_date = format_date(line.get('end_date')) if line.get('end_date') else "Ongoing"
+            duration = line.get('duration_days', '?')
+            intent = line.get('treatment_intent', 'Unknown')
+
+            regimen = line.get('regimen', {})
+            regimen_name = regimen.get('regimen_name', 'Unknown regimen')
+            protocol_ref = regimen.get('protocol_reference', '')
+            confidence = regimen.get('match_confidence', 'unknown')
+
+            md.append(f"### {line_name}")
+            md.append(f"")
+            md.append(f"- **Intent:** {intent.replace('_', ' ').title()}")
+            md.append(f"- **Regimen:** {regimen_name}")
+            if protocol_ref and protocol_ref != 'No standard protocol match':
+                md.append(f"- **Protocol Reference:** {protocol_ref}")
+            md.append(f"- **Protocol Match Confidence:** {confidence}")
+            md.append(f"- **Start Date:** {start_date}")
+            md.append(f"- **End Date:** {end_date}")
+            if duration != '?':
+                md.append(f"- **Duration:** {duration} days")
+
+            # Response assessments
+            assessments = line.get('response_assessments', [])
+            if assessments:
+                md.append(f"- **Response Assessments:** {len(assessments)} imaging study(ies)")
+                best_response = None
+                for assessment in assessments:
+                    rano = assessment.get('rano_response')
+                    if rano:
+                        if not best_response or _is_better_response(rano, best_response):
+                            best_response = rano
+                if best_response:
+                    md.append(f"- **Best Response:** {best_response.replace('_', ' ').title()}")
+
+            # Chemotherapy cycles
+            cycles = line.get('chemotherapy_cycles', [])
+            if cycles:
+                md.append(f"- **Chemotherapy Cycles:** {len(cycles)} cycle(s)")
+
+            # Radiation courses
+            radiation = line.get('radiation_courses', [])
+            if radiation:
+                for rad_course in radiation:
+                    dose = rad_course.get('total_dose_gy', '?')
+                    fractions = rad_course.get('fractions_delivered', '?')
+                    frac_type = rad_course.get('fractionation_type', 'unknown')
+                    md.append(f"- **Radiation:** {dose} Gy in {fractions} fractions ({frac_type})")
+
+            # Reason for line change
+            reason = line.get('reason_for_change', '')
+            if reason and line_num < len(lines_of_therapy):
+                md.append(f"- **Reason for Line Change:** {reason.replace('_', ' ').title()}")
+
+            md.append(f"")
+
         md.append(f"")
 
     # DATA GAPS AND ACTION ITEMS
