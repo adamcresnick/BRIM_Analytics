@@ -13,6 +13,11 @@ Transforms V4.8 timeline events into hierarchical therapeutic approaches:
 All V4.8 granular data is preserved as subelements.
 
 Design document: docs/V5_0_THERAPEUTIC_APPROACH_FRAMEWORK.md
+
+V5.0 Enhancement (2025-11-09):
+- Integrated expanded protocol knowledge base (42 protocols)
+- Added protocol_knowledge_base.py with COG, St. Jude, PBTC, PNOC protocols
+- Enhanced protocol matching with signature agents and radiation fingerprints
 """
 
 from datetime import datetime, timedelta
@@ -20,12 +25,32 @@ from typing import List, Dict, Any, Optional, Set, Tuple
 from collections import defaultdict
 import re
 
+# Import expanded protocol knowledge base
+try:
+    from protocol_knowledge_base import (
+        ALL_PROTOCOLS,
+        get_protocols_by_indication,
+        get_protocols_by_signature_agent,
+        get_protocols_by_radiation_signature,
+        get_protocol_by_id,
+        get_all_signature_agents,
+        ORIGINAL_PEDIATRIC_CNS_PROTOCOLS
+    )
+    EXPANDED_PROTOCOLS_AVAILABLE = True
+    print("  ✅ V5.0: Loaded expanded protocol knowledge base (42 protocols)")
+except ImportError:
+    EXPANDED_PROTOCOLS_AVAILABLE = False
+    print("  ⚠️  V5.0: Using original protocol knowledge base (3 protocols)")
+    ALL_PROTOCOLS = {}
+
 
 # ============================================================================
-# PROTOCOL KNOWLEDGE BASES
+# ORIGINAL PROTOCOL KNOWLEDGE BASES (Preserved for backward compatibility)
 # ============================================================================
 
-PEDIATRIC_CNS_PROTOCOLS = {
+# Note: These are now imported from protocol_knowledge_base.py if available
+# Keeping local definitions for backward compatibility if import fails
+PEDIATRIC_CNS_PROTOCOLS = ORIGINAL_PEDIATRIC_CNS_PROTOCOLS if EXPANDED_PROTOCOLS_AVAILABLE else {
     "stupp_protocol": {
         "name": "Modified Stupp Protocol",
         "reference": "Stupp et al. NEJM 2005",
@@ -417,6 +442,9 @@ def match_regimen_to_protocol(
     """
     Match observed treatment components to known protocols.
 
+    V5.0 Enhancement: Now uses expanded protocol knowledge base (42 protocols)
+    with signature agent and radiation fingerprint matching.
+
     Returns regimen match with confidence score and deviations.
     """
     # Extract components from events
@@ -426,10 +454,85 @@ def match_regimen_to_protocol(
     best_match = None
     best_score = 0.0
 
-    for protocol_id, protocol in PEDIATRIC_CNS_PROTOCOLS.items():
+    # Use expanded protocol knowledge base if available, otherwise fall back to original
+    protocols_to_check = ALL_PROTOCOLS if EXPANDED_PROTOCOLS_AVAILABLE else PEDIATRIC_CNS_PROTOCOLS
+
+    # STEP 1: Try signature agent matching first (most specific)
+    if EXPANDED_PROTOCOLS_AVAILABLE and components['chemo_drugs']:
+        for drug in components['chemo_drugs']:
+            signature_protocols = get_protocols_by_signature_agent(drug)
+            for protocol_dict in signature_protocols:
+                protocol_id = protocol_dict.get('protocol_id')
+                protocol = protocol_dict
+
+                # Check diagnosis match
+                indication_match = any(
+                    ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
+                    for ind in protocol.get('indications', [])
+                )
+
+                if not indication_match:
+                    continue
+
+                # Score component matching with bonus for signature agent match
+                score, deviations = _score_protocol_match(components, protocol)
+                score += 20  # Bonus for signature agent match
+
+                if score > best_score:
+                    best_score = score
+                    best_match = {
+                        'protocol_id': protocol_id,
+                        'regimen_name': protocol['name'],
+                        'protocol_reference': protocol.get('reference', ''),
+                        'match_confidence': _confidence_from_score(score),
+                        'evidence_level': protocol.get('evidence_level', 'unknown'),
+                        'trial_id': protocol.get('trial_id', 'N/A'),
+                        'era': protocol.get('era', 'unknown'),
+                        'deviations_from_protocol': deviations,
+                        'matching_method': 'signature_agent'
+                    }
+
+    # STEP 2: Try radiation signature matching (for radiation-based protocols)
+    if EXPANDED_PROTOCOLS_AVAILABLE and components['radiation_dose_gy']:
+        radiation_protocols = get_protocols_by_radiation_signature(
+            components['radiation_dose_gy']
+        )
+        for protocol_dict in radiation_protocols:
+            protocol_id = protocol_dict.get('protocol_id')
+            protocol = protocol_dict
+
+            # Check diagnosis match
+            indication_match = any(
+                ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
+                for ind in protocol.get('indications', [])
+            )
+
+            if not indication_match:
+                continue
+
+            # Score component matching with bonus for radiation signature match
+            score, deviations = _score_protocol_match(components, protocol)
+            score += 15  # Bonus for radiation signature match
+
+            if score > best_score:
+                best_score = score
+                best_match = {
+                    'protocol_id': protocol_id,
+                    'regimen_name': protocol['name'],
+                    'protocol_reference': protocol.get('reference', ''),
+                    'match_confidence': _confidence_from_score(score),
+                    'evidence_level': protocol.get('evidence_level', 'unknown'),
+                    'trial_id': protocol.get('trial_id', 'N/A'),
+                    'era': protocol.get('era', 'unknown'),
+                    'deviations_from_protocol': deviations,
+                    'matching_method': 'radiation_signature'
+                }
+
+    # STEP 3: Try indication-based matching (comprehensive search)
+    for protocol_id, protocol in protocols_to_check.items():
         # Check diagnosis match
         indication_match = any(
-            ind.lower() in diagnosis.lower()
+            ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
             for ind in protocol.get('indications', [])
         )
 
@@ -447,7 +550,10 @@ def match_regimen_to_protocol(
                 'protocol_reference': protocol.get('reference', ''),
                 'match_confidence': _confidence_from_score(score),
                 'evidence_level': protocol.get('evidence_level', 'unknown'),
-                'deviations_from_protocol': deviations
+                'trial_id': protocol.get('trial_id', 'N/A'),
+                'era': protocol.get('era', 'unknown'),
+                'deviations_from_protocol': deviations,
+                'matching_method': 'indication_based'
             }
 
     if not best_match:
@@ -458,7 +564,10 @@ def match_regimen_to_protocol(
             'protocol_reference': 'No standard protocol match',
             'match_confidence': 'no_match',
             'evidence_level': 'unknown',
-            'deviations_from_protocol': []
+            'trial_id': 'N/A',
+            'era': 'unknown',
+            'deviations_from_protocol': [],
+            'matching_method': 'no_match'
         }
 
     return best_match
