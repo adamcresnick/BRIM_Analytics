@@ -159,9 +159,35 @@ Each protocol contains:
 
 ### Enhanced Protocol Matching Algorithm
 
-[therapeutic_approach_abstractor.py:437-573](../scripts/therapeutic_approach_abstractor.py#L437-L573)
+[therapeutic_approach_abstractor.py:437-578](../scripts/therapeutic_approach_abstractor.py#L437-L578)
 
-The `match_regimen_to_protocol()` function now uses a **3-step matching algorithm**:
+The `match_regimen_to_protocol()` function now uses a **3-step matching algorithm** with **reasoning-based annotation** for incomplete data:
+
+#### V5.0.1 Enhancement: Reasoning with Incomplete Data
+
+The protocol matching algorithm now includes probabilistic reasoning that works even with incomplete treatment data. Each protocol match includes:
+
+1. **Missing Fields Annotation** - Lists what data is incomplete
+2. **Match Reasoning** - Explains why protocol was selected despite gaps
+3. **Data Completeness Assessment** - Quantifies how much data is present (%)
+4. **Confidence Adjustment** - Downgrades confidence when too much data is missing
+
+**Example Output with Incomplete Data:**
+
+```json
+{
+  "protocol_id": "acns0332",
+  "regimen_name": "COG ACNS0332 (High-Risk Medulloblastoma)",
+  "match_confidence": "medium",
+  "original_confidence": "high",
+  "matching_method": "signature_agent",
+  "missing_fields": ["radiation_dose", "treatment_end_dates"],
+  "data_completeness_pct": 71.4,
+  "match_reasoning": "Strong match based on signature agent(s): carboplatin. Data incomplete (missing: radiation_dose, treatment_end_dates), but signature agent(s) provide high confidence for COG ACNS0332 (High-Risk Medulloblastoma). Data completeness: 71%. Confidence downgraded from high to medium due to incomplete data."
+}
+```
+
+This approach allows clinical coordinators to see likely protocol matches even when treatment records are incomplete, while being transparent about what data is missing and how it affects confidence.
 
 #### Step 1: Signature Agent Matching (Most Specific)
 

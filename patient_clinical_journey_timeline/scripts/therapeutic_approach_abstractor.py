@@ -567,8 +567,13 @@ def match_regimen_to_protocol(
             'trial_id': 'N/A',
             'era': 'unknown',
             'deviations_from_protocol': [],
-            'matching_method': 'no_match'
+            'matching_method': 'no_match',
+            'missing_fields': [],
+            'match_reasoning': 'No protocol match found based on available treatment components'
         }
+
+    # V5.0.1: Add reasoning and missing fields annotation
+    best_match = _add_match_reasoning(best_match, components, line_events)
 
     return best_match
 
@@ -738,6 +743,128 @@ def _describe_observed_regimen(components: Dict[str, Any]) -> str:
         return "Unknown regimen"
 
     return " → ".join(parts)
+
+
+def _add_match_reasoning(
+    match: Dict[str, Any],
+    components: Dict[str, Any],
+    line_events: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    V5.0.1: Add reasoning-based annotation to protocol matches
+
+    Enhances protocol match with:
+    1. Missing fields annotation (what data is incomplete)
+    2. Match reasoning explanation (why this protocol was selected)
+    3. Data completeness assessment
+
+    This enables the agent to highlight likely protocols even with incomplete data,
+    while clearly annotating what's missing.
+
+    Args:
+        match: Protocol match dictionary
+        components: Extracted treatment components
+        line_events: Timeline events for this treatment line
+
+    Returns:
+        Enhanced match dictionary with reasoning
+    """
+    missing_fields = []
+    reasoning_parts = []
+
+    # Assess data completeness
+    if not components.get('has_surgery'):
+        missing_fields.append('surgery_details')
+
+    if not components.get('chemo_drugs'):
+        missing_fields.append('chemotherapy_agents')
+    elif len(components['chemo_drugs']) < 2:
+        missing_fields.append('complete_chemotherapy_regimen')
+
+    if not components.get('has_radiation'):
+        missing_fields.append('radiation_details')
+    elif not components.get('radiation_dose_gy'):
+        missing_fields.append('radiation_dose')
+
+    # Check for missing dates
+    has_start_dates = any(e.get('event_date') for e in line_events)
+    if not has_start_dates:
+        missing_fields.append('treatment_start_dates')
+
+    # Check for missing end dates
+    has_end_dates = any(e.get('episode_end_datetime') or e.get('end_date') for e in line_events)
+    if not has_end_dates:
+        missing_fields.append('treatment_end_dates')
+
+    # Build reasoning explanation
+    matching_method = match.get('matching_method', 'unknown')
+    confidence = match.get('match_confidence', 'unknown')
+    protocol_name = match.get('regimen_name', 'Unknown')
+
+    if matching_method == 'signature_agent':
+        # Strong match based on signature agent
+        signature_drugs = [d for d in components.get('chemo_drugs', [])
+                          if d in ['nelarabine', 'isotretinoin', 'dinutuximab', 'carboplatin', 'vismodegib', 'bevacizumab', 'vorinostat']]
+        if signature_drugs:
+            reasoning_parts.append(f"Strong match based on signature agent(s): {', '.join(signature_drugs)}")
+        if missing_fields:
+            reasoning_parts.append(f"Data incomplete (missing: {', '.join(missing_fields[:3])}), but signature agent(s) provide high confidence for {protocol_name}")
+
+    elif matching_method == 'radiation_signature':
+        # Strong match based on radiation dose pattern
+        rad_dose = components.get('radiation_dose_gy')
+        if rad_dose:
+            reasoning_parts.append(f"Match based on distinctive radiation dose ({rad_dose} Gy)")
+            if rad_dose == 18.0:
+                reasoning_parts.append("CSI 18 Gy is very rare (only used in SJMB12 WNT stratum)")
+            elif rad_dose == 23.4:
+                reasoning_parts.append("CSI 23.4 Gy suggests standard-risk medulloblastoma protocol")
+            elif rad_dose == 36.0:
+                reasoning_parts.append("CSI 36 Gy suggests high-risk medulloblastoma protocol")
+        if missing_fields:
+            reasoning_parts.append(f"Radiation signature provides {confidence} confidence despite incomplete data (missing: {', '.join(missing_fields[:2])})")
+
+    elif matching_method == 'indication_based':
+        # Weaker match based on diagnosis and components
+        reasoning_parts.append(f"Match based on diagnosis and treatment components")
+        if missing_fields:
+            reasoning_parts.append(f"Confidence is {confidence} due to incomplete data (missing: {', '.join(missing_fields[:3])})")
+            reasoning_parts.append(f"Additional data may refine protocol identification or confirm alignment with {protocol_name}")
+
+    elif matching_method == 'no_match':
+        # No protocol match
+        if missing_fields:
+            reasoning_parts.append(f"Insufficient data for protocol matching (missing: {', '.join(missing_fields)})")
+            reasoning_parts.append("Protocol identification may be possible with additional treatment details")
+        else:
+            reasoning_parts.append("Treatment pattern does not match known protocols in knowledge base")
+            reasoning_parts.append("May represent off-protocol treatment or institutional variation")
+
+    # Add data completeness summary
+    completeness_pct = 100 * (1 - len(missing_fields) / 7)  # 7 key fields
+    reasoning_parts.append(f"Data completeness: {completeness_pct:.0f}%")
+
+    # Build final reasoning string
+    match_reasoning = ". ".join(reasoning_parts) if reasoning_parts else "Protocol match based on available treatment components"
+
+    # Add to match dictionary
+    match['missing_fields'] = missing_fields
+    match['match_reasoning'] = match_reasoning
+    match['data_completeness_pct'] = round(completeness_pct, 1)
+
+    # Adjust confidence if data is very incomplete
+    if len(missing_fields) >= 4 and confidence in ['high', 'medium']:
+        # Downgrade confidence if too much data is missing
+        if confidence == 'high':
+            match['original_confidence'] = 'high'
+            match['match_confidence'] = 'medium'
+            match['match_reasoning'] += ". Confidence downgraded from high to medium due to incomplete data."
+        elif confidence == 'medium' and matching_method != 'signature_agent':
+            match['original_confidence'] = 'medium'
+            match['match_confidence'] = 'low'
+            match['match_reasoning'] += ". Confidence downgraded from medium to low due to incomplete data."
+
+    return match
 
 
 # ============================================================================
