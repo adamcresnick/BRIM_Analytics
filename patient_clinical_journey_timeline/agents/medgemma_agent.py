@@ -166,15 +166,28 @@ class MedGemmaAgent:
                     # Extend lists
                     if key not in merged:
                         merged[key] = []
+                    # Check if any items need to be lists (defensive)
                     merged[key].extend(value)
-                elif isinstance(value, dict) and key in merged and isinstance(merged[key], list):
-                    # Handle case where one chunk returns dict but we expect list
-                    # This happens when MedGemma returns inconsistent JSON structure
-                    logger.warning(f"Chunk returned dict for '{key}' but expected list - wrapping in list")
-                    merged[key].append(value)
-                elif value and key not in merged:
-                    # Take first non-null scalar
-                    merged[key] = value
+                elif isinstance(value, dict):
+                    # Handle dict values
+                    if key not in merged:
+                        merged[key] = value
+                    elif isinstance(merged[key], list):
+                        # Chunk returns dict but we have a list - append it
+                        logger.warning(f"Chunk returned dict for '{key}' but expected list - wrapping in list")
+                        merged[key].append(value)
+                    elif isinstance(merged[key], dict):
+                        # Merge dicts
+                        merged[key].update(value)
+                elif value is not None:
+                    # Handle scalar values (string, int, bool, etc.)
+                    if key not in merged:
+                        merged[key] = value
+                    elif isinstance(merged[key], list):
+                        # Chunk returns scalar but we have a list - append it
+                        logger.warning(f"Chunk returned {type(value).__name__} for '{key}' but expected list - wrapping in list")
+                        merged[key].append(value)
+                    # else: keep existing value (first non-null scalar wins)
 
         # Average confidence scores
         if 'confidence' in merged and isinstance(merged['confidence'], list):
