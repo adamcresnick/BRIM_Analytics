@@ -122,6 +122,11 @@ except ImportError as e:
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
 
+# WHO 2021 CACHE VERSION
+# Increment this version whenever v_pathology_diagnostics or underlying data infrastructure changes
+# This ensures old cached classifications are invalidated when data quality improves
+WHO_2021_CACHE_VERSION = "v5.0.2_comprehensive_snomed"  # Updated 2025-11-11: Added comprehensive SNOMED/ICD codes from 11 FHIR sources
+
 # V3: WHO 2021 CNS TUMOR CLASSIFICATION REFERENCE FILES
 # These markdown files contain comprehensive WHO CNS5 classification information for LLM consumption
 
@@ -608,12 +613,23 @@ class PatientTimelineAbstractor:
 
             # Check if patient has cached classification
             if self.athena_patient_id in classifications and not self.force_reclassify:
-                logger.info(f"✅ Loaded WHO classification from cache for {self.athena_patient_id}")
                 cached = classifications[self.athena_patient_id]
-                logger.info(f"   Diagnosis: {cached.get('who_2021_diagnosis', 'Unknown')}")
-                logger.info(f"   Classification date: {cached.get('classification_date', 'Unknown')}")
-                logger.info(f"   Method: {cached.get('classification_method', 'Unknown')}")
-                return cached
+                cached_version = cached.get('cache_version', 'unknown')
+
+                # Validate cache version - if mismatched, regenerate classification
+                if cached_version != WHO_2021_CACHE_VERSION:
+                    logger.warning(f"⚠️  Cache version mismatch for {self.athena_patient_id}")
+                    logger.warning(f"   Cached version: {cached_version}")
+                    logger.warning(f"   Current version: {WHO_2021_CACHE_VERSION}")
+                    logger.warning(f"   Data infrastructure changed - regenerating WHO classification")
+                    # Fall through to generate new classification
+                else:
+                    logger.info(f"✅ Loaded WHO classification from cache for {self.athena_patient_id}")
+                    logger.info(f"   Diagnosis: {cached.get('who_2021_diagnosis', 'Unknown')}")
+                    logger.info(f"   Classification date: {cached.get('classification_date', 'Unknown')}")
+                    logger.info(f"   Method: {cached.get('classification_method', 'Unknown')}")
+                    logger.info(f"   Cache version: {cached_version}")
+                    return cached
 
             # Need to generate classification
             if self.force_reclassify:
@@ -693,9 +709,11 @@ class PatientTimelineAbstractor:
                     "classifications": {}
                 }
 
-            # Update classification
+            # Update classification with cache version
+            classification['cache_version'] = WHO_2021_CACHE_VERSION  # Tag with current cache version
             cache_data["classifications"][self.athena_patient_id] = classification
             cache_data["_metadata"]["last_updated"] = datetime.now().strftime('%Y-%m-%d')
+            cache_data["_metadata"]["cache_version"] = WHO_2021_CACHE_VERSION
 
             # Ensure cache directory exists
             WHO_2021_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -2110,10 +2128,20 @@ Return ONLY the JSON object, no additional text.
                     specimen_id,
                     performer_org_id,
                     performer_org_name,
-                    institution_confidence
+                    institution_confidence,
+                    -- V5.0.2 FIX: Include validation fields for expanded filtering
+                    is_tumor_surgery,
+                    has_tumor_reason,
+                    has_tumor_body_site,
+                    procedure_classification,
+                    classification_confidence
                 FROM fhir_prd_db.v_procedures_tumor
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
-                    AND is_tumor_surgery = true
+                    AND (
+                        is_tumor_surgery = true
+                        OR has_tumor_reason = true
+                        OR has_tumor_body_site = true
+                    )
                 ORDER BY COALESCE(proc_performed_date_time, proc_performed_period_start)
             """,
             'chemotherapy': f"""
@@ -8376,11 +8404,27 @@ CLINICAL NOTE:
 
         Uses MedGemma to analyze actual patient care against WHO CNS5 treatment standards
         """
+        # VERBOSE DEBUG: Recursion guard and call stack tracking
+        import traceback
+        if hasattr(self, '_phase5_recursion_count'):
+            self._phase5_recursion_count += 1
+            logger.error(f"🔴 RECURSION DETECTED! Call #{self._phase5_recursion_count}")
+            logger.error("Call stack:")
+            for line in traceback.format_stack():
+                logger.error(line.strip())
+            if self._phase5_recursion_count > 5:
+                raise RecursionError(f"Phase 5 called recursively {self._phase5_recursion_count} times!")
+        else:
+            self._phase5_recursion_count = 1
+            logger.info(f"✅ Phase 5 entered for first time (patient: {self.patient_id})")
+
         print("\n" + "="*80)
         print("PHASE 5: WHO 2021 PROTOCOL VALIDATION")
         print("="*80)
+        logger.info("Phase 5: Printed header")
 
         # Check if MedGemma is available
+        logger.info("Phase 5: Checking MedGemma availability...")
         if not self.medgemma_agent:
             logger.warning("⚠️  MedGemma not available - skipping protocol validation")
             self.protocol_validations.append({
@@ -8388,9 +8432,12 @@ CLINICAL NOTE:
                 'reason': 'MedGemma agent not initialized'
             })
             return
+        logger.info("Phase 5: MedGemma available")
 
         # Get WHO diagnosis
+        logger.info("Phase 5: Getting WHO diagnosis...")
         diagnosis = self.who_2021_classification.get('who_2021_diagnosis', 'Unknown')
+        logger.info(f"Phase 5: WHO diagnosis = {diagnosis}")
 
         if diagnosis in ['Unknown', 'Insufficient data', 'Classification failed']:
             logger.warning(f"⚠️  Cannot validate protocol - WHO classification: {diagnosis}")
@@ -8809,13 +8856,18 @@ def main():
         import subprocess
         artifact_path = output_dir / f"{args.patient_id}_timeline_artifact.json"
 
+        # Get the scripts directory (same directory as this script)
+        scripts_dir = Path(__file__).parent
+        viz_script = scripts_dir / "create_timeline_enhanced.py"
+        summary_script = scripts_dir / "generate_clinical_summary.py"
+
         # Generate interactive timeline visualization
         print("\n  📊 Generating interactive timeline visualization...")
         viz_result = subprocess.run(
-            ["python3", "scripts/create_timeline_enhanced.py", str(artifact_path)],
+            ["python3", str(viz_script), str(artifact_path)],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=600  # 10 minutes for large patient datasets
         )
         if viz_result.returncode == 0:
             print("  ✅ Timeline visualization created")
@@ -8825,7 +8877,7 @@ def main():
         # Generate clinical summary
         print("\n  📝 Generating clinical summary...")
         summary_result = subprocess.run(
-            ["python3", "scripts/generate_clinical_summary.py", str(artifact_path)],
+            ["python3", str(summary_script), str(artifact_path)],
             capture_output=True,
             text=True,
             timeout=60

@@ -466,10 +466,16 @@ def match_regimen_to_protocol(
                 protocol = protocol_dict
 
                 # Check diagnosis match
-                indication_match = any(
-                    ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
-                    for ind in protocol.get('indications', [])
-                )
+                if diagnosis:
+                    indication_match = any(
+                        ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
+                        for ind in protocol.get('indications', [])
+                    )
+                else:
+                    # If no diagnosis available, skip protocols with specific indications
+                    if protocol.get('indications', []):
+                        continue
+                    indication_match = True  # Match protocols without indication requirements
 
                 if not indication_match:
                     continue
@@ -502,10 +508,16 @@ def match_regimen_to_protocol(
             protocol = protocol_dict
 
             # Check diagnosis match
-            indication_match = any(
-                ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
-                for ind in protocol.get('indications', [])
-            )
+            if diagnosis:
+                indication_match = any(
+                    ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
+                    for ind in protocol.get('indications', [])
+                )
+            else:
+                # If no diagnosis available, skip protocols with specific indications
+                if protocol.get('indications', []):
+                    continue
+                indication_match = True  # Match protocols without indication requirements
 
             if not indication_match:
                 continue
@@ -531,10 +543,16 @@ def match_regimen_to_protocol(
     # STEP 3: Try indication-based matching (comprehensive search)
     for protocol_id, protocol in protocols_to_check.items():
         # Check diagnosis match
-        indication_match = any(
-            ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
-            for ind in protocol.get('indications', [])
-        )
+        if diagnosis:
+            indication_match = any(
+                ind.lower() in diagnosis.lower() or diagnosis.lower() in ind.lower()
+                for ind in protocol.get('indications', [])
+            )
+        else:
+            # If no diagnosis available, skip protocols with specific indications
+            if protocol.get('indications', []):
+                continue
+            indication_match = True  # Match protocols without indication requirements
 
         if not indication_match:
             continue
@@ -1007,8 +1025,14 @@ def _match_radiation_regimen(
 
         # Check indication
         indications = regimen.get('indications', [])
-        if not any(ind.lower() in diagnosis.lower() for ind in indications):
+        if diagnosis and indications:
+            # If we have both diagnosis and indications, check for match
+            if not any(ind.lower() in diagnosis.lower() for ind in indications):
+                continue
+        elif not diagnosis and indications:
+            # If diagnosis is None but regimen requires specific indications, skip this regimen
             continue
+        # If no indications required (empty list) or diagnosis matches, continue to dose check
 
         # Check dose match
         dose_range = regimen.get('dose_range_gy')
