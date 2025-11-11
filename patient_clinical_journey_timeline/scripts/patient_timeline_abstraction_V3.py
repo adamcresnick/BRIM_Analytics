@@ -994,7 +994,9 @@ class PatientTimelineAbstractor:
             classification["classification_method"] = "medgemma_two_stage_tier1"
             classification["stage1_findings"] = extracted_findings  # Store for audit trail
 
-            confidence = classification.get('confidence', 'unknown').lower()
+            # Convert confidence to string and lowercase (can be float from averaging)
+            confidence_raw = classification.get('confidence', 'unknown')
+            confidence = str(confidence_raw).lower() if confidence_raw is not None else 'unknown'
             logger.info(f"   Two-stage classification confidence: {confidence}")
 
             # Tier 2: If confidence is low/insufficient, try binary pathology documents
@@ -1525,8 +1527,11 @@ Return ONLY the JSON object, no additional text.
             enhanced_classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
             enhanced_classification["classification_method"] = "medgemma_tier2_structured_plus_binary"
 
-            tier2_confidence = enhanced_classification.get('confidence', 'unknown').lower()
-            tier1_confidence = tier1_classification.get('confidence', 'unknown').lower()
+            # Convert confidence to string and lowercase (can be float from averaging)
+            tier2_conf_raw = enhanced_classification.get('confidence', 'unknown')
+            tier2_confidence = str(tier2_conf_raw).lower() if tier2_conf_raw is not None else 'unknown'
+            tier1_conf_raw = tier1_classification.get('confidence', 'unknown')
+            tier1_confidence = str(tier1_conf_raw).lower() if tier1_conf_raw is not None else 'unknown'
 
             logger.info(f"      [Tier 2] Enhanced classification confidence: {tier2_confidence}")
 
