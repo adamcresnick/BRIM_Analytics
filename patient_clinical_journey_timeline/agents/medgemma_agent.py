@@ -166,6 +166,10 @@ class MedGemmaAgent:
                     # Extend lists
                     if key not in merged:
                         merged[key] = []
+                    elif not isinstance(merged[key], list):
+                        # Previous chunk returned non-list, wrap it and continue
+                        logger.warning(f"Chunk returned list for '{key}' but previous chunk had {type(merged[key]).__name__} - converting to list")
+                        merged[key] = [merged[key]]
                     # Check if any items need to be lists (defensive)
                     merged[key].extend(value)
                 elif isinstance(value, dict):

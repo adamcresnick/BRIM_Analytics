@@ -1,6 +1,6 @@
 # Clinical Summary: Patient ekrJf9m27ER1umcVah.rRqC.9hDY9ch91PfbuGjUHko03
 
-**Generated:** November 07, 2025 at 09:45 PM
+**Generated:** November 08, 2025 at 05:52 AM
 
 ---
 
@@ -38,59 +38,87 @@ This is a Unknown-year-old Unknown with **Unknown, WHO Grade Unknown**, diagnose
 
 ## Chemotherapy History
 
-### Course #1 (Line Unknown): lomustine | temozolomide
+### Course #1 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #2 (Line Unknown): lomustine | temozolomide
+### Course #2 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #3 (Line Unknown): lomustine | temozolomide
+### Course #3 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #4 (Line Unknown): lomustine | temozolomide
+### Course #4 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #5 (Line Unknown): lomustine | temozolomide
+### Course #5 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #6 (Line Unknown): lomustine | temozolomide
+### Course #6 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #7 (Line Unknown): lomustine | temozolomide
+### Course #7 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #8 (Line Unknown): lomustine | temozolomide
+### Course #8 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #9 (Line Unknown): lomustine | temozolomide
+### Course #9 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #10 (Line Unknown): lomustine | temozolomide
+### Course #10 (Line Unknown): lomustine
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #11 (Line Unknown): lomustine | temozolomide
+### Course #11 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
-### Course #12 (Line Unknown): lomustine | temozolomide
+### Course #12 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 09, 2022
 - **End Date:** Feb 09, 2022
 
 ### Course #13 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 21, 2022
 - **End Date:** Feb 28, 2022
 
 ### Course #14 (Line Unknown): temozolomide
+- **Drug Category:** chemotherapy
+- **Protocol/Care Plan:** Lomustine, Temozolamide - Part 1 
 - **Start Date:** Feb 21, 2022
 - **End Date:** Feb 28, 2022
 
@@ -101,18 +129,23 @@ This is a Unknown-year-old Unknown with **Unknown, WHO Grade Unknown**, diagnose
 - **End Date:** Oct 11, 2021
 - **Total Fractions:** Unknown
 - **Total Dose:** Unknown Gy
+- **Appointments:** 4 scheduled
+- **Fulfillment Rate:** 100.0%
 
 ### Course #2 (Radiation Course Unknown)
 - **Start Date:** Dec 22, 2021
 - **End Date:** Dec 21, 2021
 - **Total Fractions:** Unknown
 - **Total Dose:** Unknown Gy
+- **Appointments:** 1 scheduled
+- **Fulfillment Rate:** 100.0%
 
 ### Course #3 (Radiation Course Unknown)
 - **Start Date:** May 02, 2022
 - **End Date:** Mar 02, 2022
 - **Total Fractions:** Unknown
 - **Total Dose:** Unknown Gy
+- **Appointments:** 0 scheduled
 
 ## Imaging Surveillance
 
@@ -145,4 +178,4 @@ This is a Unknown-year-old Unknown with **Unknown, WHO Grade Unknown**, diagnose
 - **Patient ID:** `ekrJf9m27ER1umcVah.rRqC.9hDY9ch91PfbuGjUHko03`
 - **Total Timeline Events:** 310
 - **Date Range:** May 07, 2021 to Jun 07, 2022
-- **Abstraction Date:** November 07, 2025
+- **Abstraction Date:** November 08, 2025

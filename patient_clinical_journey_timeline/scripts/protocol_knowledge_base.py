@@ -3,21 +3,24 @@ Protocol Knowledge Base for V5.0 Therapeutic Approach Framework
 
 This module provides an expanded protocol knowledge base integrating:
 1. Original hardcoded protocols (Stupp, COG ACNS0331, CheckMate 143)
-2. CBTN REDCap protocols (110+ pediatric oncology trials)
+2. CBTN REDCap protocols (114 pediatric oncology trials)
 3. Pediatric Oncology Treatment Protocols Reference (comprehensive protocol guide)
+4. NCCN 2024 Guidelines (annotated on relevant protocols)
 
 The knowledge base supports:
 - Protocol matching from observed treatment patterns
 - Confidence scoring based on signature agents, radiation doses, and treatment structure
 - Evidence level assignment
 - Era-appropriate protocol selection
+- NCCN 2024 guideline integration
 
 Data Sources:
-- /docs/CBTN_REDCAP_Protocols.csv
-- /docs/Pediatric Oncology Treatment Protocols Reference.html
+- /docs/CBTN_REDCAP_Protocols_Updated.csv
+- /docs/Pediatric_Oncology_Treatment_Protocols.html
 
 Author: V5.0 Framework Enhancement
 Created: 2025-11-09
+Updated: 2025-11-09 (NCCN 2024 guidelines added)
 """
 
 import csv
@@ -745,7 +748,8 @@ ST_JUDE_PROTOCOLS = {
             "18 Gy CSI for WNT-medulloblastoma (strong pointer to SJMB12)",
             "Vismodegib for SHH-medulloblastoma",
             "Multiple risk strata with molecular stratification"
-        ]
+        ],
+        "nccn_2024_guidelines": "Molecular profiling is standard and supports protocol alignment for medulloblastoma risk stratification"
     },
 
     "sjmb03": {
@@ -816,7 +820,8 @@ ST_JUDE_PROTOCOLS = {
         "inference_clues": [
             "Stratified by extent of resection and dissemination",
             "CSI for metastatic AT/RT"
-        ]
+        ],
+        "nccn_2024_guidelines": "Radiation (54–59.4 Gy) is recommended for patients ≥3 years or ≥18 months with residual disease"
     },
 
     "sj_dipg_bats": {

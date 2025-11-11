@@ -30,6 +30,25 @@ Refer to the CSV: **mb_chemo_like_protocol_bins.csv** (columns: protocol_or_cont
 - **Infant/young-child RT-avoidant approach:** HD-MTX–containing induction → myeloablative **carboplatin + thiotepa** (± etoposide) with ASCR.
 - **Relapse:** temozolomide + irinotecan (± bevacizumab); **MEMMAT** metronomic regimen.
 
+### NCCN Version 3.2025 Alignment (ped_cns_NCCN_guidlines.pdf; sections PMB-INTRO, PMB-2, PMB-3, PMB-5)
+- **Risk framing (≥3 to ≤21 years):** WNT, SHH, and Combined (Groups 3/4) remain the anchor categories; <3 years are individualized and outside NCCN scope.
+- **WNT / SHH post-op staging (PMB-2):**
+  - WNT average-risk: CSI 18–23.4 Gy + posterior fossa/bed boost 54 Gy; **vincristine omitted during CSI** per ACNS1422 logic; adjuvant cycles still cisplatin + CCNU + vincristine alternating with cyclophosphamide + vincristine.
+  - SHH average-risk: CSI 23.4 Gy + boost 54 Gy; adjuvant backbone identical to ACNS0331; add vismodegib only in clinical trial context (not routine SOC).
+- **Combined (Groups 3/4) adjuvant (PMB-3):**
+  - Low/average risk (myc negative, ≤1.5 cm² residual, M0): CSI 23.4 Gy + boost; maintenance per ACNS0331.
+  - High risk (metastatic, significant residual, molecular high-risk): CSI 36 Gy + boost 54–55.8 Gy; **daily carboplatin during CSI for Group 3** explicitly highlighted; adjuvant cycles cisplatin + CCNU + vincristine alternating with cyclophosphamide + vincristine ± etoposide.
+  - Very high risk: same chemo backbone but NCCN recommends considering tandem HDCT/ASCR and clinical trials.
+- **Systemic therapy principles (PMB-E):**
+  - Specify drug pairings per phase (post-RT maintenance vs HDCT vs relapse) and highlight endocrine, audio, and renal monitoring requirements.
+  - Concurrency guardrails: if carboplatin is used with CSI, hold vincristine.
+- **Recurrent/progressive disease (PMB-5):**
+  - Localized recurrence: resection ± re-irradiation + systemic therapy; NCCN lists temozolomide + irinotecan ± bevacizumab, MEMMAT-style metronomic therapy, and targeted inhibitors for actionable alterations.
+  - Metastatic recurrence: prioritize clinical trials, but same TMZ/IRI ± bev and MEMMAT backbones are acceptable.
+- **Follow-up (PMB-4):** endocrine labs at least annually ×5 years; MRI surveillance q3–4 months ×2 years, q6 months until year 5, then annually.
+
+> **Action:** Every bin definition in the CSV now cites both the originating protocol and the NCCN PMB page so the abstraction engine remains aligned with current guidelines.
+
 ---
 
 ## Decision Rules (pseudocode)

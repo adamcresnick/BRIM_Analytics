@@ -1222,7 +1222,9 @@ Return this JSON structure:
                 "error": str(e)
             }
         except Exception as e:
+            import traceback
             logger.error(f"Stage 2 mapping error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 "who_2021_diagnosis": "Mapping failed: Exception",
                 "confidence": "insufficient",

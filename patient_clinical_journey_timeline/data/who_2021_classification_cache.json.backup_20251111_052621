@@ -1,0 +1,335 @@
+{
+  "_metadata": {
+    "description": "WHO 2021 CNS Tumor Classification Cache for RADIANT PCA",
+    "schema_version": "2.0",
+    "last_updated": "2025-11-09",
+    "source": "Dynamic multi-tier classification (Tier 1: structured data, Tier 2: binary pathology)",
+    "workflow_prompt": "WHO_2021_DIAGNOSTIC_AGENT_PROMPT.md",
+    "reference_document": "/Users/resnick/Documents/GitHub/RADIANT_PCA/BRIM_Analytics/mvp/References/WHO_2021s.pdf",
+    "notes": "Classifications are dynamically generated from available data and cached for performance. Use --force-reclassify flag to regenerate."
+  },
+  "classifications": {
+    "eQSB0y3q.OmvN40Yhg9.eCBk5-9c-Qp-FT3pBWoSGuL83": {
+      "who_2021_diagnosis": "Astrocytoma, IDH-mutant, CNS WHO grade 3",
+      "molecular_subtype": "IDH-mutant astrocytoma",
+      "grade": 3,
+      "key_markers": "IDH1 mutation (R132H)",
+      "clinical_significance": "IDH-mutant astrocytomas are a distinct molecular subtype with generally better prognosis than IDH-wildtype glioblastomas.",
+      "expected_prognosis": "The prognosis for IDH-mutant grade 3 astrocytomas is variable but generally more favorable than IDH-wildtype glioblastomas. Median survival times range from several to many years.",
+      "recommended_protocols": {
+        "radiation": "Radiation therapy is typically recommended after surgery",
+        "chemotherapy": "Chemotherapy with temozolomide (TMZ) is often used in combination with radiation therapy",
+        "surveillance": "Close follow-up with imaging studies and clinical examinations is essential for monitoring tumor recurrence."
+      },
+      "confidence": "high",
+      "classification_rationale": "The patient's molecular profile confirms an IDH1 R132H mutation, a defining characteristic of IDH-mutant astrocytomas. The histological diagnosis of 'anaplastic astrocytoma' corresponds to WHO grade 3.  Together, these findings support the diagnosis of Astrocytoma, IDH-mutant, CNS WHO grade 3.",
+      "classification_date": "2025-11-03",
+      "classification_method": "medgemma_two_stage_tier1",
+      "stage1_findings": {
+        "molecular_markers": [
+          {
+            "marker_name": "IDH1",
+            "status": "POSITIVE",
+            "details": "c.395G>A (p.Arg132His)",
+            "source_text": "1. One Tier 1A sequence variant: IDH1 (NM_005896.3), c.395G>A (p.Arg132His).",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "MSH6",
+            "status": "POSITIVE",
+            "details": "c.3863_3865dupAAT (p.Phe1289*)",
+            "source_text": "2. One Tier 1B homozygous pathogenic variant: MSH6 (NM_000179.2), c.3863_3865dupAAT (p.Phe1289*);",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "ATRX",
+            "status": "INCONCLUSIVE",
+            "details": "c.1252C>T (p.Arg418*)",
+            "source_text": "   ATRX (NM_000489.4), c.1252C>T (p.Arg418*);",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "DNMT3A",
+            "status": "INCONCLUSIVE",
+            "details": "c.2645G>A (p.Arg882His)",
+            "source_text": "   DNMT3A (NM_022552.4), c.2645G>A (p.Arg882His);",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "NF1",
+            "status": "INCONCLUSIVE",
+            "details": "c.4600C>T (p.Arg1534*) and c.5902C>T (p.Arg1968*)",
+            "source_text": "   NF1 (NM_001042492.2), c.4600C>T (p.Arg1534*);\n    NF1 (NM_001042492.2), c.5902C>T (p.Arg1968*);",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "PIK3CA",
+            "status": "INCONCLUSIVE",
+            "details": "c.112C>T (p.Arg38Cys)",
+            "source_text": "   PIK3CA (NM_006218.3), c.112C>T (p.Arg38Cys);",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "TP53",
+            "status": "INCONCLUSIVE",
+            "details": "c.524G>A (p.Arg175His)",
+            "source_text": "   TP53 (NM_001126114.2), c.524G>A (p.Arg175His)",
+            "test_method": "NGS"
+          },
+          {
+            "marker_name": "MET",
+            "status": "INCONCLUSIVE",
+            "details": "Fusion with KMT2E",
+            "source_text": "5. One Tier 2 fusion gene: KMT2E (NM_182931.2) - MET (NM_000245.3);",
+            "test_method": "NGS"
+          }
+        ],
+        "histology_findings": [
+          {
+            "finding": "Anaplastic astrocytoma, IDH-mutant",
+            "source": "Final_Diagnosis/Pathology Report",
+            "source_text": "In summary, the findings of IDH1 p.Arg132His in conjunction with TP53 and ATRX Tier 2 variants are consistent with the diagnosis of anaplastic astrocytoma, IDH-mutant (WHO 2016 classification).",
+            "surgery_date": null
+          }
+        ],
+        "problem_list_diagnoses": [],
+        "tumor_location": "Not mentioned",
+        "patient_age_at_diagnosis": "Not mentioned",
+        "extraction_status": "success",
+        "extraction_notes": ""
+      }
+    },
+    "eiZ8gIQ.xVzYybDaR2sW5E0z9yI5BQjDeWulBFer5T4g3": {
+      "who_2021_diagnosis": "Diffuse midline glioma, H3 K27-altered",
+      "molecular_subtype": "H3 K27-altered glioma",
+      "grade": 4,
+      "key_markers": "H3F3A (p.Lys28Met), CAPZA2-MET fusion",
+      "clinical_significance": "Diffuse midline gliomas with H3 K27 alterations are highly aggressive tumors that typically arise in the midline of the brain. They are associated with poor prognosis.",
+      "expected_prognosis": "Poor; median survival is less than 1 year.",
+      "recommended_protocols": {
+        "radiation": "Radiation therapy is often used as part of initial treatment, but its effectiveness is limited.",
+        "chemotherapy": "Chemotherapy may be considered, but response rates are generally low. Clinical trials exploring novel therapies are crucial.",
+        "surveillance": "Close follow-up with imaging studies is recommended to monitor for tumor recurrence."
+      },
+      "confidence": "high",
+      "classification_rationale": "The patient's tumor meets the criteria for diffuse midline glioma, H3 K27-altered based on: (1)  diffuse growth pattern and location in the midline (thalamus, brainstem), (2) confirmation of H3F3A mutation (p.Lys28Met) and presence of CAPZA2-MET fusion, both defining molecular features for this subtype. The histologic findings (pseudopalisading necrosis, microvascular proliferation) are consistent with a WHO grade IV tumor.",
+      "classification_date": "2025-11-04",
+      "classification_method": "medgemma_two_stage_tier1",
+      "stage1_findings": {
+        "molecular_markers": [
+          {
+            "marker_name": "H3F3A",
+            "status": "POSITIVE",
+            "details": "c.83A>T (p.Lys28Met)",
+            "source_text": "1. One Tier 1A sequence variant: H3F3A (NM_002107.4), c.83A>T (p.Lys28Met)",
+            "test_method": "Sequencing"
+          },
+          {
+            "marker_name": "PDGFRA",
+            "status": "POSITIVE",
+            "details": "c.1730C>G (p.Pro577Arg) and amplification",
+            "source_text": "2. Two Tier 2 sequence variants and one Tier 2 fusion:\nPDGFRA (NM_006206.5), c.1730C>G (p.Pro577Arg)\n\n3. Multiple Tier 2 copy number variations (including PDGFRA amplification)",
+            "test_method": "Sequencing"
+          },
+          {
+            "marker_name": "TP53",
+            "status": "POSITIVE",
+            "details": "c.743G>A (p.Arg248Gln)",
+            "source_text": "2. Two Tier 2 sequence variants and one Tier 2 fusion:\nTP53 (NM_000546.5), c.743G>A (p.Arg248Gln)\n",
+            "test_method": "Sequencing"
+          },
+          {
+            "marker_name": "CAPZA2-MET",
+            "status": "POSITIVE",
+            "details": "Fusion confirmed by Sanger sequencing",
+            "source_text": "2. Two Tier 2 sequence variants and one Tier 2 fusion:\nCAPZA2 (NM_006136.2) - MET (NM_000245.3) (Confirmed by Sanger sequencing)",
+            "test_method": "Sanger Sequencing"
+          }
+        ],
+        "histology_findings": [
+          {
+            "finding": "cellular, infiltrating tumor growing in sheets and focally within fascicles composed of predominantly spindled tumor cells with moderate nuclear pleomorphism. Pseudopalisading necrosis and microvascular proliferation are present. Several mitoses and apoptotic bodies are seen.",
+            "source": "Microscopic examination",
+            "source_text": "H&E stained sections show a cellular, infiltrating tumor growing in sheets and focally within fascicles composed of predominantly spindled tumor cells with moderate nuclear pleomorphism. Pseudopalisading necrosis and microvascular proliferation are present. Several mitoses and apoptotic bodies are seen.",
+            "surgery_date": null
+          },
+          {
+            "finding": "Hyalinized vessels",
+            "source": "Microscopic examination",
+            "source_text": "Hyalinized vessels are seen within the tumor as are several calcifications, many of which are present within vessels in the cerebellum.",
+            "surgery_date": null
+          },
+          {
+            "finding": "several calcifications",
+            "source": "Microscopic examination",
+            "source_text": "Hyalinized vessels are seen within the tumor as are several calcifications, many of which are present within vessels in the cerebellum.",
+            "surgery_date": null
+          }
+        ],
+        "problem_list_diagnoses": [
+          {
+            "diagnosis": "Diffuse midline glioma, H3K27-mutant, WHO grade IV",
+            "source_text": "FINAL DIAGNOSIS: Diffuse midline glioma, H3 K27-mutant (WHO 2016 classification)."
+          }
+        ],
+        "tumor_location": "Right thalamus, right cerebral hemisphere, brainstem, right cerebellar hemisphere, optic chiasm, left periventricular white matter and the left medial temporal lobe including the hippocampus",
+        "patient_age_at_diagnosis": null,
+        "extraction_status": "success",
+        "extraction_notes": ""
+      }
+    },
+    "ekrJf9m27ER1umcVah.rRqC.9hDY9ch91PfbuGjUHko03": {
+      "who_2021_diagnosis": "Astrocytoma, IDH-mutant, CNS WHO grade 3",
+      "molecular_subtype": "IDH-mutant astrocytoma",
+      "grade": 3,
+      "key_markers": "IDH mutation",
+      "clinical_significance": "IDH-mutant astrocytomas are a distinct molecular subtype with generally better prognosis than IDH-wildtype glioblastomas.",
+      "expected_prognosis": "The prognosis for grade 3 IDH-mutant astrocytoma is typically better than that of grade 3 IDH-wildtype astrocytoma. However, it still requires aggressive treatment.",
+      "recommended_protocols": {
+        "radiation": "Radiation therapy is generally recommended",
+        "chemotherapy": "Chemotherapy with temozolomide is often used concurrently with radiation and as adjuvant therapy",
+        "surveillance": "Close surveillance with MRI scans is necessary to monitor for recurrence."
+      },
+      "confidence": "high",
+      "classification_rationale": "The patient's pathology report indicates an IDH-mutant astrocytoma, which directly maps to the WHO 2021 diagnosis of 'Astrocytoma, IDH-mutant'. The grade is specified as 3 in the report.",
+      "classification_date": "2025-11-04",
+      "classification_method": "medgemma_two_stage_tier1",
+      "stage1_findings": {
+        "molecular_markers": [
+          {
+            "marker_name": "IDH",
+            "status": "POSITIVE",
+            "details": "mutant (by immunohistochemistry)",
+            "source_text": "Histologic diagnosis: Astrocytoma, IDH-mutant (by immunohistochemistry), WHO grade 3",
+            "test_method": "IHC"
+          }
+        ],
+        "histology_findings": [
+          {
+            "finding": "Astrocytoma",
+            "source": "Pathology Report",
+            "source_text": "Histologic diagnosis: Astrocytoma, IDH-mutant (by immunohistochemistry), WHO grade 3",
+            "surgery_date": null
+          }
+        ],
+        "problem_list_diagnoses": [],
+        "tumor_location": null,
+        "patient_age_at_diagnosis": null,
+        "extraction_status": "success",
+        "extraction_notes": "No patient age or tumor location information found in provided text."
+      }
+    },
+    "eQKgvkS8KmtBLeHzf9l6yQ3": {
+      "who_2021_diagnosis": "No molecular or pathology data available",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "No data in v_molecular_tests or v_pathology_diagnostics",
+      "clinical_significance": "Patient not found in molecular/pathology views",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-08",
+      "classification_method": "failed_no_data",
+      "confidence": "no_data"
+    },
+    "e2Yl4rmKK1UEImWwazYVytQRmihau9-vUlGklQbBtU8Y3": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    },
+    "e5SMMS4-C1vsdq4lEJ-SDQb89P6zl9ZgMaSLnZsfoDOo3": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    },
+    "eaVAJ-fsOpIWRjAYnXt9DV-Kl7FwurB5vdxLJ7SirniY3": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    },
+    "eEJcrpDHtP-6cfR7bRFzo4rcdRi2fSkhGm.GuVGnCOSo3": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    },
+    "e5911thHVYNfSNoS2jXnGARRFWA-FHupC-DKE1Jc9xN83": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    },
+    "e-RTlNNtrnYfazO7K4JGWzQUSogJpql1w3CHWg1pCsnk3": {
+      "who_2021_diagnosis": "Classification failed: No findings extracted",
+      "molecular_subtype": "Unknown",
+      "grade": null,
+      "key_markers": "Extraction failed",
+      "clinical_significance": "Could not extract findings from pathology data",
+      "expected_prognosis": "Cannot determine",
+      "recommended_protocols": {
+        "radiation": "Cannot determine",
+        "chemotherapy": "Cannot determine",
+        "surveillance": "Cannot determine"
+      },
+      "classification_date": "2025-11-09",
+      "classification_method": "failed_stage1_extraction",
+      "confidence": "insufficient"
+    }
+  }
+}
