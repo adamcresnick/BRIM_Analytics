@@ -404,7 +404,7 @@ class MedGemmaAgent:
             success=True,
             extracted_data=merged_data,
             confidence=merged_data.get('confidence', 0.8),
-            raw_response=f"Merged from {len(chunk_results)} chunks",
+            raw_response=json.dumps(merged_data, indent=2),  # Return JSON string, not debug message
             prompt_tokens=len(full_prompt.split()),
             completion_tokens=0  # Not tracked for chunked extraction
         )
