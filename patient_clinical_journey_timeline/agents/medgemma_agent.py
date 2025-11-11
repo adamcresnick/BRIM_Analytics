@@ -195,7 +195,22 @@ class MedGemmaAgent:
 
         # Average confidence scores
         if 'confidence' in merged and isinstance(merged['confidence'], list):
-            merged['confidence'] = sum(merged['confidence']) / len(merged['confidence'])
+            # Convert all confidence values to floats, filtering out non-numeric values
+            numeric_confidences = []
+            for conf in merged['confidence']:
+                try:
+                    if isinstance(conf, str):
+                        numeric_confidences.append(float(conf))
+                    elif isinstance(conf, (int, float)):
+                        numeric_confidences.append(float(conf))
+                except (ValueError, TypeError):
+                    logger.warning(f"Skipping non-numeric confidence value: {conf}")
+
+            if numeric_confidences:
+                merged['confidence'] = sum(numeric_confidences) / len(numeric_confidences)
+            else:
+                logger.warning("No valid numeric confidence values found, using default 0.5")
+                merged['confidence'] = 0.5
 
         return merged
 
