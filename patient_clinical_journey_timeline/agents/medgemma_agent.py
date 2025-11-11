@@ -167,6 +167,11 @@ class MedGemmaAgent:
                     if key not in merged:
                         merged[key] = []
                     merged[key].extend(value)
+                elif isinstance(value, dict) and key in merged and isinstance(merged[key], list):
+                    # Handle case where one chunk returns dict but we expect list
+                    # This happens when MedGemma returns inconsistent JSON structure
+                    logger.warning(f"Chunk returned dict for '{key}' but expected list - wrapping in list")
+                    merged[key].append(value)
                 elif value and key not in merged:
                     # Take first non-null scalar
                     merged[key] = value
