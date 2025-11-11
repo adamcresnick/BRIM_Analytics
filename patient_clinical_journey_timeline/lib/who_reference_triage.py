@@ -94,7 +94,7 @@ class WHOReferenceTriage:
         histology = stage1_findings.get('histology_findings', [])
         location = (stage1_findings.get('tumor_location') or '').lower()
 
-        logger.info(f"🔍 WHO Triage: age={age}, markers={list(markers.keys())}, location={location}")
+        logger.info(f"🔍 WHO Triage: age={str(age) if age is not None else ''}, markers={list(markers.keys())}, location={location}")
 
         # Triage logic (in priority order)
 
