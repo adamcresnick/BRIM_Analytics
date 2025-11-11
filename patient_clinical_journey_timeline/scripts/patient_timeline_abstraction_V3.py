@@ -118,6 +118,15 @@ except ImportError as e:
     Phase = None
     CHECKPOINT_AVAILABLE = False
 
+# V5.0.3: Import data fingerprint manager for comprehensive cache invalidation
+try:
+    from lib.data_fingerprint_manager import DataFingerprintManager
+    DATA_FINGERPRINT_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import data fingerprint manager: {e}")
+    DataFingerprintManager = None
+    DATA_FINGERPRINT_AVAILABLE = False
+
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
@@ -125,7 +134,21 @@ WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classifi
 # WHO 2021 CACHE VERSION
 # Increment this version whenever v_pathology_diagnostics or underlying data infrastructure changes
 # This ensures old cached classifications are invalidated when data quality improves
-WHO_2021_CACHE_VERSION = "v5.0.2_comprehensive_snomed"  # Updated 2025-11-11: Added comprehensive SNOMED/ICD codes from 11 FHIR sources
+WHO_2021_CACHE_VERSION = "v5.0.3_data_fingerprinting"  # Updated 2025-11-11: Added comprehensive data fingerprinting for cache invalidation
+
+# WHO 2021 CACHE EXPIRY (days)
+# Maximum age for cache entries - safety net for stale caches
+WHO_2021_CACHE_MAX_AGE_DAYS = 30
+
+# WHO 2021 DATA FINGERPRINT VIEWS
+# List of Athena views to include in data fingerprint computation
+WHO_2021_FINGERPRINT_VIEWS = [
+    'v_pathology_diagnostics',
+    'v_procedures_tumor',
+    'v_chemo_treatment_episodes',
+    'v_radiation_episode_enrichment',
+    'v_imaging'
+]
 
 # V3: WHO 2021 CNS TUMOR CLASSIFICATION REFERENCE FILES
 # These markdown files contain comprehensive WHO CNS5 classification information for LLM consumption
@@ -562,6 +585,9 @@ class PatientTimelineAbstractor:
             self.checkpoint_manager = CheckpointManager(self.athena_patient_id, str(self.output_dir))
             logger.info("✅ Checkpoint manager initialized")
 
+        # V5.0.3: Data fingerprint manager for cache invalidation
+        self.fingerprint_manager = None  # Initialized later in run() after Athena client setup
+
         try:
             from orchestration.schema_loader import AthenaSchemaLoader
             from orchestration.who_cns_knowledge_base import WHOCNSKnowledgeBase
@@ -614,22 +640,66 @@ class PatientTimelineAbstractor:
             # Check if patient has cached classification
             if self.athena_patient_id in classifications and not self.force_reclassify:
                 cached = classifications[self.athena_patient_id]
-                cached_version = cached.get('cache_version', 'unknown')
 
-                # Validate cache version - if mismatched, regenerate classification
-                if cached_version != WHO_2021_CACHE_VERSION:
-                    logger.warning(f"⚠️  Cache version mismatch for {self.athena_patient_id}")
-                    logger.warning(f"   Cached version: {cached_version}")
-                    logger.warning(f"   Current version: {WHO_2021_CACHE_VERSION}")
-                    logger.warning(f"   Data infrastructure changed - regenerating WHO classification")
-                    # Fall through to generate new classification
+                # V5.0.3: Three-tier cache validation
+                # Tier 1: Infrastructure version check
+                # Tier 2: Data fingerprint check (requires fingerprint manager)
+                # Tier 3: Age-based expiry check
+
+                should_use_cache = True
+                invalidation_reason = None
+
+                # Compute current fingerprint if fingerprint manager is available
+                current_fingerprint = None
+                if DATA_FINGERPRINT_AVAILABLE and self.fingerprint_manager:
+                    try:
+                        current_fingerprint = self.fingerprint_manager.compute_fingerprint(
+                            views=WHO_2021_FINGERPRINT_VIEWS,
+                            patient_id=self.athena_patient_id
+                        )
+                        logger.info(f"📊 Computed data fingerprint: {current_fingerprint}")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Could not compute data fingerprint: {e}")
+                        current_fingerprint = None
+
+                # Validate cache entry using three-tier system
+                if DATA_FINGERPRINT_AVAILABLE and self.fingerprint_manager:
+                    validation_result = self.fingerprint_manager.validate_cache_entry(
+                        cached_data=cached,
+                        current_version=WHO_2021_CACHE_VERSION,
+                        current_fingerprint=current_fingerprint,
+                        max_age_days=WHO_2021_CACHE_MAX_AGE_DAYS
+                    )
+
+                    should_use_cache = validation_result['is_valid']
+                    invalidation_reason = validation_result['reason']
+
+                    if not should_use_cache:
+                        logger.warning(f"⚠️  Cache invalidation triggered for {self.athena_patient_id}")
+                        logger.warning(f"   Reason: {invalidation_reason}")
+                        for key, value in validation_result['details'].items():
+                            logger.warning(f"   {key}: {value}")
                 else:
+                    # Fallback: Basic version check only
+                    cached_version = cached.get('cache_version', 'unknown')
+                    if cached_version != WHO_2021_CACHE_VERSION:
+                        should_use_cache = False
+                        invalidation_reason = 'infrastructure_version_mismatch'
+                        logger.warning(f"⚠️  Cache version mismatch for {self.athena_patient_id}")
+                        logger.warning(f"   Cached version: {cached_version}")
+                        logger.warning(f"   Current version: {WHO_2021_CACHE_VERSION}")
+                        logger.warning(f"   Data infrastructure changed - regenerating WHO classification")
+
+                if should_use_cache:
                     logger.info(f"✅ Loaded WHO classification from cache for {self.athena_patient_id}")
                     logger.info(f"   Diagnosis: {cached.get('who_2021_diagnosis', 'Unknown')}")
                     logger.info(f"   Classification date: {cached.get('classification_date', 'Unknown')}")
                     logger.info(f"   Method: {cached.get('classification_method', 'Unknown')}")
-                    logger.info(f"   Cache version: {cached_version}")
+                    logger.info(f"   Cache version: {cached.get('cache_version', 'Unknown')}")
+                    if current_fingerprint:
+                        logger.info(f"   Data fingerprint: {current_fingerprint}")
                     return cached
+                # Otherwise fall through to generate new classification
 
             # Need to generate classification
             if self.force_reclassify:
@@ -709,8 +779,22 @@ class PatientTimelineAbstractor:
                     "classifications": {}
                 }
 
-            # Update classification with cache version
+            # V5.0.3: Compute and store data fingerprint along with classification
+            current_fingerprint = None
+            if DATA_FINGERPRINT_AVAILABLE and self.fingerprint_manager:
+                try:
+                    current_fingerprint = self.fingerprint_manager.compute_fingerprint(
+                        views=WHO_2021_FINGERPRINT_VIEWS,
+                        patient_id=self.athena_patient_id
+                    )
+                    logger.info(f"📊 Computed data fingerprint for cache: {current_fingerprint}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not compute data fingerprint: {e}")
+
+            # Update classification with cache metadata
             classification['cache_version'] = WHO_2021_CACHE_VERSION  # Tag with current cache version
+            classification['fingerprint'] = current_fingerprint  # Tag with data fingerprint
+            classification['timestamp'] = datetime.now().isoformat()  # Tag with timestamp
             cache_data["classifications"][self.athena_patient_id] = classification
             cache_data["_metadata"]["last_updated"] = datetime.now().strftime('%Y-%m-%d')
             cache_data["_metadata"]["cache_version"] = WHO_2021_CACHE_VERSION
@@ -1626,6 +1710,22 @@ Return ONLY the JSON object, no additional text.
                 logger.info("✅ V4.6: Investigation engine initialized")
             except Exception as e:
                 logger.warning(f"⚠️  V4.6: Could not initialize investigation engine: {e}")
+
+        # V5.0.3: Initialize data fingerprint manager (uses same Athena client)
+        if DATA_FINGERPRINT_AVAILABLE and not self.fingerprint_manager:
+            try:
+                import boto3
+                session = boto3.Session(profile_name='radiant-prod', region_name='us-east-1')
+                athena_client = session.client('athena')
+
+                self.fingerprint_manager = DataFingerprintManager(
+                    athena_client=athena_client,
+                    patient_id=self.athena_patient_id,
+                    aws_profile='radiant-prod'
+                )
+                logger.info("✅ V5.0.3: Data fingerprint manager initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  V5.0.3: Could not initialize fingerprint manager: {e}")
 
         # V4.6: PHASE 1.5: Validate schema coverage
         if self.schema_loader:
