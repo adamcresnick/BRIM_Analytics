@@ -193,17 +193,30 @@ class WHOReferenceTriage:
         logger.info("  → Tier 2A did not produce clear match, attempting Tier 2B (MedGemma reasoning)")
         triage_decision = self._medgemma_clinical_triage(stage1_findings)
 
+        # Determine which section to validate with Tier 2C
+        section_to_validate = None
+
         if triage_decision and triage_decision.get('confidence', 0) >= 0.7:
-            section = triage_decision['section']
+            section_to_validate = triage_decision['section']
             confidence = triage_decision['confidence']
             reasoning = triage_decision.get('reasoning', '')
-            logger.info(f"  → Tier 2B: {section} (confidence: {confidence:.2f})")
+            logger.info(f"  → Tier 2B: {section_to_validate} (confidence: {confidence:.2f})")
             logger.info(f"      Reasoning: {reasoning[:150]}...")
-            return section
+        else:
+            # Tier 2B failed, use default for validation
+            section_to_validate = 'adult_diffuse_gliomas'
+            logger.warning("  → Tier 2B did not produce confident result, using default for Tier 2C validation")
 
-        # 8. Default to adult gliomas if Tier 2B also fails
-        logger.warning("  → Adult-type diffuse gliomas (DEFAULT - Tier 2A + 2B failed)")
-        return 'adult_diffuse_gliomas'
+        # 8. Tier 2C: Investigation Engine validation of triage decision
+        validation = self._investigation_engine_validate_triage(section_to_validate, stage1_findings)
+
+        if validation['conflicts_detected']:
+            logger.warning(f"  ⚠️  Tier 2C detected conflict: {validation['reason']}")
+            logger.info(f"  → Tier 2C: Correcting to '{validation['corrected_section']}' (confidence: {validation['confidence']:.2f})")
+            return validation['corrected_section']
+
+        # Return validated section
+        return section_to_validate
 
     def load_selective_reference(self, section_key: str) -> str:
         """
@@ -454,3 +467,120 @@ DO NOT include any other text, explanations, or markdown formatting. Return ONLY
         except Exception as e:
             logger.error(f"  ❌ Tier 2B: Error in MedGemma triage: {e}")
             return None
+
+    def _investigation_engine_validate_triage(
+        self,
+        triage_section: str,
+        stage1_findings: Dict
+    ) -> Dict:
+        """
+        Tier 2C: Use Investigation Engine to validate triage decision against evidence.
+
+        This is the final validation layer that detects conflicts between the triage
+        decision and clinical evidence (molecular markers, problem list diagnoses).
+
+        Args:
+            triage_section: WHO section from Tier 2A or Tier 2B
+            stage1_findings: Dictionary from Stage 1 extraction
+
+        Returns:
+            Dictionary with keys:
+                - conflicts_detected: Boolean
+                - reason: String explaining conflict (if any)
+                - corrected_section: Suggested WHO section (if conflict detected)
+                - confidence: Float 0-1
+        """
+        logger.info(f"  🔍 Tier 2C: Validating triage decision '{triage_section}'...")
+
+        validation_result = {
+            'conflicts_detected': False,
+            'reason': None,
+            'corrected_section': triage_section,
+            'confidence': 1.0
+        }
+
+        markers = stage1_findings.get('molecular_markers', [])
+        problem_diagnoses = stage1_findings.get('problem_list_diagnoses', [])
+
+        # Extract marker names for easier checking
+        marker_names = [m.get('marker_name', '').upper() for m in markers]
+
+        # ===========================================
+        # CONFLICT CHECK 1: Embryonal Markers + Non-Embryonal Section
+        # ===========================================
+        embryonal_markers = ['APC', 'CTNNB1', 'WNT', 'SHH', 'SMARCB1', 'SMARCA4',
+                             'MYC', 'MYCN', 'PTCH1', 'SMO', 'SUFU']
+
+        has_embryonal_markers = any(marker in marker_names for marker in embryonal_markers)
+
+        if has_embryonal_markers and triage_section != 'embryonal_tumors':
+            conflict_markers = [m for m in embryonal_markers if m in marker_names]
+            logger.warning(f"  ⚠️  Tier 2C CONFLICT: Found embryonal markers {conflict_markers} "
+                         f"but triage selected '{triage_section}'")
+
+            validation_result['conflicts_detected'] = True
+            validation_result['reason'] = (
+                f"Molecular markers {conflict_markers} are specific to embryonal tumors "
+                f"but triage selected '{triage_section}'. This is a biological conflict."
+            )
+            validation_result['corrected_section'] = 'embryonal_tumors'
+            validation_result['confidence'] = 0.95
+            logger.info(f"  → Tier 2C: Correcting triage to 'embryonal_tumors' (confidence: 0.95)")
+            return validation_result
+
+        # ===========================================
+        # CONFLICT CHECK 2: Problem List Diagnoses + Mismatched Section
+        # ===========================================
+        for prob in problem_diagnoses:
+            diagnosis_text = prob.get('diagnosis', '').lower()
+
+            # Check for medulloblastoma in problem list
+            if 'medulloblastoma' in diagnosis_text and triage_section != 'embryonal_tumors':
+                logger.warning(f"  ⚠️  Tier 2C CONFLICT: Problem list contains '{prob.get('diagnosis', '')}' "
+                             f"but triage selected '{triage_section}'")
+
+                validation_result['conflicts_detected'] = True
+                validation_result['reason'] = (
+                    f"Problem list diagnosis '{prob.get('diagnosis', '')}' indicates medulloblastoma "
+                    f"(embryonal tumor) but triage selected '{triage_section}'. This is a clinical conflict."
+                )
+                validation_result['corrected_section'] = 'embryonal_tumors'
+                validation_result['confidence'] = 0.90
+                logger.info(f"  → Tier 2C: Correcting triage to 'embryonal_tumors' (confidence: 0.90)")
+                return validation_result
+
+            # Check for glioblastoma in problem list
+            if 'glioblastoma' in diagnosis_text and triage_section not in ['adult_diffuse_gliomas', 'pediatric_diffuse_gliomas']:
+                logger.warning(f"  ⚠️  Tier 2C CONFLICT: Problem list contains '{prob.get('diagnosis', '')}' "
+                             f"but triage selected '{triage_section}'")
+
+                validation_result['conflicts_detected'] = True
+                validation_result['reason'] = (
+                    f"Problem list diagnosis '{prob.get('diagnosis', '')}' indicates glioblastoma "
+                    f"but triage selected '{triage_section}'. This is a clinical conflict."
+                )
+                validation_result['corrected_section'] = 'adult_diffuse_gliomas'
+                validation_result['confidence'] = 0.85
+                logger.info(f"  → Tier 2C: Correcting triage to 'adult_diffuse_gliomas' (confidence: 0.85)")
+                return validation_result
+
+            # Check for ependymoma in problem list
+            if 'ependymoma' in diagnosis_text and triage_section != 'ependymomas':
+                logger.warning(f"  ⚠️  Tier 2C CONFLICT: Problem list contains '{prob.get('diagnosis', '')}' "
+                             f"but triage selected '{triage_section}'")
+
+                validation_result['conflicts_detected'] = True
+                validation_result['reason'] = (
+                    f"Problem list diagnosis '{prob.get('diagnosis', '')}' indicates ependymoma "
+                    f"but triage selected '{triage_section}'. This is a clinical conflict."
+                )
+                validation_result['corrected_section'] = 'ependymomas'
+                validation_result['confidence'] = 0.90
+                logger.info(f"  → Tier 2C: Correcting triage to 'ependymomas' (confidence: 0.90)")
+                return validation_result
+
+        # ===========================================
+        # NO CONFLICTS DETECTED
+        # ===========================================
+        logger.info(f"  ✅ Tier 2C: No conflicts detected, triage decision '{triage_section}' validated")
+        return validation_result
