@@ -1942,6 +1942,22 @@ Return ONLY the JSON object, no additional text.
         print()
         self._save_checkpoint(Phase.PHASE_6_ARTIFACT_GENERATION)
 
+        # PHASE 7: Investigation Engine QA/QC
+        print("PHASE 7: INVESTIGATION ENGINE - END-TO-END QA/QC")
+        print("-"*80)
+        from lib.investigation_engine_qaqc import InvestigationEngineQAQC
+
+        qaqc = InvestigationEngineQAQC(
+            anchored_diagnosis=self.who_2021_classification,
+            timeline_events=self.timeline_events,
+            patient_fhir_id=self.athena_patient_id
+        )
+        validation_report = qaqc.run_comprehensive_validation()
+
+        # Store validation report in artifact
+        artifact['phase_7_validation'] = validation_report
+        print()
+
         return artifact
 
     def _init_extraction_tracker(self) -> Dict:
