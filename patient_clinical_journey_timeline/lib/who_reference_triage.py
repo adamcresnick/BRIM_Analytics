@@ -173,6 +173,14 @@ class WHOReferenceTriage:
                 logger.info("  → Embryonal tumors (histology-based)")
                 return 'embryonal_tumors'
 
+        # Check problem list diagnoses for embryonal tumors (NEW - Bug #8 fix)
+        problem_diagnoses = stage1_findings.get('problem_list_diagnoses', [])
+        for prob in problem_diagnoses:
+            diagnosis = prob.get('diagnosis', '').lower()
+            if any(keyword in diagnosis for keyword in embryonal_keywords):
+                logger.info(f"  → Embryonal tumors (problem list diagnosis: '{prob.get('diagnosis', '')}')")
+                return 'embryonal_tumors'
+
         # 6. Age-based default triage
         if age and age < 18:
             logger.info("  → Pediatric-type diffuse gliomas (age < 18, default)")
