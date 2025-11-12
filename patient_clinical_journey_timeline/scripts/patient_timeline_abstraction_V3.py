@@ -949,10 +949,50 @@ class PatientTimelineAbstractor:
             logger.info(f"   Total records for extraction: {len(pathology_data)} ({len(molecular_data) if molecular_data else 0} from molecular tests, {len(combined_data) - (len(molecular_data) if molecular_data else 0)} from pathology)")
 
             # ========================================================================
+            # PHASE 0.1: MULTI-SOURCE DIAGNOSTIC EVIDENCE AGGREGATION
+            # ========================================================================
+            logger.info("   [Phase 0.1] Collecting diagnostic evidence from multiple sources...")
+
+            from lib.diagnostic_evidence_aggregator import DiagnosticEvidenceAggregator
+
+            # Initialize aggregator with query_athena function
+            evidence_aggregator = DiagnosticEvidenceAggregator(query_athena)
+
+            # Collect evidence from all sources
+            all_diagnostic_evidence = evidence_aggregator.aggregate_all_evidence(self.athena_patient_id)
+
+            logger.info(f"   ✅ Phase 0.1 complete: Collected {len(all_diagnostic_evidence)} pieces of diagnostic evidence")
+
+            # Log evidence summary
+            if all_diagnostic_evidence:
+                highest_authority = evidence_aggregator.get_highest_authority_diagnosis(all_diagnostic_evidence)
+                if highest_authority:
+                    logger.info(f"      Highest authority diagnosis: {highest_authority.diagnosis} "
+                               f"(source: {highest_authority.source.name}, confidence: {highest_authority.confidence:.2f})")
+
+                consensus = evidence_aggregator.get_consensus_diagnosis(all_diagnostic_evidence)
+                if consensus:
+                    logger.info(f"      Consensus diagnosis: {consensus}")
+
+            # ========================================================================
             # STAGE 1: EXTRACT MOLECULAR FINDINGS AND DIAGNOSES
             # ========================================================================
             logger.info("   [Stage 1] Extracting molecular findings and diagnoses...")
             extracted_findings = self._stage1_extract_findings(pathology_data)
+
+            # Enrich Stage 1 findings with Phase 0.1 evidence
+            if all_diagnostic_evidence:
+                extracted_findings['diagnostic_evidence'] = [
+                    {
+                        'diagnosis': ev.diagnosis,
+                        'source': ev.source.name,
+                        'confidence': ev.confidence,
+                        'date': ev.date.strftime('%Y-%m-%d') if ev.date else None,
+                        'extraction_method': ev.extraction_method
+                    }
+                    for ev in all_diagnostic_evidence
+                ]
+                logger.info(f"      Enriched Stage 1 findings with {len(all_diagnostic_evidence)} evidence items")
 
             if not extracted_findings or extracted_findings.get('extraction_status') == 'failed':
                 logger.warning("   ⚠️  Stage 1 extraction failed, cannot proceed to Stage 2")
