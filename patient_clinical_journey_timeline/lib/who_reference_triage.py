@@ -159,7 +159,8 @@ class WHOReferenceTriage:
                 return 'ependymomas'
 
         # 5. Check for embryonal tumor markers
-        embryonal_markers = ['SMARCB1', 'SMARCA4', 'MYC', 'MYCN']
+        embryonal_markers = ['SMARCB1', 'SMARCA4', 'MYC', 'MYCN', 'APC', 'CTNNB1']
+        # APC and CTNNB1 are WNT pathway markers for medulloblastoma
         if any(m in markers for m in embryonal_markers):
             logger.info("  → Embryonal tumors (molecular markers)")
             return 'embryonal_tumors'
