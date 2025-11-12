@@ -189,8 +189,20 @@ class WHOReferenceTriage:
             logger.info("  → Adult-type diffuse gliomas (age >= 40, default)")
             return 'adult_diffuse_gliomas'
 
-        # 7. Default to adult gliomas if no clear triage
-        logger.warning("  → Adult-type diffuse gliomas (DEFAULT - no clear triage factors)")
+        # 7. Tier 2B: MedGemma clinical reasoning for ambiguous cases
+        logger.info("  → Tier 2A did not produce clear match, attempting Tier 2B (MedGemma reasoning)")
+        triage_decision = self._medgemma_clinical_triage(stage1_findings)
+
+        if triage_decision and triage_decision.get('confidence', 0) >= 0.7:
+            section = triage_decision['section']
+            confidence = triage_decision['confidence']
+            reasoning = triage_decision.get('reasoning', '')
+            logger.info(f"  → Tier 2B: {section} (confidence: {confidence:.2f})")
+            logger.info(f"      Reasoning: {reasoning[:150]}...")
+            return section
+
+        # 8. Default to adult gliomas if Tier 2B also fails
+        logger.warning("  → Adult-type diffuse gliomas (DEFAULT - Tier 2A + 2B failed)")
         return 'adult_diffuse_gliomas'
 
     def load_selective_reference(self, section_key: str) -> str:
@@ -298,3 +310,147 @@ RELEVANT CLASSIFICATION SECTION
             'lines_saved': full_total - selective_total,
             'savings_percentage': round(savings_pct, 1)
         }
+
+    def _medgemma_clinical_triage(self, stage1_findings: Dict) -> Optional[Dict]:
+        """
+        Tier 2B: Use MedGemma to reason about which WHO section is most relevant.
+
+        This is called when Tier 2A rule-based matching doesn't produce a clear match.
+        Uses LLM to make clinical reasoning about triage based on all available evidence.
+
+        Args:
+            stage1_findings: Dictionary from Stage 1 extraction
+
+        Returns:
+            Dictionary with keys:
+                - section: WHO section key
+                - confidence: Float 0-1
+                - reasoning: String explaining the triage decision
+
+        Returns None if MedGemma is not available or encounters an error.
+        """
+        try:
+            # Import MedGemmaAgent (lazy import to avoid circular dependency)
+            from agents.medgemma_agent import MedGemmaAgent
+
+            medgemma = MedGemmaAgent(model='gemma2:27b')
+
+            # Prepare clinical context for triage
+            age = stage1_findings.get('patient_age_at_diagnosis')
+            markers = stage1_findings.get('molecular_markers', [])
+            histology = stage1_findings.get('histology_findings', [])
+            location = stage1_findings.get('tumor_location', 'Unknown')
+            problem_diagnoses = stage1_findings.get('problem_list_diagnoses', [])
+
+            # Build clinical summary
+            clinical_summary = f"""
+Patient Age: {age if age is not None else 'Unknown'}
+Tumor Location: {location}
+
+Molecular Markers ({len(markers)} found):
+"""
+            for m in markers:
+                marker_name = m.get('marker_name', 'Unknown')
+                status = m.get('status', 'Unknown')
+                details = m.get('details', '')
+                clinical_summary += f"  - {marker_name}: {status}"
+                if details:
+                    clinical_summary += f" ({details[:100]})"
+                clinical_summary += "\n"
+
+            if histology:
+                clinical_summary += f"\nHistology Findings ({len(histology)} found):\n"
+                for h in histology:
+                    finding = h.get('finding', 'Unknown')
+                    clinical_summary += f"  - {finding[:150]}\n"
+
+            if problem_diagnoses:
+                clinical_summary += f"\nProblem List Diagnoses ({len(problem_diagnoses)} found):\n"
+                for p in problem_diagnoses:
+                    diagnosis = p.get('diagnosis', 'Unknown')
+                    clinical_summary += f"  - {diagnosis[:150]}\n"
+
+            # Construct triage prompt
+            triage_prompt = f"""You are a neuropathologist expert in WHO 2021 CNS Tumor Classification.
+
+Given the following clinical findings, determine which WHO 2021 CNS tumor classification section is MOST relevant for this patient.
+
+CLINICAL FINDINGS:
+{clinical_summary}
+
+WHO 2021 CLASSIFICATION SECTIONS:
+1. adult_diffuse_gliomas - Adult-type diffuse gliomas (IDH-mutant/wildtype glioblastoma, astrocytoma, oligodendroglioma)
+2. pediatric_diffuse_gliomas - Pediatric-type diffuse gliomas (H3-mutant, BRAF-mutant, IDH-wildtype pediatric gliomas)
+3. ependymomas - Ependymal tumors (supratentorial, posterior fossa, spinal)
+4. embryonal_tumors - Embryonal tumors (medulloblastoma WNT/SHH/Group 3/4, atypical teratoid/rhabdoid tumor, PNET)
+5. other_gliomas - Circumscribed astrocytic gliomas, glioneuronal tumors
+6. meningiomas - Meningeal tumors
+7. other_tumors - All other CNS tumors
+
+TASK:
+Based on the clinical findings above, determine the MOST appropriate WHO section.
+
+IMPORTANT CLINICAL REASONING RULES:
+- APC, CTNNB1 (beta-catenin), WNT pathway markers → embryonal_tumors (medulloblastoma WNT-activated)
+- SMARCB1, SMARCA4 loss → embryonal_tumors (atypical teratoid/rhabdoid tumor)
+- MYC, MYCN amplification → embryonal_tumors (medulloblastoma)
+- IDH1/IDH2 mutation → adult_diffuse_gliomas (unless age < 18)
+- H3F3A, HIST1H3B mutation → pediatric_diffuse_gliomas
+- BRAF V600E → pediatric_diffuse_gliomas (low-grade glioma)
+- Age < 18 + IDH-wildtype → pediatric_diffuse_gliomas
+- Age >= 40 + IDH-wildtype → adult_diffuse_gliomas
+- Problem list diagnoses mentioning "medulloblastoma" → embryonal_tumors
+
+Return ONLY a JSON object with this exact structure:
+{{
+    "section": "<section_key from list above>",
+    "confidence": <float 0.0-1.0>,
+    "reasoning": "<1-2 sentence clinical reasoning for this triage decision>"
+}}
+
+DO NOT include any other text, explanations, or markdown formatting. Return ONLY the JSON object."""
+
+            logger.info("  🧠 Tier 2B: Querying MedGemma for clinical triage reasoning...")
+
+            # Query MedGemma
+            response = medgemma.query(triage_prompt, temperature=0.1)
+
+            if not response:
+                logger.warning("  ⚠️  Tier 2B: MedGemma returned empty response")
+                return None
+
+            # Parse JSON response
+            import json
+            import re
+
+            # Try to extract JSON from response (handle cases where model adds extra text)
+            json_match = re.search(r'\{[^{}]*"section"[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                response = json_match.group(0)
+
+            try:
+                triage_result = json.loads(response)
+            except json.JSONDecodeError as e:
+                logger.warning(f"  ⚠️  Tier 2B: Failed to parse MedGemma JSON response: {e}")
+                logger.warning(f"       Response was: {response[:200]}")
+                return None
+
+            # Validate response structure
+            if 'section' not in triage_result or 'confidence' not in triage_result:
+                logger.warning(f"  ⚠️  Tier 2B: MedGemma response missing required fields")
+                return None
+
+            # Validate section key
+            section = triage_result['section']
+            if section not in self.SECTION_RANGES:
+                logger.warning(f"  ⚠️  Tier 2B: MedGemma returned invalid section: {section}")
+                return None
+
+            return triage_result
+
+        except ImportError:
+            logger.warning("  ⚠️  Tier 2B: MedGemmaAgent not available")
+            return None
+        except Exception as e:
+            logger.error(f"  ❌ Tier 2B: Error in MedGemma triage: {e}")
+            return None
