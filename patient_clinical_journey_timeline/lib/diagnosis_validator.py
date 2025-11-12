@@ -159,7 +159,12 @@ class DiagnosisValidator:
         logger.info("=" * 80)
         logger.info(f"   Diagnosis: {diagnosis}")
         logger.info(f"   Valid: {validation_result['is_valid']}")
-        logger.info(f"   Confidence: {validation_result['confidence']:.2f}")
+        # Handle both float and string confidence values
+        conf_value = validation_result['confidence']
+        if isinstance(conf_value, (int, float)):
+            logger.info(f"   Confidence: {conf_value:.2f}")
+        else:
+            logger.info(f"   Confidence: {conf_value}")
         logger.info(f"   Violations: {len(validation_result['violations'])}")
         logger.info(f"   Warnings: {len(validation_result['warnings'])}")
         logger.info(f"   Conflicts: {len(validation_result['conflicts'])}")

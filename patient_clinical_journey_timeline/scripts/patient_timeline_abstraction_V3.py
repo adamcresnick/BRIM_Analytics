@@ -989,15 +989,57 @@ class PatientTimelineAbstractor:
             result_preview = classification.get('who_2021_diagnosis', 'Unknown')[:100]
             logger.info(f"   ✅ Stage 2 complete: {result_preview}")
 
+            # ========================================================================
+            # STAGE 3: VALIDATE DIAGNOSIS (BIOLOGICAL PLAUSIBILITY)
+            # ========================================================================
+            logger.info("   [Stage 3] Validating diagnosis against biological plausibility...")
+
+            from lib.diagnosis_validator import DiagnosisValidator
+            validator = DiagnosisValidator()
+
+            # Validate classification against molecular markers and problem list
+            validated_classification = validator.validate_diagnosis(
+                who_classification=classification,
+                stage1_findings=extracted_findings
+            )
+
+            # Log validation results
+            validation = validated_classification.get('validation', {})
+            if not validation.get('is_valid', True):
+                logger.error(f"   ❌ Stage 3 FAILED: Diagnosis is biologically implausible!")
+                logger.error(f"      Violations: {len(validation.get('violations', []))}")
+            else:
+                logger.info(f"   ✅ Stage 3 complete: Diagnosis is biologically plausible")
+
+            if validation.get('warnings'):
+                logger.warning(f"   ⚠️  Stage 3 warnings: {len(validation.get('warnings', []))}")
+
+            if validation.get('conflicts'):
+                logger.warning(f"   ⚠️  Stage 3 conflicts: {len(validation.get('conflicts', []))}")
+
+            # Use validated classification (contains adjusted confidence and validation metadata)
+            classification = validated_classification
+
             # Add metadata
             classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
-            classification["classification_method"] = "medgemma_two_stage_tier1"
+            classification["classification_method"] = "medgemma_three_stage_validated"
             classification["stage1_findings"] = extracted_findings  # Store for audit trail
 
-            # Convert confidence to string and lowercase (can be float from averaging)
+            # Convert confidence to string and lowercase (can be float from validation)
             confidence_raw = classification.get('confidence', 'unknown')
-            confidence = str(confidence_raw).lower() if confidence_raw is not None else 'unknown'
-            logger.info(f"   Two-stage classification confidence: {confidence}")
+
+            # Handle numeric confidence (from validation) - convert low values to 'low'
+            if isinstance(confidence_raw, (int, float)):
+                if confidence_raw <= 0.3:
+                    confidence = 'low'
+                elif confidence_raw <= 0.6:
+                    confidence = 'moderate'
+                else:
+                    confidence = 'high'
+            else:
+                confidence = str(confidence_raw).lower() if confidence_raw is not None else 'unknown'
+
+            logger.info(f"   Three-stage classification confidence: {confidence} (raw: {confidence_raw})")
 
             # Tier 2: If confidence is low/insufficient, try binary pathology documents
             if confidence in ['low', 'insufficient', 'unknown']:
