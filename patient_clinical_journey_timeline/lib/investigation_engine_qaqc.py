@@ -28,6 +28,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
+from lib.llm_prompt_wrapper import LLMPromptWrapper, ClinicalContext
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,9 @@ class InvestigationEngineQAQC:
         self.anchored_diagnosis = anchored_diagnosis
         self.timeline_events = timeline_events
         self.patient_fhir_id = patient_fhir_id
+        self.llm_wrapper = LLMPromptWrapper()  # V5.3: Initialize LLM prompt wrapper
 
-        logger.info("✅ InvestigationEngineQAQC initialized")
+        logger.info("✅ InvestigationEngineQAQC initialized (V5.3 with LLM reconciliation)")
         logger.info(f"   Patient: {patient_fhir_id}")
         logger.info(f"   Anchored diagnosis: {anchored_diagnosis.get('who_2021_diagnosis', 'UNKNOWN')}")
         logger.info(f"   Timeline events: {len(timeline_events)}")
@@ -276,13 +278,43 @@ class InvestigationEngineQAQC:
             )
 
             if not found_csi:
-                violation = (
+                violation_description = (
                     "Medulloblastoma diagnosis but NO craniospinal irradiation (CSI) found. "
                     "Standard protocol requires CSI 23.4-36 Gy + posterior fossa boost."
                 )
-                result['critical_violations'].append(violation)
-                result['is_valid'] = False
-                logger.error(f"      ❌ {violation}")
+
+                # V5.3: Attempt LLM reconciliation before marking as critical violation
+                logger.info("      → V5.3: CSI not found - attempting LLM reconciliation...")
+                reconciliation = self._reconcile_conflict(
+                    conflict_description="Medulloblastoma diagnosed but craniospinal irradiation (CSI) not detected in timeline",
+                    anchored_diagnosis=diagnosis,
+                    conflicting_treatment=f"Radiation events found: {len(radiation_events)}, but no CSI pattern detected",
+                    additional_context="Standard medulloblastoma protocol includes CSI 23.4-36 Gy + posterior fossa boost"
+                )
+
+                # Check reconciliation result
+                if reconciliation.get('reconciliation_successful'):
+                    if reconciliation.get('acceptable_variance') and not reconciliation.get('is_true_violation'):
+                        # LLM determined this is acceptable variance
+                        logger.warning(f"      ⚠️  {violation_description}")
+                        logger.info(f"          V5.3 Reconciliation: {reconciliation.get('explanation', '')[:150]}")
+                        result['warnings'].append(
+                            f"{violation_description} | V5.3 LLM: {reconciliation.get('recommendation', 'Acceptable variance')}"
+                        )
+                        result['reconciliation_results'] = result.get('reconciliation_results', [])
+                        result['reconciliation_results'].append(reconciliation)
+                    else:
+                        # LLM confirmed true violation
+                        result['critical_violations'].append(violation_description)
+                        result['is_valid'] = False
+                        logger.error(f"      ❌ {violation_description}")
+                        logger.info(f"          V5.3 Reconciliation confirmed violation: {reconciliation.get('explanation', '')[:150]}")
+                else:
+                    # Reconciliation failed - treat as critical violation (conservative)
+                    result['critical_violations'].append(violation_description)
+                    result['is_valid'] = False
+                    logger.error(f"      ❌ {violation_description}")
+                    logger.warning(f"          V5.3 Reconciliation failed - treating as critical violation")
             else:
                 logger.info("      ✅ CSI found (expected for medulloblastoma)")
 
@@ -339,14 +371,44 @@ class InvestigationEngineQAQC:
             )
 
             if found_60gy:
-                violation = (
+                violation_description = (
                     "Grade 2/low-grade glioma diagnosis but 60 Gy radiation found. "
                     "Low-grade gliomas should receive MAX 54 Gy to avoid toxicity. "
                     "60 Gy suggests potential over-treatment or misclassification."
                 )
-                result['critical_violations'].append(violation)
-                result['is_valid'] = False
-                logger.error(f"      ❌ {violation}")
+
+                # V5.3: Attempt LLM reconciliation for potential over-treatment
+                logger.info("      → V5.3: 60 Gy found for low-grade glioma - attempting LLM reconciliation...")
+                reconciliation = self._reconcile_conflict(
+                    conflict_description="Low-grade/Grade 2 glioma but 60 Gy radiation detected (exceeds standard 54 Gy max)",
+                    anchored_diagnosis=diagnosis,
+                    conflicting_treatment="60 Gy radiation therapy detected",
+                    additional_context="Low-grade gliomas typically receive 45-54 Gy max. 60 Gy could indicate misclassification or upgrade to high-grade."
+                )
+
+                # Check reconciliation result
+                if reconciliation.get('reconciliation_successful'):
+                    if reconciliation.get('acceptable_variance') and not reconciliation.get('is_true_violation'):
+                        # LLM determined this might be acceptable (e.g., tumor upgrade)
+                        logger.warning(f"      ⚠️  {violation_description}")
+                        logger.info(f"          V5.3 Reconciliation: {reconciliation.get('explanation', '')[:150]}")
+                        result['warnings'].append(
+                            f"{violation_description} | V5.3 LLM: {reconciliation.get('recommendation', 'Review for possible tumor upgrade')}"
+                        )
+                        result['reconciliation_results'] = result.get('reconciliation_results', [])
+                        result['reconciliation_results'].append(reconciliation)
+                    else:
+                        # LLM confirmed true over-treatment violation
+                        result['critical_violations'].append(violation_description)
+                        result['is_valid'] = False
+                        logger.error(f"      ❌ {violation_description}")
+                        logger.info(f"          V5.3 Reconciliation confirmed over-treatment: {reconciliation.get('explanation', '')[:150]}")
+                else:
+                    # Reconciliation failed - treat as critical violation (conservative)
+                    result['critical_violations'].append(violation_description)
+                    result['is_valid'] = False
+                    logger.error(f"      ❌ {violation_description}")
+                    logger.warning(f"          V5.3 Reconciliation failed - treating as critical violation")
 
         if result['is_valid'] and not result['warnings']:
             logger.info("      ✅ Treatment protocol validated against diagnosis")
@@ -535,3 +597,123 @@ class InvestigationEngineQAQC:
             logger.info("      ✅ Disease progression logic validated")
 
         return result
+
+    def _reconcile_conflict(
+        self,
+        conflict_description: str,
+        anchored_diagnosis: str,
+        conflicting_treatment: str,
+        additional_context: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        V5.3: Use LLM reconciliation to resolve protocol-diagnosis conflicts.
+
+        When Phase 7 detects a conflict (e.g., medulloblastoma but no CSI found),
+        use MedGemma to analyze whether this is a true violation or acceptable variance.
+
+        Args:
+            conflict_description: Description of the conflict
+            anchored_diagnosis: WHO 2021 diagnosis from Phase 0
+            conflicting_treatment: Treatment protocol observed in timeline
+            additional_context: Additional clinical context (optional)
+
+        Returns:
+            Reconciliation result with LLM analysis and recommendation
+        """
+        logger.info(f"      → V5.3: Reconciling conflict with MedGemma...")
+
+        # V5.3: Create clinical context
+        context = ClinicalContext(
+            patient_id=self.patient_fhir_id,
+            phase='PHASE_7_RECONCILIATION',
+            known_diagnosis=anchored_diagnosis,
+            evidence_summary=conflict_description
+        )
+
+        # Build reconciliation prompt
+        reconciliation_schema = {
+            "is_true_violation": "boolean - true if this is a definite protocol violation",
+            "acceptable_variance": "boolean - true if this could be acceptable clinical variance",
+            "explanation": "string - clinical reasoning for the determination",
+            "severity": "string - CRITICAL | WARNING | ACCEPTABLE",
+            "recommendation": "string - recommended action (e.g., 'Flag for manual review', 'Accept as variance')"
+        }
+
+        # Prepare document text with conflict details
+        conflict_document = f"""
+CLINICAL CONFLICT DETECTED:
+
+Anchored Diagnosis (WHO 2021): {anchored_diagnosis}
+
+Observed Treatment Protocol: {conflicting_treatment}
+
+Conflict Description: {conflict_description}
+
+Additional Context: {additional_context or 'None provided'}
+
+TASK: Determine if this represents a true protocol violation or acceptable clinical variance.
+Consider:
+1. Are there valid clinical scenarios where this diagnosis would NOT receive the expected treatment?
+2. Could this be due to patient-specific factors (age, comorbidities, trial enrollment)?
+3. Could this be a data extraction issue rather than a true clinical violation?
+4. Is this a critical safety issue or a minor protocol variation?
+"""
+
+        wrapped_prompt = self.llm_wrapper.wrap_reconciliation_prompt(
+            conflict_description=conflict_description,
+            evidence_items=[
+                f"Diagnosis: {anchored_diagnosis}",
+                f"Treatment: {conflicting_treatment}"
+            ],
+            expected_schema=reconciliation_schema,
+            context=context
+        )
+
+        try:
+            # Import MedGemma API
+            from lib.local_medgemma import medgemma
+
+            # Query MedGemma with wrapped reconciliation prompt
+            response = medgemma.query(wrapped_prompt, temperature=0.1)
+
+            # V5.3: Validate response
+            is_valid, reconciliation, error = self.llm_wrapper.validate_response(
+                response,
+                reconciliation_schema
+            )
+
+            if not is_valid:
+                logger.warning(f"      ⚠️  LLM reconciliation returned invalid response: {error}")
+                return {
+                    'reconciliation_attempted': True,
+                    'reconciliation_successful': False,
+                    'error': error,
+                    'fallback': 'Treat as critical violation (LLM reconciliation failed)'
+                }
+
+            # Log reconciliation result
+            logger.info(f"      ✅ LLM reconciliation complete:")
+            logger.info(f"          True violation: {reconciliation.get('is_true_violation')}")
+            logger.info(f"          Acceptable variance: {reconciliation.get('acceptable_variance')}")
+            logger.info(f"          Severity: {reconciliation.get('severity')}")
+            logger.info(f"          Explanation: {reconciliation.get('explanation', '')[:100]}...")
+
+            return {
+                'reconciliation_attempted': True,
+                'reconciliation_successful': True,
+                'is_true_violation': reconciliation.get('is_true_violation', True),
+                'acceptable_variance': reconciliation.get('acceptable_variance', False),
+                'severity': reconciliation.get('severity', 'CRITICAL'),
+                'explanation': reconciliation.get('explanation', ''),
+                'recommendation': reconciliation.get('recommendation', 'Flag for manual review'),
+                'llm_confidence': reconciliation.get('confidence', 0.0)
+            }
+
+        except Exception as e:
+            logger.error(f"      ❌ LLM reconciliation exception: {type(e).__name__}: {str(e)}")
+            return {
+                'reconciliation_attempted': True,
+                'reconciliation_successful': False,
+                'error': str(e),
+                'fallback': 'Treat as critical violation (LLM reconciliation exception)'
+            }
