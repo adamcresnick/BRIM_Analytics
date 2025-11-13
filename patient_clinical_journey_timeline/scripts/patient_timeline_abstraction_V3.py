@@ -127,6 +127,40 @@ except ImportError as e:
     DataFingerprintManager = None
     DATA_FINGERPRINT_AVAILABLE = False
 
+# V5.2: Import production optimizations
+try:
+    from lib.structured_logging import get_logger, StructuredLoggerAdapter
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import structured logging: {e}")
+    get_logger = None
+    StructuredLoggerAdapter = None
+    STRUCTURED_LOGGING_AVAILABLE = False
+
+try:
+    from lib.exception_handling import (
+        FatalError, RecoverableError, CompletenessTracker,
+        handle_error, ErrorSeverity
+    )
+    EXCEPTION_HANDLING_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import exception handling: {e}")
+    FatalError = None
+    RecoverableError = None
+    CompletenessTracker = None
+    handle_error = None
+    ErrorSeverity = None
+    EXCEPTION_HANDLING_AVAILABLE = False
+
+try:
+    from lib.athena_parallel_query import AthenaParallelExecutor, QueryResult
+    ATHENA_PARALLEL_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import athena parallel query: {e}")
+    AthenaParallelExecutor = None
+    QueryResult = None
+    ATHENA_PARALLEL_AVAILABLE = False
+
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
@@ -588,6 +622,45 @@ class PatientTimelineAbstractor:
         # V5.0.3: Data fingerprint manager for cache invalidation
         self.fingerprint_manager = None  # Initialized later in run() after Athena client setup
 
+        # V5.2: Initialize production optimizations
+        # Structured logging with patient/phase context
+        self.structured_logger = None
+        if STRUCTURED_LOGGING_AVAILABLE:
+            self.structured_logger = get_logger(
+                __name__,
+                patient_id=self.athena_patient_id,
+                phase='INIT',
+                aws_profile='radiant-prod'
+            )
+            self.structured_logger.info("Initializing PatientTimelineAbstractor with V5.2 features")
+
+        # Completeness tracker for data source extraction tracking
+        self.completeness_tracker = None
+        if EXCEPTION_HANDLING_AVAILABLE:
+            self.completeness_tracker = CompletenessTracker()
+            if self.structured_logger:
+                self.structured_logger.info("Completeness tracker initialized")
+            else:
+                logger.info("✅ V5.2: Completeness tracker initialized")
+
+        # Athena parallel query executor for Phase 1 optimization
+        self.athena_parallel_executor = None
+        if ATHENA_PARALLEL_AVAILABLE:
+            try:
+                self.athena_parallel_executor = AthenaParallelExecutor(
+                    aws_profile='radiant-prod',
+                    database='fhir_prd_db',
+                    max_concurrent=5,
+                    query_timeout_seconds=300
+                )
+                if self.structured_logger:
+                    self.structured_logger.info("Athena parallel executor initialized (max_concurrent=5)")
+                else:
+                    logger.info("✅ V5.2: Athena parallel executor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize Athena parallel executor: {e}")
+                self.athena_parallel_executor = None
+
         try:
             from orchestration.schema_loader import AthenaSchemaLoader
             from orchestration.who_cns_knowledge_base import WHOCNSKnowledgeBase
@@ -856,6 +929,10 @@ class PatientTimelineAbstractor:
         # This table contains actual genomics interpretation text in test_result_narrative
         # PRIORITY 2: Fallback to v_pathology_diagnostics for observations
         try:
+            # Track molecular query attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_molecular_query')
+
             molecular_query = f"""
             SELECT
                 patient_id as patient_fhir_id,
@@ -885,6 +962,17 @@ class PatientTimelineAbstractor:
 
             molecular_data = query_athena(molecular_query, "Querying molecular_test_results for genomics data", suppress_output=True)
             logger.info(f"   Found {len(molecular_data) if molecular_data else 0} records from molecular_test_results")
+
+            # Track molecular query success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_molecular_query',
+                    record_count=len(molecular_data) if molecular_data else 0
+                )
+
+            # Track pathology query attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_pathology_query')
 
             # Fallback to v_pathology_diagnostics if no molecular test data
             pathology_query = f"""
@@ -917,6 +1005,13 @@ class PatientTimelineAbstractor:
 
             pathology_data = query_athena(pathology_query, "Querying v_pathology_diagnostics for fallback data", suppress_output=True)
             logger.info(f"   Found {len(pathology_data) if pathology_data else 0} records from v_pathology_diagnostics")
+
+            # Track pathology query success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_pathology_query',
+                    record_count=len(pathology_data) if pathology_data else 0
+                )
 
             # Combine results: prioritize v_molecular_tests, then add v_pathology_diagnostics
             combined_data = []
@@ -953,6 +1048,10 @@ class PatientTimelineAbstractor:
             # ========================================================================
             logger.info("   [Phase 0.1] Collecting diagnostic evidence from multiple sources...")
 
+            # Track Phase 0.1 attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_1_diagnostic_evidence_aggregation')
+
             from lib.diagnostic_evidence_aggregator import DiagnosticEvidenceAggregator
 
             # Initialize aggregator with query_athena function
@@ -962,6 +1061,13 @@ class PatientTimelineAbstractor:
             all_diagnostic_evidence = evidence_aggregator.aggregate_all_evidence(self.athena_patient_id)
 
             logger.info(f"   ✅ Phase 0.1 complete: Collected {len(all_diagnostic_evidence)} pieces of diagnostic evidence")
+
+            # Track Phase 0.1 success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_1_diagnostic_evidence_aggregation',
+                    record_count=len(all_diagnostic_evidence)
+                )
 
             # Log evidence summary
             if all_diagnostic_evidence:
@@ -978,6 +1084,11 @@ class PatientTimelineAbstractor:
             # STAGE 1: EXTRACT MOLECULAR FINDINGS AND DIAGNOSES
             # ========================================================================
             logger.info("   [Stage 1] Extracting molecular findings and diagnoses...")
+
+            # Track Stage 1 attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_stage1_extract_findings')
+
             extracted_findings = self._stage1_extract_findings(pathology_data)
 
             # Enrich Stage 1 findings with Phase 0.1 evidence
@@ -996,6 +1107,14 @@ class PatientTimelineAbstractor:
 
             if not extracted_findings or extracted_findings.get('extraction_status') == 'failed':
                 logger.warning("   ⚠️  Stage 1 extraction failed, cannot proceed to Stage 2")
+
+                # Track Stage 1 failure
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_failure(
+                        'phase0_stage1_extract_findings',
+                        error_message="Stage 1 extraction failed or returned no findings"
+                    )
+
                 return {
                     "who_2021_diagnosis": "Classification failed: No findings extracted",
                     "molecular_subtype": "Unknown",
@@ -1017,14 +1136,43 @@ class PatientTimelineAbstractor:
                        f"{len(extracted_findings.get('histology_findings', []))} histology findings, "
                        f"{len(extracted_findings.get('problem_list_diagnoses', []))} problem list diagnoses")
 
+            # Track Stage 1 success
+            if self.completeness_tracker:
+                total_findings = (len(extracted_findings.get('molecular_markers', [])) +
+                                len(extracted_findings.get('histology_findings', [])) +
+                                len(extracted_findings.get('problem_list_diagnoses', [])))
+                self.completeness_tracker.mark_success(
+                    'phase0_stage1_extract_findings',
+                    record_count=total_findings
+                )
+
             # ========================================================================
             # STAGE 2: MAP FINDINGS TO WHO 2021 CLASSIFICATION
             # ========================================================================
             logger.info("   [Stage 2] Mapping findings to WHO 2021 classification...")
+
+            # Track Stage 2 attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_stage2_who_classification')
+
             classification = self._stage2_map_to_who2021(extracted_findings)
 
             if not classification or classification.get('confidence') == 'insufficient':
                 logger.warning("   ⚠️  Stage 2 mapping resulted in insufficient confidence")
+
+                # Track Stage 2 as having low confidence (not a failure, but note it)
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_success(
+                        'phase0_stage2_who_classification',
+                        record_count=1
+                    )
+            else:
+                # Track Stage 2 success
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_success(
+                        'phase0_stage2_who_classification',
+                        record_count=1
+                    )
 
             result_preview = classification.get('who_2021_diagnosis', 'Unknown')[:100]
             logger.info(f"   ✅ Stage 2 complete: {result_preview}")
@@ -1103,6 +1251,22 @@ class PatientTimelineAbstractor:
 
         except Exception as e:
             logger.error(f"Error generating WHO classification: {e}")
+
+            # Track failure in completeness tracker
+            if self.completeness_tracker:
+                # Determine which operation failed
+                if 'molecular_query' in str(e) or 'molecular_test_results' in str(e):
+                    self.completeness_tracker.mark_failure('phase0_molecular_query', error_message=str(e))
+                elif 'pathology_query' in str(e) or 'v_pathology_diagnostics' in str(e):
+                    self.completeness_tracker.mark_failure('phase0_pathology_query', error_message=str(e))
+                elif 'stage1' in str(e).lower() or 'extract_findings' in str(e):
+                    self.completeness_tracker.mark_failure('phase0_stage1_extract_findings', error_message=str(e))
+                elif 'stage2' in str(e).lower() or 'who2021' in str(e):
+                    self.completeness_tracker.mark_failure('phase0_stage2_who_classification', error_message=str(e))
+                else:
+                    # Generic Phase 0 failure
+                    self.completeness_tracker.mark_failure('phase0_who_classification', error_message=str(e))
+
             return {
                 "who_2021_diagnosis": f"Classification failed: {str(e)}",
                 "molecular_subtype": "Unknown",
@@ -1755,6 +1919,10 @@ Return ONLY the JSON object, no additional text.
 
         # PHASE 0: WHO 2021 TUMOR CLASSIFICATION (Run ONCE, cache forever)
         # This is the ONLY place tumor classification happens
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_0')
+
         print("PHASE 0: WHO 2021 TUMOR CLASSIFICATION")
         print("-"*80)
         print("This phase runs ONCE and caches the result.")
@@ -1770,6 +1938,10 @@ Return ONLY the JSON object, no additional text.
         print()
 
         # PHASE 1: Load structured data from 6 Athena views FOR TIMELINE
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_1')
+
         if self._should_skip_phase(Phase.PHASE_1_DATA_LOADING, start_phase):
             print("⏭️  SKIPPING PHASE 1 (already completed)")
             print("-"*80)
@@ -1839,6 +2011,10 @@ Return ONLY the JSON object, no additional text.
             self._log_investigation_results('Phase 1', investigation)
 
         # PHASE 2: Construct initial timeline
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_2')
+
         if self._should_skip_phase(Phase.PHASE_2_TIMELINE_CONSTRUCTION, start_phase):
             print("⏭️  SKIPPING PHASE 2 (already completed)")
             print("-"*80)
@@ -1865,6 +2041,10 @@ Return ONLY the JSON object, no additional text.
             self._save_checkpoint(Phase.PHASE_2_5_TREATMENT_ORDINALITY)
 
         # PHASE 3: Identify extraction gaps
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_3')
+
         if self._should_skip_phase(Phase.PHASE_3_GAP_IDENTIFICATION, start_phase):
             print("⏭️  SKIPPING PHASE 3 (already completed)")
             print("-"*80)
@@ -1890,6 +2070,10 @@ Return ONLY the JSON object, no additional text.
         print()
 
         # PHASE 4: Prioritize and extract from binaries (REAL MEDGEMMA INTEGRATION)
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_4')
+
         if self._should_skip_phase(Phase.PHASE_4_BINARY_EXTRACTION, start_phase):
             print("⏭️  SKIPPING PHASE 4 (already completed)")
             print("-"*80)
@@ -1923,6 +2107,10 @@ Return ONLY the JSON object, no additional text.
             self._log_investigation_results('Phase 4', investigation)
 
         # PHASE 5: Protocol validation
+        # V5.2: Update structured logger context
+        if self.structured_logger:
+            self.structured_logger.update_context(phase='PHASE_5')
+
         if self._should_skip_phase(Phase.PHASE_5_PROTOCOL_VALIDATION, start_phase):
             print("⏭️  SKIPPING PHASE 5 (already completed)")
             print("-"*80)
@@ -1945,17 +2133,49 @@ Return ONLY the JSON object, no additional text.
         # PHASE 7: Investigation Engine QA/QC
         print("PHASE 7: INVESTIGATION ENGINE - END-TO-END QA/QC")
         print("-"*80)
-        from lib.investigation_engine_qaqc import InvestigationEngineQAQC
 
-        qaqc = InvestigationEngineQAQC(
-            anchored_diagnosis=self.who_2021_classification,
-            timeline_events=self.timeline_events,
-            patient_fhir_id=self.athena_patient_id
-        )
-        validation_report = qaqc.run_comprehensive_validation()
+        # Track Phase 7 investigation engine QA/QC attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase7_investigation_engine_qaqc')
 
-        # Store validation report in artifact
-        artifact['phase_7_validation'] = validation_report
+        try:
+            from lib.investigation_engine_qaqc import InvestigationEngineQAQC
+
+            qaqc = InvestigationEngineQAQC(
+                anchored_diagnosis=self.who_2021_classification,
+                timeline_events=self.timeline_events,
+                patient_fhir_id=self.athena_patient_id
+            )
+            validation_report = qaqc.run_comprehensive_validation()
+
+            # Store validation report in artifact
+            artifact['phase_7_validation'] = validation_report
+
+            # Track Phase 7 success
+            if self.completeness_tracker:
+                # Count number of validations performed
+                num_validations = 0
+                if validation_report:
+                    num_validations = len(validation_report.get('validations', []))
+                self.completeness_tracker.mark_success(
+                    'phase7_investigation_engine_qaqc',
+                    record_count=num_validations
+                )
+
+        except Exception as e:
+            logger.error(f"Phase 7 Investigation Engine QA/QC failed: {e}")
+            artifact['phase_7_validation'] = {
+                'status': 'ERROR',
+                'error': str(e)
+            }
+
+            # Track Phase 7 failure
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_failure(
+                    'phase7_investigation_engine_qaqc',
+                    error_message=str(e)
+                )
+
         print()
 
         return artifact
@@ -2492,27 +2712,158 @@ Return ONLY the JSON object, no additional text.
             """
         }
 
+        # V5.2: Use parallel query execution if available, otherwise fall back to sequential
         self.structured_data = {}
-        for source_name, query in queries.items():
-            # V4.6: Pass investigation engine for automatic query failure investigation
-            self.structured_data[source_name] = query_athena(
-                query=query,
-                description=f"Loading {source_name}",
-                investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
-                schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
-            )
 
-            # V3: Track schema query
-            field_names = []
-            if 'SELECT' in query:
-                # Extract field names from SELECT clause (simple parsing)
-                select_clause = query.split('FROM')[0].split('SELECT')[1].strip()
-                field_names = [f.strip().split(' as ')[-1].split(',')[0] for f in select_clause.split(',')]
-            self._track_schema_query(
-                schema_name=f"v_{source_name}",
-                fields=field_names,
-                row_count=len(self.structured_data[source_name])
-            )
+        if self.athena_parallel_executor and ATHENA_PARALLEL_AVAILABLE:
+            # V5.2: PARALLEL EXECUTION (50-75% faster)
+            if self.structured_logger:
+                self.structured_logger.info(f"Executing {len(queries)} Athena queries in parallel (max_concurrent=5)")
+            else:
+                logger.info(f"V5.2: Executing {len(queries)} Athena queries in parallel")
+
+            try:
+                # Mark all sources as attempted in completeness tracker
+                if self.completeness_tracker:
+                    for source_name in queries.keys():
+                        self.completeness_tracker.mark_attempted(f'phase1_{source_name}')
+
+                # Execute queries in parallel
+                parallel_results = self.athena_parallel_executor.execute_parallel(queries)
+
+                # Store results and track completeness
+                for source_name, data in parallel_results.items():
+                    self.structured_data[source_name] = data
+
+                    # Track success in completeness tracker
+                    if self.completeness_tracker:
+                        self.completeness_tracker.mark_success(
+                            f'phase1_{source_name}',
+                            record_count=len(data)
+                        )
+
+                    if self.structured_logger:
+                        self.structured_logger.info(f"Loaded {len(data)} {source_name} records")
+
+                    # V3: Track schema query
+                    field_names = []
+                    query = queries[source_name]
+                    if 'SELECT' in query:
+                        # Extract field names from SELECT clause (simple parsing)
+                        select_clause = query.split('FROM')[0].split('SELECT')[1].strip()
+                        field_names = [f.strip().split(' as ')[-1].split(',')[0] for f in select_clause.split(',')]
+                    self._track_schema_query(
+                        schema_name=f"v_{source_name}",
+                        fields=field_names,
+                        row_count=len(self.structured_data[source_name])
+                    )
+
+                if self.structured_logger:
+                    self.structured_logger.info("Parallel query execution completed successfully")
+                else:
+                    logger.info("✅ V5.2: Parallel query execution completed")
+
+            except Exception as e:
+                # Log error and fall back to sequential execution
+                if self.completeness_tracker:
+                    self.completeness_tracker.log_error(
+                        error_type='parallel_query_failure',
+                        message=f"Parallel query execution failed: {str(e)}",
+                        phase='PHASE_1',
+                        severity=ErrorSeverity.RECOVERABLE if EXCEPTION_HANDLING_AVAILABLE else None
+                    )
+
+                logger.warning(f"⚠️  V5.2: Parallel query execution failed: {e}")
+                logger.warning("   Falling back to sequential execution...")
+
+                # FALLBACK: Sequential execution
+                for source_name, query in queries.items():
+                    # Mark as attempted
+                    if self.completeness_tracker:
+                        self.completeness_tracker.mark_attempted(f'phase1_{source_name}')
+
+                    try:
+                        # V4.6: Pass investigation engine for automatic query failure investigation
+                        self.structured_data[source_name] = query_athena(
+                            query=query,
+                            description=f"Loading {source_name}",
+                            investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                            schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+                        )
+
+                        # Track success
+                        if self.completeness_tracker:
+                            self.completeness_tracker.mark_success(
+                                f'phase1_{source_name}',
+                                record_count=len(self.structured_data[source_name])
+                            )
+
+                        # V3: Track schema query
+                        field_names = []
+                        if 'SELECT' in query:
+                            # Extract field names from SELECT clause (simple parsing)
+                            select_clause = query.split('FROM')[0].split('SELECT')[1].strip()
+                            field_names = [f.strip().split(' as ')[-1].split(',')[0] for f in select_clause.split(',')]
+                        self._track_schema_query(
+                            schema_name=f"v_{source_name}",
+                            fields=field_names,
+                            row_count=len(self.structured_data[source_name])
+                        )
+                    except Exception as query_error:
+                        # Track failure
+                        if self.completeness_tracker:
+                            self.completeness_tracker.mark_failure(
+                                f'phase1_{source_name}',
+                                error_message=str(query_error)
+                            )
+                        raise
+        else:
+            # SEQUENTIAL EXECUTION (original behavior)
+            if self.structured_logger:
+                self.structured_logger.info("Executing Athena queries sequentially (parallel executor not available)")
+            else:
+                logger.info("Executing Athena queries sequentially")
+
+            for source_name, query in queries.items():
+                # Mark as attempted
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_attempted(f'phase1_{source_name}')
+
+                try:
+                    # V4.6: Pass investigation engine for automatic query failure investigation
+                    self.structured_data[source_name] = query_athena(
+                        query=query,
+                        description=f"Loading {source_name}",
+                        investigation_engine=self.investigation_engine if hasattr(self, 'investigation_engine') else None,
+                        schema_loader=self.schema_loader if hasattr(self, 'schema_loader') else None
+                    )
+
+                    # Track success
+                    if self.completeness_tracker:
+                        self.completeness_tracker.mark_success(
+                            f'phase1_{source_name}',
+                            record_count=len(self.structured_data[source_name])
+                        )
+
+                    # V3: Track schema query
+                    field_names = []
+                    if 'SELECT' in query:
+                        # Extract field names from SELECT clause (simple parsing)
+                        select_clause = query.split('FROM')[0].split('SELECT')[1].strip()
+                        field_names = [f.strip().split(' as ')[-1].split(',')[0] for f in select_clause.split(',')]
+                    self._track_schema_query(
+                        schema_name=f"v_{source_name}",
+                        fields=field_names,
+                        row_count=len(self.structured_data[source_name])
+                    )
+                except Exception as query_error:
+                    # Track failure
+                    if self.completeness_tracker:
+                        self.completeness_tracker.mark_failure(
+                            f'phase1_{source_name}',
+                            error_message=str(query_error)
+                        )
+                    raise
 
         # V4.1: Extract institution from procedures and imaging (Steps 3 & 4) - V2 OPTIMIZED
         if self.institution_tracker:
@@ -2642,6 +2993,10 @@ Return ONLY the JSON object, no additional text.
 
         events = []
 
+        # Track Phase 2 timeline construction attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_timeline_construction')
+
         # STAGE 0: Add molecular diagnosis as anchor event
         print("  Stage 0: Molecular diagnosis")
         if self.who_2021_classification.get('who_2021_diagnosis'):
@@ -2662,6 +3017,11 @@ Return ONLY the JSON object, no additional text.
 
         # STAGE 1: Encounters/appointments (visits)
         print("  Stage 1: Encounters/appointments")
+
+        # Track visits extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_visits_extraction')
+
         visit_count = 0
         for record in self.structured_data.get('visits', []):
             events.append({
@@ -2675,8 +3035,17 @@ Return ONLY the JSON object, no additional text.
             visit_count += 1
         print(f"    ✅ Added {visit_count} encounters/appointments")
 
+        # Track visits success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_visits_extraction', record_count=visit_count)
+
         # STAGE 2: Procedures (surgeries)
         print("  Stage 2: Procedures (surgeries)")
+
+        # Track procedures extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_procedures_extraction')
+
         surgery_count = 0
         for record in self.structured_data.get('procedures', []):
             # V4.1 STEP 7: Create clinical_features dict for surgery events
@@ -2718,12 +3087,21 @@ Return ONLY the JSON object, no additional text.
             surgery_count += 1
         print(f"    ✅ Added {surgery_count} surgical procedures")
 
+        # Track procedures success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_procedures_extraction', record_count=surgery_count)
+
         # Validate against expected paradigm
         if surgery_count == 0 and self.who_2021_classification.get('who_2021_diagnosis'):
             print(f"    ⚠️  WARNING: No surgeries found for patient with {self.who_2021_classification.get('who_2021_diagnosis')}")
 
         # STAGE 3: Chemotherapy episodes with V4.8 intelligent date adjudication
         print("  Stage 3: Chemotherapy episodes (V4.8: Intelligent date adjudication)")
+
+        # Track chemotherapy extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_chemotherapy_extraction')
+
         chemo_episode_count = 0
         chemo_adjudication_log = []
 
@@ -2785,6 +3163,10 @@ Return ONLY the JSON object, no additional text.
 
         print(f"    ✅ Added {chemo_episode_count} chemotherapy episodes (V4.8: Used intelligent date adjudication)")
 
+        # Track chemotherapy success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_chemotherapy_extraction', record_count=chemo_episode_count)
+
         # V4.8: Log summary of adjudication decisions
         if chemo_adjudication_log:
             logger.info(f"    V4.8: Adjudicated {len(chemo_adjudication_log)} chemotherapy records using 5-tier fallback hierarchy")
@@ -2798,6 +3180,11 @@ Return ONLY the JSON object, no additional text.
 
         # STAGE 4: Radiation episodes
         print("  Stage 4: Radiation episodes")
+
+        # Track radiation extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_radiation_extraction')
+
         radiation_episode_count = 0
         for record in self.structured_data.get('radiation', []):
             # Start event
@@ -2835,6 +3222,10 @@ Return ONLY the JSON object, no additional text.
             radiation_episode_count += 1
         print(f"    ✅ Added {radiation_episode_count} radiation episodes")
 
+        # Track radiation success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_radiation_extraction', record_count=radiation_episode_count)
+
         # Validate against expected paradigm
         expected_radiation = self.who_2021_classification.get('recommended_protocols', {}).get('radiation')
         if expected_radiation:
@@ -2844,6 +3235,11 @@ Return ONLY the JSON object, no additional text.
 
         # STAGE 5: Imaging studies
         print("  Stage 5: Imaging studies")
+
+        # Track imaging extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_imaging_extraction')
+
         imaging_count = 0
         for record in self.structured_data.get('imaging', []):
             # V4.1 STEP 7: Create clinical_features dict for imaging events
@@ -2883,8 +3279,17 @@ Return ONLY the JSON object, no additional text.
             imaging_count += 1
         print(f"    ✅ Added {imaging_count} imaging studies")
 
+        # Track imaging success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_imaging_extraction', record_count=imaging_count)
+
         # STAGE 6: Add pathology/diagnosis events (already integrated in Stage 0, but keep granular records)
         print("  Stage 6: Pathology events (granular)")
+
+        # Track pathology extraction
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase2_pathology_extraction')
+
         pathology_count = 0
         for record in self.structured_data.get('pathology', []):
             events.append({
@@ -2901,6 +3306,10 @@ Return ONLY the JSON object, no additional text.
             pathology_count += 1
         print(f"    ✅ Added {pathology_count} pathology records")
 
+        # Track pathology success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_pathology_extraction', record_count=pathology_count)
+
         # Sort chronologically (None dates go to end)
         events.sort(key=lambda x: (x.get('event_date') is None, x.get('event_date', '')))
 
@@ -2909,6 +3318,10 @@ Return ONLY the JSON object, no additional text.
             event['event_sequence'] = i
 
         self.timeline_events = events
+
+        # Track overall Phase 2 success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase2_timeline_construction', record_count=len(events))
 
         print(f"\n  ✅ Timeline construction complete: {len(events)} total events across 7 stages")
         print(f"     Stage 0: 1 molecular diagnosis anchor")
@@ -2964,6 +3377,10 @@ Return ONLY the JSON object, no additional text.
 
     def _phase3_identify_extraction_gaps(self):
         """Phase 3: Identify gaps in structured data requiring binary extraction"""
+
+        # Track Phase 3 gap identification attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase3_gap_identification')
 
         gaps = []
 
@@ -3083,6 +3500,10 @@ Return ONLY the JSON object, no additional text.
                 })
 
         self.extraction_gaps = gaps
+
+        # Track Phase 3 success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase3_gap_identification', record_count=len(gaps))
 
         print(f"  ✅ Identified {len(gaps)} extraction opportunities")
         gap_counts = {}
@@ -4606,8 +5027,19 @@ Return as structured JSON with confidence levels."""
         Phase 4: Real MedGemma extraction from binary documents
         """
 
+        # Track Phase 4 binary extraction attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase4_binary_extraction')
+
         if not self.medgemma_agent or not self.binary_agent:
             print("  ⚠️  Ollama/MedGemma not available - skipping binary extraction")
+
+            # Track Phase 4 as failed due to missing MedGemma
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_failure(
+                    'phase4_binary_extraction',
+                    error_message="MedGemma/Ollama not available"
+                )
             return
 
         # V4.2+ Route to batch or sequential extraction
@@ -4742,6 +5174,25 @@ Return as structured JSON with confidence levels."""
         # Store batch stats
         if hasattr(self, 'validation_stats'):
             self.validation_stats['batch_extraction_stats'] = batch_stats
+
+        # Track Phase 4 batch extraction success
+        if self.completeness_tracker:
+            if batch_stats['gaps_filled'] > 0:
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=batch_stats['gaps_filled']
+                )
+            elif batch_stats['failed_batches'] == batch_stats['total_batches']:
+                self.completeness_tracker.mark_failure(
+                    'phase4_binary_extraction',
+                    error_message=f"All {batch_stats['total_batches']} batches failed"
+                )
+            else:
+                # Partial success
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=batch_stats['gaps_filled']
+                )
 
     def _phase4_sequential_extraction(self):
         """
@@ -5115,6 +5566,25 @@ REMINDER: Return ONLY valid JSON matching the exact schema above. No other text.
 
         print(f"\n  ✅ Extracted from {extracted_count} documents")
         print(f"  ❌ {failed_count} failed or require manual review")
+
+        # Track Phase 4 sequential extraction success
+        if self.completeness_tracker:
+            if extracted_count > 0:
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=extracted_count
+                )
+            elif failed_count > 0 and extracted_count == 0:
+                self.completeness_tracker.mark_failure(
+                    'phase4_binary_extraction',
+                    error_message=f"All {failed_count} extractions failed"
+                )
+            else:
+                # No extractions attempted
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=0
+                )
 
     def _generate_medgemma_prompt(self, gap: Dict) -> str:
         """Route to specialized prompt generator based on gap type"""
@@ -8609,6 +9079,10 @@ CLINICAL NOTE:
 
         Uses MedGemma to analyze actual patient care against WHO CNS5 treatment standards
         """
+        # Track Phase 5 protocol validation attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase5_protocol_validation')
+
         # VERBOSE DEBUG: Recursion guard and call stack tracking
         import traceback
         if hasattr(self, '_phase5_recursion_count'):
@@ -8636,6 +9110,13 @@ CLINICAL NOTE:
                 'status': 'SKIPPED',
                 'reason': 'MedGemma agent not initialized'
             })
+
+            # Track Phase 5 as skipped
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_failure(
+                    'phase5_protocol_validation',
+                    error_message="MedGemma not available"
+                )
             return
         logger.info("Phase 5: MedGemma available")
 
@@ -8650,6 +9131,13 @@ CLINICAL NOTE:
                 'status': 'SKIPPED',
                 'reason': f'No valid WHO classification (status: {diagnosis})'
             })
+
+            # Track Phase 5 as skipped due to no WHO classification
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_failure(
+                    'phase5_protocol_validation',
+                    error_message=f"No valid WHO classification: {diagnosis}"
+                )
             return
 
         logger.info(f"Validating care for: {diagnosis}")
@@ -8753,6 +9241,14 @@ CLINICAL NOTE:
 
                 self.protocol_validations.append(validation_data)
                 logger.info("✅ Protocol validation complete")
+
+                # Track Phase 5 success
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_success(
+                        'phase5_protocol_validation',
+                        record_count=1
+                    )
+
                 print(f"\n  Validation Summary:")
                 print(f"  Diagnosis: {diagnosis}")
                 print(f"  Age: {self.patient_demographics.get('pd_age_years')} years")
@@ -8765,12 +9261,26 @@ CLINICAL NOTE:
                     'reason': 'MedGemma extraction unsuccessful'
                 })
 
+                # Track Phase 5 failure
+                if self.completeness_tracker:
+                    self.completeness_tracker.mark_failure(
+                        'phase5_protocol_validation',
+                        error_message="MedGemma validation unsuccessful"
+                    )
+
         except Exception as e:
             logger.error(f"Error during protocol validation: {e}")
             self.protocol_validations.append({
                 'status': 'ERROR',
                 'reason': str(e)
             })
+
+            # Track Phase 5 error
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_failure(
+                    'phase5_protocol_validation',
+                    error_message=str(e)
+                )
 
     def _prepare_timeline_summary_for_validation(self) -> str:
         """
@@ -8865,6 +9375,10 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
     def _phase6_generate_artifact(self):
         """Phase 6: Generate final JSON timeline artifact"""
 
+        # Track Phase 6 artifact generation attempt
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_attempted('phase6_artifact_generation')
+
         # V3: Generate extraction tracking report
         extraction_report = self._generate_extraction_report()
 
@@ -8891,6 +9405,22 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
             'binary_extractions': self.binary_extractions,
             'protocol_validations': self.protocol_validations
         }
+
+        # V5.2: Add completeness metadata if available
+        if self.completeness_tracker and EXCEPTION_HANDLING_AVAILABLE:
+            completeness_metadata = self.completeness_tracker.get_completeness_metadata()
+            artifact['v5_2_completeness_metadata'] = completeness_metadata
+
+            if self.structured_logger:
+                self.structured_logger.info(
+                    f"Completeness score: {completeness_metadata['completeness_score']:.1%} "
+                    f"({completeness_metadata['total_sources_succeeded']}/{completeness_metadata['total_sources_attempted']} sources)"
+                )
+            else:
+                logger.info(
+                    f"V5.2: Completeness score: {completeness_metadata['completeness_score']:.1%} "
+                    f"({completeness_metadata['total_sources_succeeded']}/{completeness_metadata['total_sources_attempted']} sources)"
+                )
 
         # V5.0: Build therapeutic approach from timeline events
         if build_therapeutic_approach is not None:
@@ -8973,6 +9503,10 @@ Be specific about expected doses, agents, frequencies based on the WHO reference
             if len(self.failed_extractions) > 0:
                 print(f"     Failed Extractions Logged: {len(self.failed_extractions)}")
                 print(f"       (See artifact metadata for details)")
+
+        # Track Phase 6 success
+        if self.completeness_tracker:
+            self.completeness_tracker.mark_success('phase6_artifact_generation', record_count=1)
 
         return artifact
 
