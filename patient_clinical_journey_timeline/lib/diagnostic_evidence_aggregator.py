@@ -362,25 +362,34 @@ class DiagnosticEvidenceAggregator:
                 if not report_text:
                     continue
 
-                # Use MedGemma to extract diagnosis mentions
-                extraction_prompt = f"""You are a clinical NLP system. Extract any CNS tumor diagnosis mentions from this radiology report.
+                # V5.3: Use structured prompt wrapper
+                context = ClinicalContext(
+                    patient_id=patient_fhir_id,
+                    phase='PHASE_0_TIER_2B',
+                    evidence_summary=f"Extracting from imaging report dated {record.get('report_date')}"
+                )
 
-RADIOLOGY REPORT:
-{report_text[:2000]}
-
-Return ONLY a JSON object with this structure:
-{{
-    "diagnosis_found": true/false,
-    "diagnosis": "the diagnosis text if found, or null",
-    "confidence": 0.0-1.0
-}}
-
-If no CNS tumor diagnosis is mentioned, set diagnosis_found to false and diagnosis to null."""
+                wrapped_prompt = self.llm_wrapper.wrap_extraction_prompt(
+                    task_description="Extract CNS tumor diagnosis from radiology report impression/findings",
+                    document_text=report_text,
+                    expected_schema=self.llm_wrapper.create_diagnosis_extraction_schema(),
+                    context=context,
+                    max_document_length=4000
+                )
 
                 try:
-                    response = medgemma.query(extraction_prompt, temperature=0.1)
                     import json
-                    extraction = json.loads(response)
+                    response = medgemma.query(wrapped_prompt, temperature=0.1)
+
+                    # V5.3: Validate response
+                    is_valid, extraction, error = self.llm_wrapper.validate_response(
+                        response,
+                        self.llm_wrapper.create_diagnosis_extraction_schema()
+                    )
+
+                    if not is_valid:
+                        logger.debug(f"      Invalid LLM response: {error}")
+                        continue
 
                     if extraction.get('diagnosis_found') and extraction.get('diagnosis'):
                         # Parse date
@@ -398,7 +407,7 @@ If no CNS tumor diagnosis is mentioned, set diagnosis_found to false and diagnos
                             confidence=extraction.get('confidence', 0.70),
                             date=date_obj,
                             raw_data=record,
-                            extraction_method='medgemma'
+                            extraction_method='medgemma_structured'  # V5.3 marker
                         ))
 
                 except Exception as e:
