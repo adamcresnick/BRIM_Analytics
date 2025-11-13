@@ -125,8 +125,10 @@ class DiagnosticEvidenceAggregator:
         # Tier 2B (MedGemma): Clinical reasoning for narrative sources
         logger.info("   [Tier 2B] Extracting from narrative sources (MedGemma)...")
         evidence.extend(self._extract_from_imaging_reports(patient_fhir_id))
-        evidence.extend(self._extract_from_clinical_notes(patient_fhir_id))
-        evidence.extend(self._extract_from_discharge_summaries(patient_fhir_id))
+        # NOTE: _extract_from_clinical_notes() and _extract_from_discharge_summaries()
+        # reference non-existent tables and are disabled pending proper data source identification
+        # evidence.extend(self._extract_from_clinical_notes(patient_fhir_id))  # DISABLED: uses non-existent v_clinical_notes
+        # evidence.extend(self._extract_from_discharge_summaries(patient_fhir_id))  # DISABLED: needs proper v_encounters query
 
         logger.info(f"   → Tier 2B complete: {len(evidence)} total evidence items after narrative extraction")
 
@@ -228,7 +230,7 @@ class DiagnosticEvidenceAggregator:
 
     def _extract_from_problem_lists(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
         """
-        Extract diagnosis from problem/condition lists (v_conditions).
+        Extract diagnosis from problem/condition lists (v_problem_list_diagnoses).
 
         Tier 2A: Keyword-based extraction from coded diagnoses.
 
@@ -245,7 +247,7 @@ class DiagnosticEvidenceAggregator:
             recorded_date,
             clinical_status,
             verification_status
-        FROM v_conditions
+        FROM v_problem_list_diagnoses
         WHERE patient_fhir_id = '{patient_fhir_id}'
           AND condition_display_name IS NOT NULL
           AND condition_display_name != ''
@@ -253,7 +255,7 @@ class DiagnosticEvidenceAggregator:
         """
 
         try:
-            results = self.query_athena(query, "Querying v_conditions for problem list evidence", suppress_output=True)
+            results = self.query_athena(query, "Querying v_problem_list_diagnoses for problem list evidence", suppress_output=True)
 
             if not results:
                 logger.info("      → No problem list diagnosis evidence found")
