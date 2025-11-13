@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Callable, Optional
 from enum import Enum
+from lib.llm_prompt_wrapper import LLMPromptWrapper, ClinicalContext
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,8 @@ class DiagnosticEvidenceAggregator:
                          Returns list of dicts
         """
         self.query_athena = query_athena
-        logger.info("✅ DiagnosticEvidenceAggregator initialized")
+        self.llm_wrapper = LLMPromptWrapper()
+        logger.info("✅ DiagnosticEvidenceAggregator initialized (V5.3 with LLM prompt wrapper)")
 
     def aggregate_all_evidence(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
         """
