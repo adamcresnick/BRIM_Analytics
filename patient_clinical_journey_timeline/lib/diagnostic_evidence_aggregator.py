@@ -325,19 +325,19 @@ class DiagnosticEvidenceAggregator:
         """
         query = f"""
         SELECT DISTINCT
-            report_date,
-            report_type,
-            impression,
-            findings
-        FROM v_imaging_reports
+            study_date as report_date,
+            study_description as report_type,
+            result_information
+        FROM v_imaging
         WHERE patient_fhir_id = '{patient_fhir_id}'
-          AND (impression IS NOT NULL OR findings IS NOT NULL)
-        ORDER BY report_date DESC
+          AND result_information IS NOT NULL
+          AND TRIM(result_information) != ''
+        ORDER BY study_date DESC
         LIMIT 50
         """
 
         try:
-            results = self.query_athena(query, "Querying v_imaging_reports for diagnosis evidence", suppress_output=True)
+            results = self.query_athena(query, "Querying v_imaging for diagnosis evidence", suppress_output=True)
 
             if not results:
                 logger.info("      → No imaging reports found")
@@ -355,9 +355,7 @@ class DiagnosticEvidenceAggregator:
 
             # Process each imaging report
             for record in results:
-                impression = record.get('impression', '')
-                findings = record.get('findings', '')
-                report_text = f"{impression}\n{findings}".strip()
+                report_text = record.get('result_information', '').strip()
 
                 if not report_text:
                     continue
