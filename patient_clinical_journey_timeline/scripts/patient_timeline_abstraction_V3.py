@@ -161,6 +161,26 @@ except ImportError as e:
     QueryResult = None
     ATHENA_PARALLEL_AVAILABLE = False
 
+# V5.4: Import async binary extraction
+try:
+    from lib.async_binary_extraction import AsyncBinaryExtractor, ExtractionPriority
+    ASYNC_EXTRACTION_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import async binary extraction: {e}")
+    AsyncBinaryExtractor = None
+    ExtractionPriority = None
+    ASYNC_EXTRACTION_AVAILABLE = False
+
+# V5.4: Import streaming query executor
+try:
+    from lib.athena_streaming_executor import AthenaStreamingExecutor, generate_column_projection_query
+    STREAMING_EXECUTOR_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import streaming executor: {e}")
+    AthenaStreamingExecutor = None
+    generate_column_projection_query = None
+    STREAMING_EXECUTOR_AVAILABLE = False
+
 # WHO 2021 CLASSIFICATION CACHE PATH
 # Cache file stores all WHO 2021 classifications to avoid expensive re-computation
 WHO_2021_CACHE_PATH = Path(__file__).parent.parent / 'data' / 'who_2021_classification_cache.json'
@@ -660,6 +680,27 @@ class PatientTimelineAbstractor:
             except Exception as e:
                 logger.warning(f"⚠️  Could not initialize Athena parallel executor: {e}")
                 self.athena_parallel_executor = None
+
+        # V5.4: Async binary extractor for Phase 4 optimization
+        # NOTE: Initialized later in run() after WHO classification is loaded (needs clinical context)
+        self.async_extractor = None
+
+        # V5.4: Streaming query executor for memory optimization
+        self.streaming_executor = None
+        if STREAMING_EXECUTOR_AVAILABLE:
+            try:
+                self.streaming_executor = AthenaStreamingExecutor(
+                    aws_profile='radiant-prod',
+                    database='fhir_prd_db',
+                    region='us-east-1'
+                )
+                if self.structured_logger:
+                    self.structured_logger.info("Streaming query executor initialized")
+                else:
+                    logger.info("✅ V5.4: Streaming query executor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize streaming executor: {e}")
+                self.streaming_executor = None
 
         try:
             from orchestration.schema_loader import AthenaSchemaLoader
@@ -1987,6 +2028,29 @@ Return ONLY the JSON object, no additional text.
                 logger.info("✅ V5.0.3: Data fingerprint manager initialized")
             except Exception as e:
                 logger.warning(f"⚠️  V5.0.3: Could not initialize fingerprint manager: {e}")
+
+        # V5.4: Initialize async binary extractor (requires WHO classification for clinical context)
+        if ASYNC_EXTRACTION_AVAILABLE and AGENTS_AVAILABLE and self.medgemma_agent and not self.async_extractor:
+            try:
+                # Create clinical context for shared extraction context
+                clinical_context = {
+                    'patient_diagnosis': self.who_2021_classification.get('who_2021_diagnosis', 'Unknown'),
+                    'known_markers': self.who_2021_classification.get('key_markers', [])
+                }
+
+                self.async_extractor = AsyncBinaryExtractor(
+                    medgemma_agent=self.medgemma_agent,
+                    max_concurrent=3,  # Process 3 documents in parallel
+                    clinical_context=clinical_context,
+                    timeout_seconds=30
+                )
+                if self.structured_logger:
+                    self.structured_logger.info("Async binary extractor initialized (max_concurrent=3)")
+                else:
+                    logger.info("✅ V5.4: Async binary extractor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize async binary extractor: {e}")
+                self.async_extractor = None
 
         # V4.6: PHASE 1.5: Validate schema coverage
         if self.schema_loader:
@@ -5042,8 +5106,11 @@ Return as structured JSON with confidence levels."""
                 )
             return
 
-        # V4.2+ Route to batch or sequential extraction
-        if self.use_batch_extraction:
+        # V5.4: Route to async, batch, or sequential extraction
+        # Priority: async (V5.4) > batch (V4.2+) > sequential (legacy)
+        if self.async_extractor and ASYNC_EXTRACTION_AVAILABLE:
+            return self._phase4_async_extraction()
+        elif self.use_batch_extraction:
             return self._phase4_batch_extraction()
         else:
             return self._phase4_sequential_extraction()
@@ -5192,6 +5259,155 @@ Return as structured JSON with confidence levels."""
                 self.completeness_tracker.mark_success(
                     'phase4_binary_extraction',
                     record_count=batch_stats['gaps_filled']
+                )
+
+    def _phase4_async_extraction(self):
+        """
+        V5.4: Phase 4 async extraction using AsyncBinaryExtractor
+
+        Uses parallel extraction with priority queues for 50-70% time reduction.
+        """
+        print("  ⚡ Using V5.4 ASYNC extraction mode (parallel processing)")
+
+        if not self.async_extractor or not ASYNC_EXTRACTION_AVAILABLE:
+            logger.warning("Async extractor not available, falling back to sequential")
+            return self._phase4_sequential_extraction()
+
+        # Prioritize gaps (HIGHEST → HIGH → MEDIUM)
+        priority_map = {'HIGHEST': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+        prioritized_gaps = sorted(
+            self.extraction_gaps,
+            key=lambda x: priority_map.get(x.get('priority', 'LOW'), 4)
+        )
+
+        # Apply max_extractions limit if set
+        if self.max_extractions:
+            prioritized_gaps = prioritized_gaps[:self.max_extractions]
+            print(f"  ⚠️  Limiting to {self.max_extractions} extraction(s) for testing")
+
+        print(f"  Building {len(prioritized_gaps)} extraction tasks...")
+
+        # Build extraction tasks
+        extraction_tasks = []
+        for gap in prioritized_gaps:
+            # Get document for this gap
+            medgemma_target = gap.get('medgemma_target', '')
+            if not medgemma_target or medgemma_target == 'MISSING_REFERENCE':
+                logger.warning(f"Gap {gap['gap_type']} has no document target, skipping")
+                gap['status'] = 'NO_DOCUMENTS_AVAILABLE'
+                continue
+
+            # Fetch document content
+            try:
+                extracted_text = self._fetch_binary_document(medgemma_target)
+                if not extracted_text:
+                    logger.warning(f"Failed to fetch document for {gap['gap_type']}")
+                    gap['status'] = 'FETCH_FAILED'
+                    continue
+            except Exception as e:
+                logger.warning(f"Error fetching document for {gap['gap_type']}: {e}")
+                gap['status'] = 'FETCH_ERROR'
+                continue
+
+            # Build extraction prompt
+            try:
+                extraction_prompt = self._generate_medgemma_prompt(gap)
+                full_prompt = f"{extraction_prompt}\n\nDOCUMENT TEXT:\n{extracted_text}"
+            except Exception as e:
+                logger.warning(f"Error generating prompt for {gap['gap_type']}: {e}")
+                gap['status'] = 'PROMPT_ERROR'
+                continue
+
+            # Create document object for AsyncBinaryExtractor
+            document = {
+                'binary_id': medgemma_target,
+                'document_type': gap.get('gap_type', 'unknown'),
+                'category': gap.get('category', 'unknown'),
+                'content': extracted_text
+            }
+
+            # Create async extraction task
+            task = self.async_extractor.create_task(
+                gap=gap,
+                document=document,
+                extraction_prompt=full_prompt,
+                priority=None  # Auto-determine priority
+            )
+            extraction_tasks.append(task)
+
+        if not extraction_tasks:
+            print("  ⚠️  No valid extraction tasks created")
+            return
+
+        print(f"  📊 Created {len(extraction_tasks)} extraction tasks")
+        print(f"  🚀 Executing in parallel (max_concurrent=3)...")
+
+        # Execute batch async with progress callback
+        extraction_results = self.async_extractor.extract_batch_async(
+            extraction_tasks,
+            progress_callback=lambda completed, total: print(f"    Progress: {completed}/{total} tasks completed")
+        )
+
+        # Process results and integrate into timeline
+        extracted_count = 0
+        failed_count = 0
+
+        for result in extraction_results:
+            gap_type = result.task.gap_type
+            gap_id = result.task.gap_id
+
+            # Find the original gap
+            gap = next((g for g in prioritized_gaps if g.get('gap_type') == gap_type), None)
+            if not gap:
+                logger.warning(f"Could not find gap for result: {gap_type}")
+                continue
+
+            if result.success and result.extracted_data:
+                # Integrate extraction into timeline
+                try:
+                    self._integrate_extraction_into_timeline(gap, result.extracted_data)
+                    gap['status'] = 'RESOLVED'
+                    gap['extraction_result'] = result.extracted_data
+                    gap['extraction_source'] = 'async'
+                    extracted_count += 1
+                    print(f"    ✅ {gap_type} extracted successfully")
+                except Exception as e:
+                    logger.warning(f"Failed to integrate {gap_type}: {e}")
+                    gap['status'] = 'INTEGRATION_FAILED'
+                    failed_count += 1
+            else:
+                gap['status'] = 'EXTRACTION_FAILED'
+                gap['error_message'] = result.error_message
+                failed_count += 1
+                print(f"    ❌ {gap_type} extraction failed: {result.error_message}")
+
+        # Log statistics
+        stats = self.async_extractor.get_statistics()
+        print(f"\n  📊 V5.4 Async Extraction Summary:")
+        print(f"    Total tasks: {stats['total_tasks']}")
+        print(f"    Successful: {stats['completed_tasks']} ({stats['success_rate']*100:.1f}%)")
+        print(f"    Failed: {stats['failed_tasks']}")
+        print(f"    Average time: {stats['average_execution_time_seconds']:.2f}s per task")
+        print(f"    Total time: {stats['total_execution_time_seconds']:.2f}s")
+        print(f"    Concurrency: {self.async_extractor.max_concurrent}x parallel")
+
+        # Track Phase 4 async extraction success
+        if self.completeness_tracker:
+            if extracted_count > 0:
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=extracted_count
+                )
+            elif failed_count == len(extraction_tasks):
+                self.completeness_tracker.mark_failure(
+                    'phase4_binary_extraction',
+                    error_message=f"All {failed_count} extractions failed"
+                )
+            else:
+                # Partial success
+                self.completeness_tracker.mark_success(
+                    'phase4_binary_extraction',
+                    record_count=extracted_count
                 )
 
     def _phase4_sequential_extraction(self):

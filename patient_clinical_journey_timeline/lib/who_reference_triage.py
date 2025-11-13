@@ -42,6 +42,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# V5.4: Import LLM output validator
+try:
+    from lib.llm_output_validator import LLMOutputValidator
+    VALIDATOR_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Could not import LLM output validator: {e}")
+    LLMOutputValidator = None
+    VALIDATOR_AVAILABLE = False
+
 
 class WHOReferenceTriage:
     """
@@ -73,6 +82,16 @@ class WHOReferenceTriage:
         self.reference_path = Path(reference_path)
         if not self.reference_path.exists():
             logger.error(f"WHO reference not found: {reference_path}")
+
+        # V5.4: Initialize LLM output validator
+        self.llm_validator = None
+        if VALIDATOR_AVAILABLE:
+            try:
+                self.llm_validator = LLMOutputValidator()
+                logger.info("✅ V5.4: LLM output validator initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not initialize LLM output validator: {e}")
+                self.llm_validator = None
 
     def identify_relevant_section(self, stage1_findings: Dict) -> str:
         """
@@ -213,7 +232,59 @@ class WHOReferenceTriage:
         if validation['conflicts_detected']:
             logger.warning(f"  ⚠️  Tier 2C detected conflict: {validation['reason']}")
             logger.info(f"  → Tier 2C: Correcting to '{validation['corrected_section']}' (confidence: {validation['confidence']:.2f})")
-            return validation['corrected_section']
+            section_to_validate = validation['corrected_section']
+
+        # V5.4: Biological coherence validation (post Tier 2C)
+        # This is a final sanity check that raises issues to Claude agent for review
+        if self.llm_validator and VALIDATOR_AVAILABLE:
+            # Extract molecular markers for validation
+            markers = stage1_findings.get('molecular_markers', [])
+            marker_names = [m.get('marker_name', '') for m in markers]
+
+            # Get diagnosis text for context
+            problem_diagnoses = stage1_findings.get('problem_list_diagnoses', [])
+            diagnosis_text = ', '.join([p.get('diagnosis', '') for p in problem_diagnoses]) if problem_diagnoses else ''
+
+            # Map section name to section number (for validator)
+            section_name_to_number = {
+                'adult_diffuse_gliomas': 2,  # Sections 2-4 are adult gliomas
+                'pediatric_diffuse_gliomas': 9,  # Sections 9, 12 are pediatric
+                'ependymomas': 13,
+                'embryonal_tumors': 10,
+                'other_gliomas': 11,
+                'meningiomas': 14,
+                'other_tumors': 15
+            }
+
+            recommended_section_number = section_name_to_number.get(section_to_validate, 0)
+
+            if recommended_section_number > 0:
+                logger.info(f"  🔍 V5.4: Validating WHO section {section_to_validate} biological coherence...")
+
+                validation_result = self.llm_validator.validate_who_section_coherence(
+                    recommended_section=recommended_section_number,
+                    molecular_markers=marker_names,
+                    diagnosis_text=diagnosis_text
+                )
+
+                if not validation_result.is_coherent:
+                    # Raise issue to Claude agent (via logging, no auto-override)
+                    issue = validation_result.issue
+                    formatted_issue = self.llm_validator.format_coherence_issue_for_agent(issue)
+
+                    logger.warning("="*80)
+                    logger.warning("V5.4: WHO SECTION COHERENCE ISSUE DETECTED")
+                    logger.warning("="*80)
+                    logger.warning(formatted_issue)
+                    logger.warning("="*80)
+
+                    # Log decision point for Claude agent (but don't override Tier 2C)
+                    logger.info(f"  ℹ️  Claude agent: Tier 2C selected '{section_to_validate}', "
+                               f"but V5.4 validator suggests biological review")
+                    logger.info(f"      Validator confidence: {issue.confidence:.0%}")
+                    logger.info(f"      Continuing with Tier 2C decision ('{section_to_validate}')")
+                else:
+                    logger.info(f"  ✅ V5.4: WHO Section {section_to_validate} is biologically coherent with markers")
 
         # Return validated section
         return section_to_validate
