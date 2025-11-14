@@ -936,24 +936,22 @@ class PatientTimelineAbstractor:
 
     def _generate_who_classification(self) -> Dict[str, Any]:
         """
-        Generate WHO 2021 classification using TWO-STAGE MedGemma workflow:
+        V5.6: Generate WHO 2021 classification through nomenclature standardization.
 
-        STAGE 1: Extract molecular findings and diagnoses from structured data
-          - Simple extraction task: pull molecular markers, histology, problem list diagnoses
-          - Focus on: genomics results, IHC markers, pathology free-text diagnoses
-          - Output: Structured list of findings
+        NEW ARCHITECTURE (Phase 0 Redesign):
+        This is NOT tumor classification - it's translating historical pathologist
+        diagnoses to WHO 2021 terminology when needed.
 
-        STAGE 2: Map extracted findings to WHO 2021 classification
-          - Focused mapping task: apply WHO CNS5 criteria to extracted findings
-          - Use WHO reference for diagnostic logic
-          - Output: WHO 2021 diagnosis
-
-        This two-stage approach is more effective than single 45K char prompt.
+        Flow:
+          Phase 0.1: Aggregate diagnostic evidence from all sources (ALREADY EXISTS)
+          Phase 0.2: Extract primary diagnosis verbatim from most authoritative source
+          Phase 0.3: Assess WHO 2021 alignment and translate if needed (reasoning-based)
+          Phase 0.4: Review consistency across sources and flag concerns
 
         Returns:
             Dict with WHO 2021 classification fields
         """
-        logger.info(f"Generating WHO 2021 classification for {self.athena_patient_id}")
+        logger.info(f"V5.6: Generating WHO 2021 classification for {self.athena_patient_id}")
 
         # Check if MedGemma agent is available
         if not self.medgemma_agent:
@@ -1104,8 +1102,8 @@ class PatientTimelineAbstractor:
 
             from lib.diagnostic_evidence_aggregator import DiagnosticEvidenceAggregator
 
-            # Initialize aggregator with query_athena function
-            evidence_aggregator = DiagnosticEvidenceAggregator(query_athena)
+            # V5.6: Initialize aggregator with query_athena function AND medgemma_agent
+            evidence_aggregator = DiagnosticEvidenceAggregator(query_athena, self.medgemma_agent)
 
             # Collect evidence from all sources
             all_diagnostic_evidence = evidence_aggregator.aggregate_all_evidence(self.athena_patient_id)
@@ -1131,171 +1129,232 @@ class PatientTimelineAbstractor:
                     logger.info(f"      Consensus diagnosis: {consensus}")
 
             # ========================================================================
-            # STAGE 1: EXTRACT MOLECULAR FINDINGS AND DIAGNOSES
+            # V5.6 TIER 2: BINARY PATHOLOGY FALLBACK (if Tier 1 insufficient)
             # ========================================================================
-            logger.info("   [Stage 1] Extracting molecular findings and diagnoses...")
+            # If Phase 0.1 found <2 evidence items or low confidence, query v_binary_files
+            # for actual pathology PDFs and extract with MedGemma
+            tier2_triggered = False
+            if len(all_diagnostic_evidence) < 2:
+                logger.warning(f"   ⚠️  Phase 0.1 found only {len(all_diagnostic_evidence)} evidence items")
+                logger.info("   [Tier 2] Attempting binary pathology document enhancement...")
+                tier2_triggered = True
+            elif all_diagnostic_evidence:
+                highest = evidence_aggregator.get_highest_authority_diagnosis(all_diagnostic_evidence)
+                if highest and highest.confidence < 0.75:
+                    logger.warning(f"   ⚠️  Highest confidence only {highest.confidence:.2f}")
+                    logger.info("   [Tier 2] Attempting binary pathology document enhancement...")
+                    tier2_triggered = True
 
-            # Track Stage 1 attempt
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_attempted('phase0_stage1_extract_findings')
+            if tier2_triggered:
+                # Call existing _enhance_classification_with_binary_pathology() method
+                # This queries v_binary_files for pathology PDFs and extracts with MedGemma
+                try:
+                    # Create structured data summary from Phase 0.1 evidence
+                    structured_summary_lines = []
+                    for idx, evidence in enumerate(all_diagnostic_evidence[:10], 1):
+                        structured_summary_lines.append(
+                            f"{idx}. {evidence.diagnosis} "
+                            f"(source: {evidence.source.name}, confidence: {evidence.confidence:.2f}, "
+                            f"date: {evidence.date.strftime('%Y-%m-%d') if evidence.date else 'unknown'})"
+                        )
+                    structured_data_summary = "\n".join(structured_summary_lines) if structured_summary_lines else "No structured evidence found"
 
-            extracted_findings = self._stage1_extract_findings(pathology_data)
-
-            # Enrich Stage 1 findings with Phase 0.1 evidence
-            if all_diagnostic_evidence:
-                extracted_findings['diagnostic_evidence'] = [
-                    {
-                        'diagnosis': ev.diagnosis,
-                        'source': ev.source.name,
-                        'confidence': ev.confidence,
-                        'date': ev.date.strftime('%Y-%m-%d') if ev.date else None,
-                        'extraction_method': ev.extraction_method
+                    # Tier 1 classification placeholder (will be enhanced by Tier 2)
+                    tier1_classification = {
+                        "who_2021_diagnosis": highest_authority.diagnosis if all_diagnostic_evidence and highest_authority else "Unknown",
+                        "confidence": highest_authority.confidence if all_diagnostic_evidence and highest_authority else 0.0,
+                        "source": "phase_0_1_tier_1"
                     }
-                    for ev in all_diagnostic_evidence
-                ]
-                logger.info(f"      Enriched Stage 1 findings with {len(all_diagnostic_evidence)} evidence items")
 
-            if not extracted_findings or extracted_findings.get('extraction_status') == 'failed':
-                logger.warning("   ⚠️  Stage 1 extraction failed, cannot proceed to Stage 2")
-
-                # Track Stage 1 failure
-                if self.completeness_tracker:
-                    self.completeness_tracker.mark_failure(
-                        'phase0_stage1_extract_findings',
-                        error_message="Stage 1 extraction failed or returned no findings"
+                    # Attempt binary pathology enhancement
+                    binary_enhanced_classification = self._enhance_classification_with_binary_pathology(
+                        tier1_classification=tier1_classification,
+                        structured_data_summary=structured_data_summary
                     )
 
-                return {
-                    "who_2021_diagnosis": "Classification failed: No findings extracted",
-                    "molecular_subtype": "Unknown",
-                    "grade": None,
-                    "key_markers": "Extraction failed",
-                    "clinical_significance": "Could not extract findings from pathology data",
-                    "expected_prognosis": "Cannot determine",
-                    "recommended_protocols": {
-                        "radiation": "Cannot determine",
-                        "chemotherapy": "Cannot determine",
-                        "surveillance": "Cannot determine"
-                    },
-                    "classification_date": datetime.now().strftime('%Y-%m-%d'),
-                    "classification_method": "failed_stage1_extraction",
-                    "confidence": "insufficient"
-                }
+                    if binary_enhanced_classification:
+                        logger.info("   ✅ Tier 2 binary pathology enhancement succeeded")
+                        # Update pathology_data with binary-derived diagnosis for Phase 0.2+
+                        pathology_data.append({
+                            'diagnostic_name': binary_enhanced_classification.get('who_2021_diagnosis', 'Unknown'),
+                            'diagnostic_category': 'Binary_Pathology_Enhancement',
+                            'diagnostic_source': 'v_binary_files',
+                            'result_value': f"Tier 2 enhanced diagnosis: {binary_enhanced_classification.get('reasoning', 'See binary extraction')}",
+                            'diagnostic_date': None,
+                            'tier2_enhanced': True
+                        })
+                    else:
+                        logger.warning("   ⚠️  Tier 2 binary pathology enhancement found no additional documents")
+                except Exception as e:
+                    logger.error(f"   ❌ Tier 2 binary pathology enhancement failed: {e}")
 
-            logger.info(f"   ✅ Stage 1 complete: Extracted {len(extracted_findings.get('molecular_markers', []))} molecular markers, "
-                       f"{len(extracted_findings.get('histology_findings', []))} histology findings, "
-                       f"{len(extracted_findings.get('problem_list_diagnoses', []))} problem list diagnoses")
+            # ========================================================================
+            # PHASE 0.2: EXTRACT PRIMARY DIAGNOSIS FROM MULTI-SOURCE EVIDENCE
+            # ========================================================================
+            from lib.phase0_diagnosis_extractor import DiagnosisExtractor
 
-            # Track Stage 1 success
+            diagnosis_extractor = DiagnosisExtractor(self.medgemma_agent)
+
+            # Track Phase 0.2 attempt
             if self.completeness_tracker:
-                total_findings = (len(extracted_findings.get('molecular_markers', [])) +
-                                len(extracted_findings.get('histology_findings', [])) +
-                                len(extracted_findings.get('problem_list_diagnoses', [])))
-                self.completeness_tracker.mark_success(
-                    'phase0_stage1_extract_findings',
-                    record_count=total_findings
-                )
+                self.completeness_tracker.mark_attempted('phase0_2_primary_diagnosis_extraction')
 
-            # ========================================================================
-            # STAGE 2: MAP FINDINGS TO WHO 2021 CLASSIFICATION
-            # ========================================================================
-            logger.info("   [Stage 2] Mapping findings to WHO 2021 classification...")
-
-            # Track Stage 2 attempt
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_attempted('phase0_stage2_who_classification')
-
-            classification = self._stage2_map_to_who2021(extracted_findings)
-
-            if not classification or classification.get('confidence') == 'insufficient':
-                logger.warning("   ⚠️  Stage 2 mapping resulted in insufficient confidence")
-
-                # Track Stage 2 as having low confidence (not a failure, but note it)
-                if self.completeness_tracker:
-                    self.completeness_tracker.mark_success(
-                        'phase0_stage2_who_classification',
-                        record_count=1
-                    )
-            else:
-                # Track Stage 2 success
-                if self.completeness_tracker:
-                    self.completeness_tracker.mark_success(
-                        'phase0_stage2_who_classification',
-                        record_count=1
-                    )
-
-            result_preview = classification.get('who_2021_diagnosis', 'Unknown')[:100]
-            logger.info(f"   ✅ Stage 2 complete: {result_preview}")
-
-            # ========================================================================
-            # STAGE 3: VALIDATE DIAGNOSIS (BIOLOGICAL PLAUSIBILITY)
-            # ========================================================================
-            logger.info("   [Stage 3] Validating diagnosis against biological plausibility...")
-
-            from lib.diagnosis_validator import DiagnosisValidator
-            validator = DiagnosisValidator()
-
-            # Validate classification against molecular markers and problem list
-            validated_classification = validator.validate_diagnosis(
-                who_classification=classification,
-                stage1_findings=extracted_findings
+            primary_diagnosis = diagnosis_extractor.extract_primary_diagnosis(
+                diagnostic_evidence=all_diagnostic_evidence,
+                pathology_data=pathology_data
             )
 
-            # Log validation results
-            validation = validated_classification.get('validation', {})
-            if not validation.get('is_valid', True):
-                logger.error(f"   ❌ Stage 3 FAILED: Diagnosis is biologically implausible!")
-                logger.error(f"      Violations: {len(validation.get('violations', []))}")
-            else:
-                logger.info(f"   ✅ Stage 3 complete: Diagnosis is biologically plausible")
-
-            if validation.get('warnings'):
-                logger.warning(f"   ⚠️  Stage 3 warnings: {len(validation.get('warnings', []))}")
-
-            if validation.get('conflicts'):
-                logger.warning(f"   ⚠️  Stage 3 conflicts: {len(validation.get('conflicts', []))}")
-
-            # Use validated classification (contains adjusted confidence and validation metadata)
-            classification = validated_classification
-
-            # Add metadata
-            classification["classification_date"] = datetime.now().strftime('%Y-%m-%d')
-            classification["classification_method"] = "medgemma_three_stage_validated"
-            classification["stage1_findings"] = extracted_findings  # Store for audit trail
-
-            # Convert confidence to string and lowercase (can be float from validation)
-            confidence_raw = classification.get('confidence', 'unknown')
-
-            # Handle numeric confidence (from validation) - convert low values to 'low'
-            if isinstance(confidence_raw, (int, float)):
-                if confidence_raw <= 0.3:
-                    confidence = 'low'
-                elif confidence_raw <= 0.6:
-                    confidence = 'moderate'
-                else:
-                    confidence = 'high'
-            else:
-                confidence = str(confidence_raw).lower() if confidence_raw is not None else 'unknown'
-
-            logger.info(f"   Three-stage classification confidence: {confidence} (raw: {confidence_raw})")
-
-            # Tier 2: If confidence is low/insufficient, try binary pathology documents
-            if confidence in ['low', 'insufficient', 'unknown']:
-                logger.info(f"   ⚠️  Tier 1 confidence {confidence}, attempting Tier 2 (binary pathology fallback)...")
-
-                # Format findings for binary enhancement
-                findings_summary = json.dumps(extracted_findings, indent=2)
-
-                enhanced_classification = self._enhance_classification_with_binary_pathology(
-                    classification,
-                    findings_summary
+            # Track Phase 0.2 success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_2_primary_diagnosis_extraction',
+                    record_count=1
                 )
 
-                if enhanced_classification:
-                    logger.info(f"   ✅ Generated WHO classification (Tier 2): {enhanced_classification.get('who_2021_diagnosis', 'Unknown')}")
-                    return enhanced_classification
-                else:
-                    logger.info(f"   ℹ️  Tier 2 did not improve confidence, using Tier 1 result")
+            logger.info(f"   ✅ Phase 0.2 complete: Primary diagnosis extracted")
+
+            # ========================================================================
+            # PHASE 0.3: WHO 2021 ALIGNMENT ASSESSMENT & TRANSLATION
+            # ========================================================================
+            from lib.phase0_who_translator import WHO2021Translator
+
+            who_translator = WHO2021Translator(
+                medgemma_agent=self.medgemma_agent,
+                who_reference_path=WHO_2021_REFERENCE_PATH
+            )
+
+            # Track Phase 0.3 attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_3_who_translation')
+
+            who_translation = who_translator.assess_and_translate(primary_diagnosis)
+
+            # Track Phase 0.3 success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_3_who_translation',
+                    record_count=1
+                )
+
+            logger.info(f"   ✅ Phase 0.3 complete: WHO 2021 assessment and translation")
+
+            # ========================================================================
+            # PHASE 0.4: MULTI-SOURCE CONSISTENCY REVIEW & FLAGGING
+            # ========================================================================
+            from lib.phase0_consistency_reviewer import ConsistencyReviewer
+
+            consistency_reviewer = ConsistencyReviewer(self.medgemma_agent)
+
+            # Track Phase 0.4 attempt
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_attempted('phase0_4_consistency_review')
+
+            # Get patient age if available for plausibility checks
+            patient_age = getattr(self, 'patient_age', None)
+
+            consistency_review = consistency_reviewer.review_consistency(
+                primary_diagnosis=primary_diagnosis,
+                who_translation=who_translation,
+                diagnostic_evidence=all_diagnostic_evidence,
+                patient_age=patient_age
+            )
+
+            # Track Phase 0.4 success
+            if self.completeness_tracker:
+                self.completeness_tracker.mark_success(
+                    'phase0_4_consistency_review',
+                    record_count=len(consistency_review.get('flags_for_review', []))
+                )
+
+            logger.info(f"   ✅ Phase 0.4 complete: Consistency review")
+
+            # ========================================================================
+            # ASSEMBLE FINAL WHO 2021 CLASSIFICATION
+            # ========================================================================
+            # V5.6: Build diagnosis_timeline from Phase 0.2 temporal events
+            diagnosis_timeline = []
+
+            # Add primary initial diagnosis
+            primary_dx_date = primary_diagnosis.get('primary_diagnosis_date')
+            diagnosis_timeline.append({
+                "event_type": "primary_initial_diagnosis",
+                "diagnosis": who_translation.get('who_2021_diagnosis', 'Unknown'),
+                "date": primary_dx_date,
+                "source": primary_diagnosis.get('primary_diagnosis_source', 'unknown'),
+                "is_primary": True
+            })
+
+            # Add temporal diagnostic events (if any)
+            temporal_events = primary_diagnosis.get('temporal_diagnostic_events', [])
+            for event in temporal_events:
+                diagnosis_timeline.append({
+                    "event_type": event.get('event_type', 'unknown'),
+                    "diagnosis": event.get('diagnosis', 'Unknown'),
+                    "date": event.get('date'),
+                    "source": event.get('source', 'unknown'),
+                    "relationship_to_primary": event.get('relationship_to_primary', ''),
+                    "is_primary": False
+                })
+
+            classification = {
+                # Core WHO 2021 diagnosis
+                "who_2021_diagnosis": who_translation.get('who_2021_diagnosis', 'Unknown'),
+                "molecular_subtype": who_translation.get('molecular_subtype'),
+                "grade": who_translation.get('grade'),
+                "key_markers": who_translation.get('key_markers', 'None documented'),
+
+                # Clinical information (from WHO translation)
+                "clinical_significance": who_translation.get('clinical_significance', 'WHO 2021 classification'),
+
+                # V5.6: Diagnosis timeline (primary + temporal events)
+                "diagnosis_timeline": diagnosis_timeline,
+                "temporal_diagnostic_events_detected": primary_diagnosis.get('temporal_diagnostic_events_detected', False),
+                "temporal_changes_noted": consistency_review.get('temporal_changes_noted', False),
+
+                # V5.6: These fields maintained for compatibility with downstream code
+                # They are not part of WHO classification and should be populated elsewhere in pipeline
+                "expected_prognosis": "To be determined",
+                "recommended_protocols": {
+                    "radiation": "To be determined",
+                    "chemotherapy": "To be determined",
+                    "surveillance": "To be determined"
+                },
+
+                # V5.6 Metadata
+                "classification_date": datetime.now().strftime('%Y-%m-%d'),
+                "classification_method": "v5_6_phase0_redesign",
+                "confidence": consistency_review.get('confidence_assessment', {}).get('final_confidence', 'unknown'),
+
+                # V5.6 Audit trail - store all phase outputs
+                "phase0_audit_trail": {
+                    "phase0_1_diagnostic_evidence": {
+                        "evidence_count": len(all_diagnostic_evidence),
+                        "highest_authority": evidence_aggregator.get_highest_authority_diagnosis(all_diagnostic_evidence).diagnosis if all_diagnostic_evidence else None
+                    },
+                    "phase0_2_primary_diagnosis": primary_diagnosis,
+                    "phase0_3_who_translation": who_translation,
+                    "phase0_4_consistency_review": consistency_review
+                }
+            }
+
+            logger.info(f"   ✅ V5.6 Phase 0 complete: {classification['who_2021_diagnosis']}")
+            logger.info(f"      Confidence: {classification['confidence']}")
+            logger.info(f"      Temporal events detected: {classification['temporal_diagnostic_events_detected']}")
+            logger.info(f"      Diagnosis timeline events: {len(diagnosis_timeline)}")
+            logger.info(f"      Review recommendation: {consistency_review.get('review_recommendation', 'unknown')}")
+
+            # Log diagnosis timeline
+            if len(diagnosis_timeline) > 1:
+                logger.info(f"      Diagnosis Timeline:")
+                for idx, event in enumerate(diagnosis_timeline, 1):
+                    logger.info(f"        {idx}. [{event['event_type']}] {event['diagnosis']} ({event.get('date', 'unknown date')})")
+
+            # Log any flags
+            flags = consistency_review.get('flags_for_review', [])
+            if flags:
+                logger.warning(f"      ⚠️  {len(flags)} review flags raised:")
+                for flag in flags:
+                    logger.warning(f"        [{flag.get('severity', 'unknown').upper()}] {flag.get('flag_type', 'unknown')}")
 
             return classification
 
@@ -1741,12 +1800,13 @@ Return this JSON structure:
                 binary_text = self._extract_text_from_binary_document(binary_id, content_type)
 
                 if binary_text:
+                    # V5.6: NO TRUNCATION - let LLMPromptWrapper handle long documents via summarization
                     extracted_texts.append({
                         'source': dr_type,
                         'content_type': content_type,
-                        'text': binary_text[:5000]  # Limit to 5000 chars per document
+                        'text': binary_text  # V5.6: Full text, no truncation
                     })
-                    logger.info(f"      [Tier 2]    ✅ Extracted {len(binary_text)} characters")
+                    logger.info(f"      [Tier 2]    ✅ Extracted {len(binary_text)} characters (will auto-summarize if >15,000)")
                 else:
                     logger.info(f"      [Tier 2]    ⚠️  No text extracted")
 

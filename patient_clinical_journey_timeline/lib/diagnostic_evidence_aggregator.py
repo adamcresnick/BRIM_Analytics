@@ -1,29 +1,21 @@
 #!/usr/bin/env python3
 """
-Diagnostic Evidence Aggregator - Phase 0.1
+Diagnostic Evidence Aggregator - Phase 0.1 - V5.6
 
-Aggregates diagnosis mentions from ALL clinical sources across the care journey.
-Part of the Diagnostic Reasoning Infrastructure Sprint.
-
-This module implements multi-source diagnostic evidence collection with:
-  - 3-tier reasoning cascade (Keywords → MedGemma → Investigation Engine)
-  - Clinical authority ranking (pathology > molecular > problem lists > notes)
-  - Evidence quality assessment and confidence scoring
-
-Usage:
-    from lib.diagnostic_evidence_aggregator import DiagnosticEvidenceAggregator, DiagnosisEvidence
-
-    aggregator = DiagnosticEvidenceAggregator(query_athena_func)
-    evidence_list = aggregator.aggregate_all_evidence(patient_fhir_id)
-
-    for evidence in evidence_list:
-        print(f"{evidence.source}: {evidence.diagnosis} (confidence: {evidence.confidence})")
+V5.6 CHANGES:
+- Removed disabled v_clinical_notes and v_encounters methods
+- Removed Tier 2C (Investigation Engine fallback)
+- Changed pathology extraction to MedGemma reasoning (not keywords)
+- Changed problem list extraction to MedGemma reasoning (not keywords)
+- Removed genomics-only filter from v_pathology_diagnostics
+- Added MedGemma agent parameter to __init__()
+- Tier 2 binary pathology enhancement integrated at Phase 0 level
 """
 
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Dict, Callable, Optional
+from typing import List, Dict, Callable, Optional, Any
 from enum import Enum
 from lib.llm_prompt_wrapper import LLMPromptWrapper, ClinicalContext
 
@@ -40,11 +32,11 @@ class EvidenceSource(Enum):
     MOLECULAR_TESTING = 2        # Molecular confirmation
     PROBLEM_LIST = 3             # Coded diagnoses
     IMAGING_REPORTS = 4          # Radiological impressions
-    ONCOLOGY_NOTES = 5           # Specialist documentation
-    RADIATION_ONCOLOGY = 6       # Treatment planning
-    DISCHARGE_SUMMARIES = 7      # Admission/discharge diagnoses
-    PROGRESS_NOTES = 8           # Ongoing references
-    TREATMENT_PROTOCOLS = 9      # Protocol requirements
+    ONCOLOGY_NOTES = 5           # Specialist documentation (not queried in V5.6)
+    RADIATION_ONCOLOGY = 6       # Treatment planning (not queried in V5.6)
+    DISCHARGE_SUMMARIES = 7      # Admission/discharge diagnoses (not queried in V5.6)
+    PROGRESS_NOTES = 8           # Ongoing references (not queried in V5.6)
+    TREATMENT_PROTOCOLS = 9      # Protocol requirements (not queried in V5.6)
 
 
 @dataclass
@@ -65,7 +57,7 @@ class DiagnosisEvidence:
     confidence: float
     date: Optional[datetime]
     raw_data: Dict
-    extraction_method: str  # 'keyword', 'medgemma', 'investigation_engine'
+    extraction_method: str  # 'keyword_fallback', 'medgemma_reasoning', 'medgemma_structured'
 
     def __post_init__(self):
         """Validate confidence is in range 0-1."""
@@ -77,30 +69,38 @@ class DiagnosticEvidenceAggregator:
     """
     Aggregates diagnosis evidence from multiple sources across care journey.
 
-    Implements 3-tier reasoning:
-    - Tier 2A (Keywords): Fast extraction from structured sources
-    - Tier 2B (MedGemma): Clinical reasoning for narrative sources
-    - Tier 2C (Investigation Engine): Alternative sources if gaps found
+    V5.6 Architecture:
+    - Tier 1 (Structured + Narrative MedGemma): Pathology (all types), problem lists, imaging
+    - Tier 2 (Binary Pathology): Fallback to v_binary_files if Tier 1 insufficient (handled at Phase 0 level)
 
     Attributes:
         query_athena: Function to query Athena database
+        medgemma_agent: MedGemma agent for reasoning-based extraction
     """
 
-    def __init__(self, query_athena: Callable):
+    def __init__(self, query_athena: Callable, medgemma_agent: Optional[Any] = None):
         """
-        Initialize aggregator with Athena query function.
+        Initialize aggregator with Athena query function and optional MedGemma agent.
 
         Args:
             query_athena: Function with signature query_athena(query_string, description)
                          Returns list of dicts
+            medgemma_agent: Optional MedGemma agent for reasoning-based extraction
         """
         self.query_athena = query_athena
-        self.llm_wrapper = LLMPromptWrapper()
-        logger.info("✅ DiagnosticEvidenceAggregator initialized (V5.3 with LLM prompt wrapper)")
+        self.medgemma_agent = medgemma_agent
+        self.llm_wrapper = LLMPromptWrapper(medgemma_agent=medgemma_agent)  # V5.6: Pass medgemma for summarization
+
+        if medgemma_agent:
+            logger.info("✅ DiagnosticEvidenceAggregator initialized (V5.6 with MedGemma reasoning)")
+        else:
+            logger.info("✅ DiagnosticEvidenceAggregator initialized (V5.6, MedGemma unavailable - will use keyword extraction)")
 
     def aggregate_all_evidence(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
         """
         Collect ALL diagnosis mentions across entire care journey.
+
+        V5.6: Uses MedGemma reasoning for ALL extractions (pathology, problem lists, imaging).
 
         Args:
             patient_fhir_id: Patient FHIR ID
@@ -109,35 +109,19 @@ class DiagnosticEvidenceAggregator:
             List of DiagnosisEvidence objects sorted by clinical authority (highest first)
         """
         logger.info("="*80)
-        logger.info("PHASE 0.1: MULTI-SOURCE DIAGNOSTIC EVIDENCE AGGREGATION")
+        logger.info("PHASE 0.1: MULTI-SOURCE DIAGNOSTIC EVIDENCE AGGREGATION (V5.6)")
         logger.info("="*80)
         logger.info(f"   Patient: {patient_fhir_id}")
 
         evidence = []
 
-        # Tier 2A (Keywords): Fast extraction from structured sources
-        logger.info("   [Tier 2A] Extracting from structured sources (keyword-based)...")
-        evidence.extend(self._extract_from_pathology(patient_fhir_id))
-        evidence.extend(self._extract_from_problem_lists(patient_fhir_id))
+        # Tier 1: MedGemma reasoning-based extraction from all sources
+        logger.info("   [Tier 1] Extracting with MedGemma reasoning...")
+        evidence.extend(self._extract_from_pathology(patient_fhir_id))  # V5.6: NOW uses MedGemma
+        evidence.extend(self._extract_from_problem_lists(patient_fhir_id))  # V5.6: NOW uses MedGemma
+        evidence.extend(self._extract_from_imaging_reports(patient_fhir_id))  # Already used MedGemma
 
-        logger.info(f"   → Tier 2A complete: {len(evidence)} evidence items from structured sources")
-
-        # Tier 2B (MedGemma): Clinical reasoning for narrative sources
-        logger.info("   [Tier 2B] Extracting from narrative sources (MedGemma)...")
-        evidence.extend(self._extract_from_imaging_reports(patient_fhir_id))
-        # NOTE: _extract_from_clinical_notes() and _extract_from_discharge_summaries()
-        # reference non-existent tables and are disabled pending proper data source identification
-        # evidence.extend(self._extract_from_clinical_notes(patient_fhir_id))  # DISABLED: uses non-existent v_clinical_notes
-        # evidence.extend(self._extract_from_discharge_summaries(patient_fhir_id))  # DISABLED: needs proper v_encounters query
-
-        logger.info(f"   → Tier 2B complete: {len(evidence)} total evidence items after narrative extraction")
-
-        # Tier 2C (Investigation Engine): Alternative sources if gaps found
-        if len(evidence) < 2:
-            logger.warning(f"   ⚠️  Insufficient evidence ({len(evidence)} items), attempting Tier 2C...")
-            evidence.extend(self._investigation_engine_search_alternatives(patient_fhir_id))
-        else:
-            logger.info(f"   → Tier 2C not needed: Sufficient evidence already collected ({len(evidence)} items)")
+        logger.info(f"   → Tier 1 complete: {len(evidence)} evidence items collected")
 
         # Sort by clinical authority (highest authority first)
         evidence.sort(key=lambda e: e.source.value)
@@ -151,7 +135,8 @@ class DiagnosticEvidenceAggregator:
         """
         Extract diagnosis from pathology reports (v_pathology_diagnostics).
 
-        Tier 2A: Keyword-based extraction from structured pathology data.
+        V5.6 Tier 1: MedGemma reasoning-based extraction from ALL pathology text
+        (molecular + surgical/histological). NO genomics-only filter.
 
         Args:
             patient_fhir_id: Patient FHIR ID
@@ -164,75 +149,174 @@ class DiagnosticEvidenceAggregator:
             diagnostic_name,
             diagnostic_date,
             diagnostic_source,
+            diagnostic_category,
             component_name,
-            result_value
+            result_value,
+            test_lab
         FROM v_pathology_diagnostics
         WHERE patient_fhir_id = '{patient_fhir_id}'
-          AND diagnostic_name IS NOT NULL
-          AND diagnostic_name != ''
-        ORDER BY diagnostic_date DESC
+          AND result_value IS NOT NULL
+          AND result_value != ''
+          AND LENGTH(result_value) > 50
+        ORDER BY diagnostic_date DESC NULLS LAST
+        LIMIT 50
         """
 
         try:
-            results = self.query_athena(query, "Querying v_pathology_diagnostics for diagnosis evidence", suppress_output=True)
+            results = self.query_athena(query, "Querying v_pathology_diagnostics for ALL pathology (molecular + surgical)", suppress_output=True)
 
             if not results:
-                logger.info("      → No pathology diagnosis evidence found")
+                logger.info("      → No pathology reports found")
                 return []
+
+            logger.info(f"      → Found {len(results)} pathology records with free text")
+
+            # V5.6: Use MedGemma reasoning if available, otherwise fall back to keywords
+            if not self.medgemma_agent:
+                logger.warning("      ⚠️  MedGemma not available, falling back to keyword extraction")
+                return self._extract_from_pathology_keywords(results)
 
             evidence = []
 
-            # Keywords indicating actual diagnosis (not just test results)
-            diagnosis_keywords = [
-                'tumor', 'neoplasm', 'malignant', 'cancer', 'carcinoma',
-                'glioma', 'glioblastoma', 'astrocytoma', 'ependymoma', 'medulloblastoma',
-                'grade', 'who', 'histology', 'pathology', 'biopsy', 'resection'
-            ]
+            # Process each pathology record with MedGemma
+            for idx, record in enumerate(results[:20]):  # Limit to 20 to avoid excessive calls
+                result_text = record.get('result_value', '').strip()
+                diagnostic_name = record.get('diagnostic_name', '')
+                diagnostic_category = record.get('diagnostic_category', '')
 
-            for record in results:
-                diagnostic_name = record.get('diagnostic_name', '').lower()
+                if not result_text:
+                    continue
 
-                # Check if this is a diagnosis mention (not just lab result)
-                is_diagnosis = any(keyword in diagnostic_name for keyword in diagnosis_keywords)
+                # V5.6: Use structured prompt wrapper
+                context = ClinicalContext(
+                    patient_id=patient_fhir_id,
+                    phase='PHASE_0_TIER_1_PATHOLOGY',
+                    evidence_summary=f"{diagnostic_category} - {diagnostic_name}"
+                )
 
-                if is_diagnosis:
-                    # Parse date
-                    date_str = record.get('diagnostic_date')
-                    date_obj = None
-                    if date_str:
-                        try:
-                            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                        except:
-                            pass
+                wrapped_prompt = self.llm_wrapper.wrap_extraction_prompt(
+                    task_description="Extract primary CNS tumor diagnosis from pathology report (molecular OR surgical/histological)",
+                    document_text=f"PATHOLOGY REPORT:\n{diagnostic_name}\n\n{result_text}",
+                    expected_schema=self.llm_wrapper.create_diagnosis_extraction_schema(),
+                    context=context,
+                    max_document_length=4000
+                )
 
-                    # Determine confidence based on source type
-                    source_type = record.get('diagnostic_source', '').lower()
-                    if 'surgical' in source_type or 'pathology' in source_type:
-                        confidence = 0.95  # Surgical pathology is gold standard
-                    else:
-                        confidence = 0.85  # Other pathology sources still high confidence
+                try:
+                    response = self.medgemma_agent.query(wrapped_prompt, temperature=0.1)
 
-                    evidence.append(DiagnosisEvidence(
-                        diagnosis=record.get('diagnostic_name', ''),
-                        source=EvidenceSource.SURGICAL_PATHOLOGY,
-                        confidence=confidence,
-                        date=date_obj,
-                        raw_data=record,
-                        extraction_method='keyword'
-                    ))
+                    # V5.6: Validate response
+                    is_valid, extraction, error = self.llm_wrapper.validate_response(
+                        response,
+                        self.llm_wrapper.create_diagnosis_extraction_schema()
+                    )
 
-            logger.info(f"      → Found {len(evidence)} pathology diagnosis mentions")
+                    if not is_valid:
+                        logger.debug(f"      Invalid LLM response for record {idx+1}: {error}")
+                        continue
+
+                    if extraction.get('diagnosis_found') and extraction.get('diagnosis'):
+                        # Parse date
+                        date_str = record.get('diagnostic_date')
+                        date_obj = None
+                        if date_str:
+                            try:
+                                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                            except:
+                                pass
+
+                        # Determine confidence based on source type
+                        source_type = record.get('diagnostic_source', '').lower()
+                        llm_confidence = extraction.get('confidence', 0.85)
+
+                        if 'surgical' in source_type or 'final' in diagnostic_category.lower():
+                            base_confidence = 0.95  # Surgical pathology is gold standard
+                            source = EvidenceSource.SURGICAL_PATHOLOGY
+                        elif 'molecular' in diagnostic_category.lower() or 'genomic' in diagnostic_category.lower():
+                            base_confidence = 0.90  # Molecular testing is highly reliable
+                            source = EvidenceSource.MOLECULAR_TESTING
+                        else:
+                            base_confidence = 0.85  # Other pathology sources
+                            source = EvidenceSource.SURGICAL_PATHOLOGY
+
+                        # Combine base confidence with LLM extraction confidence
+                        final_confidence = min(base_confidence, llm_confidence)
+
+                        evidence.append(DiagnosisEvidence(
+                            diagnosis=extraction['diagnosis'],
+                            source=source,
+                            confidence=final_confidence,
+                            date=date_obj,
+                            raw_data=record,
+                            extraction_method='medgemma_reasoning'  # V5.6 marker
+                        ))
+
+                except Exception as e:
+                    logger.debug(f"      Could not extract from pathology record {idx+1}: {e}")
+                    continue
+
+            logger.info(f"      → Extracted {len(evidence)} diagnoses from pathology via MedGemma reasoning")
             return evidence
 
         except Exception as e:
             logger.error(f"      ❌ Error extracting from pathology: {e}")
             return []
 
+    def _extract_from_pathology_keywords(self, results: List[Dict]) -> List[DiagnosisEvidence]:
+        """
+        Fallback keyword-based extraction when MedGemma unavailable.
+
+        Args:
+            results: Query results from v_pathology_diagnostics
+
+        Returns:
+            List of DiagnosisEvidence from keyword extraction
+        """
+        evidence = []
+
+        diagnosis_keywords = [
+            'tumor', 'neoplasm', 'malignant', 'cancer', 'carcinoma',
+            'glioma', 'glioblastoma', 'astrocytoma', 'ependymoma', 'medulloblastoma',
+            'grade', 'who', 'histology', 'pathology', 'biopsy', 'resection'
+        ]
+
+        for record in results:
+            diagnostic_name = record.get('diagnostic_name', '').lower()
+
+            is_diagnosis = any(keyword in diagnostic_name for keyword in diagnosis_keywords)
+
+            if is_diagnosis:
+                date_str = record.get('diagnostic_date')
+                date_obj = None
+                if date_str:
+                    try:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    except:
+                        pass
+
+                source_type = record.get('diagnostic_source', '').lower()
+                if 'surgical' in source_type or 'pathology' in source_type:
+                    confidence = 0.95
+                else:
+                    confidence = 0.85
+
+                evidence.append(DiagnosisEvidence(
+                    diagnosis=record.get('diagnostic_name', ''),
+                    source=EvidenceSource.SURGICAL_PATHOLOGY,
+                    confidence=confidence,
+                    date=date_obj,
+                    raw_data=record,
+                    extraction_method='keyword_fallback'
+                ))
+
+        logger.info(f"      → Found {len(evidence)} diagnoses from pathology via keyword fallback")
+        return evidence
+
     def _extract_from_problem_lists(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
         """
         Extract diagnosis from problem/condition lists (v_problem_list_diagnoses).
 
-        Tier 2A: Keyword-based extraction from coded diagnoses.
+        V5.6 Tier 1: MedGemma reasoning-based extraction (changed from keywords).
 
         Args:
             patient_fhir_id: Patient FHIR ID
@@ -251,73 +335,164 @@ class DiagnosticEvidenceAggregator:
         WHERE patient_fhir_id = '{patient_fhir_id}'
           AND condition_display_name IS NOT NULL
           AND condition_display_name != ''
-        ORDER BY onset_date DESC
+        ORDER BY onset_date DESC NULLS LAST, recorded_date DESC NULLS LAST
+        LIMIT 50
         """
 
         try:
             results = self.query_athena(query, "Querying v_problem_list_diagnoses for problem list evidence", suppress_output=True)
 
             if not results:
-                logger.info("      → No problem list diagnosis evidence found")
+                logger.info("      → No problem list diagnoses found")
                 return []
+
+            logger.info(f"      → Found {len(results)} problem list entries")
+
+            # V5.6: Use MedGemma reasoning if available
+            if not self.medgemma_agent:
+                logger.warning("      ⚠️  MedGemma not available, falling back to keyword extraction")
+                return self._extract_from_problem_lists_keywords(results)
 
             evidence = []
 
-            # Keywords for CNS tumor diagnoses
-            cns_tumor_keywords = [
-                'tumor', 'neoplasm', 'malignant', 'cancer',
-                'glioma', 'glioblastoma', 'astrocytoma', 'ependymoma', 'medulloblastoma',
-                'brain', 'cns', 'central nervous system', 'cranial', 'intracranial'
-            ]
-
+            # Group similar diagnoses to reduce redundant Med Gemma calls
+            unique_diagnoses = {}
             for record in results:
-                condition_name = record.get('condition_display_name', '').lower()
+                dx_name = record.get('condition_display_name', '').strip()
+                if dx_name and dx_name not in unique_diagnoses:
+                    unique_diagnoses[dx_name] = record
 
-                # Check if this is a CNS tumor diagnosis
-                is_cns_tumor = any(keyword in condition_name for keyword in cns_tumor_keywords)
+            # Process each unique diagnosis with MedGemma
+            for idx, (dx_name, record) in enumerate(list(unique_diagnoses.items())[:15]):  # Limit to 15
 
-                if is_cns_tumor:
-                    # Parse date (prefer onset_date over recorded_date)
-                    date_str = record.get('onset_date') or record.get('recorded_date')
-                    date_obj = None
-                    if date_str:
-                        try:
-                            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                        except:
-                            pass
+                # V5.6: Use structured prompt wrapper
+                context = ClinicalContext(
+                    patient_id=patient_fhir_id,
+                    phase='PHASE_0_TIER_1_PROBLEM_LIST',
+                    evidence_summary=f"Problem list diagnosis: {dx_name}"
+                )
 
-                    # Determine confidence based on verification status
-                    verification = record.get('verification_status', '').lower()
-                    clinical_status = record.get('clinical_status', '').lower()
+                wrapped_prompt = self.llm_wrapper.wrap_extraction_prompt(
+                    task_description="Extract CNS tumor diagnosis from problem list entry",
+                    document_text=f"PROBLEM LIST DIAGNOSIS:\n{dx_name}\n\nClinical Status: {record.get('clinical_status', 'unknown')}\nVerification Status: {record.get('verification_status', 'unknown')}",
+                    expected_schema=self.llm_wrapper.create_diagnosis_extraction_schema(),
+                    context=context,
+                    max_document_length=1000
+                )
 
-                    if verification == 'confirmed' and clinical_status == 'active':
-                        confidence = 0.90  # Confirmed, active diagnosis
-                    elif verification == 'confirmed':
-                        confidence = 0.85  # Confirmed but may not be active
-                    else:
-                        confidence = 0.75  # Unverified or provisional
+                try:
+                    response = self.medgemma_agent.query(wrapped_prompt, temperature=0.1)
 
-                    evidence.append(DiagnosisEvidence(
-                        diagnosis=record.get('condition_display_name', ''),
-                        source=EvidenceSource.PROBLEM_LIST,
-                        confidence=confidence,
-                        date=date_obj,
-                        raw_data=record,
-                        extraction_method='keyword'
-                    ))
+                    # V5.6: Validate response
+                    is_valid, extraction, error = self.llm_wrapper.validate_response(
+                        response,
+                        self.llm_wrapper.create_diagnosis_extraction_schema()
+                    )
 
-            logger.info(f"      → Found {len(evidence)} problem list diagnosis mentions")
+                    if not is_valid:
+                        logger.debug(f"      Invalid LLM response for problem list {idx+1}: {error}")
+                        continue
+
+                    if extraction.get('diagnosis_found') and extraction.get('diagnosis'):
+                        # Parse date (prefer onset_date, fallback to recorded_date)
+                        date_str = record.get('onset_date') or record.get('recorded_date')
+                        date_obj = None
+                        if date_str:
+                            try:
+                                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                            except:
+                                pass
+
+                        # Confidence based on verification status
+                        verification = record.get('verification_status', '').lower()
+                        clinical_status = record.get('clinical_status', '').lower()
+                        llm_confidence = extraction.get('confidence', 0.75)
+
+                        if 'confirmed' in verification and 'active' in clinical_status:
+                            base_confidence = 0.85
+                        elif 'confirmed' in verification:
+                            base_confidence = 0.80
+                        else:
+                            base_confidence = 0.70
+
+                        final_confidence = min(base_confidence, llm_confidence)
+
+                        evidence.append(DiagnosisEvidence(
+                            diagnosis=extraction['diagnosis'],
+                            source=EvidenceSource.PROBLEM_LIST,
+                            confidence=final_confidence,
+                            date=date_obj,
+                            raw_data=record,
+                            extraction_method='medgemma_reasoning'  # V5.6 marker
+                        ))
+
+                except Exception as e:
+                    logger.debug(f"      Could not extract from problem list {idx+1}: {e}")
+                    continue
+
+            logger.info(f"      → Extracted {len(evidence)} diagnoses from problem lists via MedGemma reasoning")
             return evidence
 
         except Exception as e:
             logger.error(f"      ❌ Error extracting from problem lists: {e}")
             return []
 
+    def _extract_from_problem_lists_keywords(self, results: List[Dict]) -> List[DiagnosisEvidence]:
+        """
+        Fallback keyword-based extraction for problem lists when MedGemma unavailable.
+
+        Args:
+            results: Query results from v_problem_list_diagnoses
+
+        Returns:
+            List of DiagnosisEvidence from keyword extraction
+        """
+        evidence = []
+
+        diagnosis_keywords = [
+            'tumor', 'neoplasm', 'malignant', 'cancer',
+            'glioma', 'glioblastoma', 'astrocytoma', 'ependymoma', 'medulloblastoma',
+            'brain', 'cns', 'central nervous system'
+        ]
+
+        for record in results:
+            condition_name = record.get('condition_display_name', '').lower()
+
+            is_cns_diagnosis = any(keyword in condition_name for keyword in diagnosis_keywords)
+
+            if is_cns_diagnosis:
+                date_str = record.get('onset_date') or record.get('recorded_date')
+                date_obj = None
+                if date_str:
+                    try:
+                        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    except:
+                        pass
+
+                verification = record.get('verification_status', '').lower()
+                if 'confirmed' in verification:
+                    confidence = 0.80
+                else:
+                    confidence = 0.70
+
+                evidence.append(DiagnosisEvidence(
+                    diagnosis=record.get('condition_display_name', ''),
+                    source=EvidenceSource.PROBLEM_LIST,
+                    confidence=confidence,
+                    date=date_obj,
+                    raw_data=record,
+                    extraction_method='keyword_fallback'
+                ))
+
+        logger.info(f"      → Found {len(evidence)} diagnoses from problem lists via keyword fallback")
+        return evidence
+
     def _extract_from_imaging_reports(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
         """
         Extract diagnosis from imaging reports (radiology reports).
 
-        Tier 2B: MedGemma-based extraction from narrative radiology impressions.
+        V5.6 Tier 1: MedGemma-based extraction from narrative radiology impressions.
+        NOW uses self.medgemma_agent instead of local instantiation.
 
         Args:
             patient_fhir_id: Patient FHIR ID
@@ -345,15 +520,12 @@ class DiagnosticEvidenceAggregator:
                 logger.info("      → No imaging reports found")
                 return []
 
-            evidence = []
-
-            # Import MedGemma for narrative extraction
-            try:
-                from agents.medgemma_agent import MedGemmaAgent
-                medgemma = MedGemmaAgent(model='gemma2:27b')
-            except Exception as e:
-                logger.warning(f"      ⚠️  Could not initialize MedGemma, skipping imaging reports: {e}")
+            # V5.6: Use self.medgemma_agent if available
+            if not self.medgemma_agent:
+                logger.warning("      ⚠️  MedGemma not available, skipping imaging reports")
                 return []
+
+            evidence = []
 
             # Process each imaging report
             for record in results:
@@ -362,10 +534,10 @@ class DiagnosticEvidenceAggregator:
                 if not report_text:
                     continue
 
-                # V5.3: Use structured prompt wrapper
+                # V5.6: Use structured prompt wrapper
                 context = ClinicalContext(
                     patient_id=patient_fhir_id,
-                    phase='PHASE_0_TIER_2B',
+                    phase='PHASE_0_TIER_1_IMAGING',
                     evidence_summary=f"Extracting from imaging report dated {record.get('report_date')}"
                 )
 
@@ -378,10 +550,9 @@ class DiagnosticEvidenceAggregator:
                 )
 
                 try:
-                    import json
-                    response = medgemma.query(wrapped_prompt, temperature=0.1)
+                    response = self.medgemma_agent.query(wrapped_prompt, temperature=0.1)
 
-                    # V5.3: Validate response
+                    # V5.6: Validate response
                     is_valid, extraction, error = self.llm_wrapper.validate_response(
                         response,
                         self.llm_wrapper.create_diagnosis_extraction_schema()
@@ -407,380 +578,19 @@ class DiagnosticEvidenceAggregator:
                             confidence=extraction.get('confidence', 0.70),
                             date=date_obj,
                             raw_data=record,
-                            extraction_method='medgemma_structured'  # V5.3 marker
+                            extraction_method='medgemma_reasoning'  # V5.6 marker
                         ))
 
                 except Exception as e:
                     logger.debug(f"      Could not extract from imaging report: {e}")
                     continue
 
-            logger.info(f"      → Found {len(evidence)} imaging report diagnosis mentions")
+            logger.info(f"      → Extracted {len(evidence)} diagnoses from imaging via MedGemma reasoning")
             return evidence
 
         except Exception as e:
             logger.error(f"      ❌ Error extracting from imaging reports: {e}")
             return []
-
-    def _extract_from_clinical_notes(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
-        """
-        Extract diagnosis from clinical notes (progress notes, oncology notes).
-
-        Tier 2B: MedGemma-based extraction from narrative clinical documentation.
-
-        Args:
-            patient_fhir_id: Patient FHIR ID
-
-        Returns:
-            List of DiagnosisEvidence from clinical notes
-        """
-        query = f"""
-        SELECT DISTINCT
-            note_date,
-            note_type,
-            note_text
-        FROM v_clinical_notes
-        WHERE patient_fhir_id = '{patient_fhir_id}'
-          AND note_text IS NOT NULL
-          AND (LOWER(note_type) LIKE '%oncology%'
-               OR LOWER(note_type) LIKE '%progress%'
-               OR LOWER(note_type) LIKE '%consult%')
-        ORDER BY note_date DESC
-        LIMIT 30
-        """
-
-        try:
-            results = self.query_athena(query, "Querying v_clinical_notes for diagnosis evidence", suppress_output=True)
-
-            if not results:
-                logger.info("      → No clinical notes found")
-                return []
-
-            evidence = []
-
-            # Import MedGemma for narrative extraction
-            try:
-                from agents.medgemma_agent import MedGemmaAgent
-                medgemma = MedGemmaAgent(model='gemma2:27b')
-            except Exception as e:
-                logger.warning(f"      ⚠️  Could not initialize MedGemma, skipping clinical notes: {e}")
-                return []
-
-            # Process each clinical note
-            for record in results:
-                note_text = record.get('note_text', '').strip()
-
-                if not note_text:
-                    continue
-
-                # V5.3: Use structured prompt wrapper
-                context = ClinicalContext(
-                    patient_id=patient_fhir_id,
-                    phase='PHASE_0_TIER_2B',
-                    evidence_summary=f"Extracting from clinical note dated {record.get('note_date')}"
-                )
-
-                wrapped_prompt = self.llm_wrapper.wrap_extraction_prompt(
-                    task_description="Extract CNS tumor diagnosis from clinical note",
-                    document_text=note_text,
-                    expected_schema=self.llm_wrapper.create_diagnosis_extraction_schema(),
-                    context=context,
-                    max_document_length=4000
-                )
-
-                try:
-                    import json
-                    response = medgemma.query(wrapped_prompt, temperature=0.1)
-
-                    # V5.3: Validate response
-                    is_valid, extraction, error = self.llm_wrapper.validate_response(
-                        response,
-                        self.llm_wrapper.create_diagnosis_extraction_schema()
-                    )
-
-                    if not is_valid:
-                        logger.debug(f"      Invalid LLM response: {error}")
-                        continue
-
-                    if extraction.get('diagnosis_found') and extraction.get('diagnosis'):
-                        # Parse date
-                        date_str = record.get('note_date')
-                        date_obj = None
-                        if date_str:
-                            try:
-                                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                            except:
-                                pass
-
-                        # Determine source type based on note type
-                        note_type = record.get('note_type', '').lower()
-                        if 'oncology' in note_type:
-                            source = EvidenceSource.ONCOLOGY_NOTES
-                        elif 'radiation' in note_type:
-                            source = EvidenceSource.RADIATION_ONCOLOGY
-                        else:
-                            source = EvidenceSource.PROGRESS_NOTES
-
-                        evidence.append(DiagnosisEvidence(
-                            diagnosis=extraction['diagnosis'],
-                            source=source,
-                            confidence=extraction.get('confidence', 0.65),
-                            date=date_obj,
-                            raw_data=record,
-                            extraction_method='medgemma_structured'  # V5.3 marker
-                        ))
-
-                except Exception as e:
-                    logger.debug(f"      Could not extract from clinical note: {e}")
-                    continue
-
-            logger.info(f"      → Found {len(evidence)} clinical note diagnosis mentions")
-            return evidence
-
-        except Exception as e:
-            logger.error(f"      ❌ Error extracting from clinical notes: {e}")
-            return []
-
-    def _extract_from_discharge_summaries(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
-        """
-        Extract diagnosis from discharge summaries.
-
-        Tier 2B: MedGemma-based extraction from discharge documentation.
-
-        Args:
-            patient_fhir_id: Patient FHIR ID
-
-        Returns:
-            List of DiagnosisEvidence from discharge summaries
-        """
-        query = f"""
-        SELECT DISTINCT
-            discharge_date,
-            admission_diagnosis,
-            discharge_diagnosis,
-            summary_text
-        FROM v_encounters
-        WHERE patient_fhir_id = '{patient_fhir_id}'
-          AND encounter_class = 'inpatient'
-          AND (admission_diagnosis IS NOT NULL
-               OR discharge_diagnosis IS NOT NULL
-               OR summary_text IS NOT NULL)
-        ORDER BY discharge_date DESC
-        LIMIT 20
-        """
-
-        try:
-            results = self.query_athena(query, "Querying v_encounters for discharge diagnosis evidence", suppress_output=True)
-
-            if not results:
-                logger.info("      → No discharge summaries found")
-                return []
-
-            evidence = []
-
-            # Import MedGemma for narrative extraction
-            try:
-                from agents.medgemma_agent import MedGemmaAgent
-                medgemma = MedGemmaAgent(model='gemma2:27b')
-            except Exception as e:
-                logger.warning(f"      ⚠️  Could not initialize MedGemma, skipping discharge summaries: {e}")
-                return []
-
-            # Process each discharge record
-            for record in results:
-                admission_dx = record.get('admission_diagnosis', '')
-                discharge_dx = record.get('discharge_diagnosis', '')
-                summary_text = record.get('summary_text', '')
-                combined_text = f"{admission_dx}\n{discharge_dx}\n{summary_text}".strip()
-
-                if not combined_text:
-                    continue
-
-                # V5.3: Use structured prompt wrapper
-                context = ClinicalContext(
-                    patient_id=patient_fhir_id,
-                    phase='PHASE_0_TIER_2B',
-                    evidence_summary=f"Extracting from discharge summary dated {record.get('discharge_date')}"
-                )
-
-                wrapped_prompt = self.llm_wrapper.wrap_extraction_prompt(
-                    task_description="Extract primary CNS tumor diagnosis from discharge summary",
-                    document_text=combined_text,
-                    expected_schema=self.llm_wrapper.create_diagnosis_extraction_schema(),
-                    context=context,
-                    max_document_length=4000
-                )
-
-                try:
-                    import json
-                    response = medgemma.query(wrapped_prompt, temperature=0.1)
-
-                    # V5.3: Validate response
-                    is_valid, extraction, error = self.llm_wrapper.validate_response(
-                        response,
-                        self.llm_wrapper.create_diagnosis_extraction_schema()
-                    )
-
-                    if not is_valid:
-                        logger.debug(f"      Invalid LLM response: {error}")
-                        continue
-
-                    if extraction.get('diagnosis_found') and extraction.get('diagnosis'):
-                        # Parse date
-                        date_str = record.get('discharge_date')
-                        date_obj = None
-                        if date_str:
-                            try:
-                                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                            except:
-                                pass
-
-                        evidence.append(DiagnosisEvidence(
-                            diagnosis=extraction['diagnosis'],
-                            source=EvidenceSource.DISCHARGE_SUMMARIES,
-                            confidence=extraction.get('confidence', 0.75),
-                            date=date_obj,
-                            raw_data=record,
-                            extraction_method='medgemma_structured'  # V5.3 marker
-                        ))
-
-                except Exception as e:
-                    logger.debug(f"      Could not extract from discharge summary: {e}")
-                    continue
-
-            logger.info(f"      → Found {len(evidence)} discharge summary diagnosis mentions")
-            return evidence
-
-        except Exception as e:
-            logger.error(f"      ❌ Error extracting from discharge summaries: {e}")
-            return []
-
-    def _investigation_engine_search_alternatives(self, patient_fhir_id: str) -> List[DiagnosisEvidence]:
-        """
-        Use Investigation Engine to search alternative sources when insufficient evidence.
-
-        Tier 2C: Fallback mechanism triggered when <2 evidence sources found.
-
-        This method uses the Investigation Engine's comprehensive search capabilities
-        to find diagnosis evidence in less common sources (treatment protocols,
-        radiation oncology notes, etc.).
-
-        Args:
-            patient_fhir_id: Patient FHIR ID
-
-        Returns:
-            List of DiagnosisEvidence from alternative sources
-        """
-        logger.info("      [Tier 2C - Investigation Engine] Searching alternative sources...")
-
-        evidence = []
-
-        # Try radiation oncology records
-        try:
-            query = f"""
-            SELECT DISTINCT
-                treatment_date,
-                treatment_site,
-                diagnosis_code,
-                diagnosis_description
-            FROM v_radiation_oncology
-            WHERE patient_fhir_id = '{patient_fhir_id}'
-              AND diagnosis_description IS NOT NULL
-            ORDER BY treatment_date DESC
-            LIMIT 20
-            """
-
-            results = self.query_athena(query, "Searching radiation oncology records for diagnosis", suppress_output=True)
-
-            for record in results:
-                diagnosis_desc = record.get('diagnosis_description', '')
-
-                # Check if this is a CNS tumor diagnosis
-                cns_keywords = ['glioma', 'glioblastoma', 'astrocytoma', 'ependymoma',
-                               'medulloblastoma', 'brain', 'cns', 'tumor', 'neoplasm']
-
-                if any(keyword in diagnosis_desc.lower() for keyword in cns_keywords):
-                    # Parse date
-                    date_str = record.get('treatment_date')
-                    date_obj = None
-                    if date_str:
-                        try:
-                            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                        except:
-                            pass
-
-                    evidence.append(DiagnosisEvidence(
-                        diagnosis=diagnosis_desc,
-                        source=EvidenceSource.RADIATION_ONCOLOGY,
-                        confidence=0.80,  # Radiation treatment requires confirmed diagnosis
-                        date=date_obj,
-                        raw_data=record,
-                        extraction_method='investigation_engine'
-                    ))
-
-            if evidence:
-                logger.info(f"      → Investigation Engine found {len(evidence)} radiation oncology evidence items")
-
-        except Exception as e:
-            logger.debug(f"      Investigation Engine: No radiation oncology data available: {e}")
-
-        # Try treatment/chemotherapy protocols
-        try:
-            query = f"""
-            SELECT DISTINCT
-                medication_date,
-                medication_name,
-                reason_for_use
-            FROM v_medications
-            WHERE patient_fhir_id = '{patient_fhir_id}'
-              AND reason_for_use IS NOT NULL
-              AND (LOWER(medication_name) LIKE '%chemo%'
-                   OR LOWER(medication_name) LIKE '%temozolomide%'
-                   OR LOWER(medication_name) LIKE '%bevacizumab%'
-                   OR LOWER(medication_name) LIKE '%lomustine%')
-            ORDER BY medication_date DESC
-            LIMIT 20
-            """
-
-            results = self.query_athena(query, "Searching chemotherapy protocols for diagnosis", suppress_output=True)
-
-            for record in results:
-                reason = record.get('reason_for_use', '')
-
-                # Check if reason mentions CNS tumor
-                cns_keywords = ['glioma', 'glioblastoma', 'astrocytoma', 'ependymoma',
-                               'medulloblastoma', 'brain', 'cns', 'tumor', 'neoplasm']
-
-                if any(keyword in reason.lower() for keyword in cns_keywords):
-                    # Parse date
-                    date_str = record.get('medication_date')
-                    date_obj = None
-                    if date_str:
-                        try:
-                            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                        except:
-                            pass
-
-                    evidence.append(DiagnosisEvidence(
-                        diagnosis=reason,
-                        source=EvidenceSource.TREATMENT_PROTOCOLS,
-                        confidence=0.75,  # Treatment indication confidence
-                        date=date_obj,
-                        raw_data=record,
-                        extraction_method='investigation_engine'
-                    ))
-
-            if evidence:
-                logger.info(f"      → Investigation Engine found {len(evidence)} treatment protocol evidence items")
-
-        except Exception as e:
-            logger.debug(f"      Investigation Engine: No treatment protocol data available: {e}")
-
-        if not evidence:
-            logger.warning("      ⚠️  Investigation Engine: No additional evidence found in alternative sources")
-        else:
-            logger.info(f"      ✅ Investigation Engine complete: Found {len(evidence)} additional evidence items")
-
-        return evidence
 
     def get_highest_authority_diagnosis(self, evidence_list: List[DiagnosisEvidence]) -> Optional[DiagnosisEvidence]:
         """
@@ -808,26 +618,26 @@ class DiagnosticEvidenceAggregator:
             evidence_list: List of DiagnosisEvidence objects
 
         Returns:
-            Consensus diagnosis string, or None if no consensus
+            Most common diagnosis string, or None if no evidence
         """
         if not evidence_list:
             return None
 
-        # Filter to high-confidence evidence (>= 0.80)
-        high_confidence = [e for e in evidence_list if e.confidence >= 0.80]
+        # Filter to high-confidence evidence (>0.7)
+        high_conf = [e for e in evidence_list if e.confidence > 0.7]
 
-        if not high_confidence:
+        if not high_conf:
             return None
 
-        # Count diagnosis mentions
+        # Count diagnosis occurrences
         diagnosis_counts = {}
-        for evidence in high_confidence:
-            diagnosis_normalized = evidence.diagnosis.lower().strip()
-            diagnosis_counts[diagnosis_normalized] = diagnosis_counts.get(diagnosis_normalized, 0) + 1
+        for evidence in high_conf:
+            dx = evidence.diagnosis.lower().strip()
+            diagnosis_counts[dx] = diagnosis_counts.get(dx, 0) + 1
 
-        # Return most common diagnosis
+        # Return most common
         if diagnosis_counts:
-            consensus = max(diagnosis_counts.items(), key=lambda x: x[1])[0]
-            return consensus
+            most_common = max(diagnosis_counts.items(), key=lambda x: x[1])
+            return most_common[0]
 
         return None

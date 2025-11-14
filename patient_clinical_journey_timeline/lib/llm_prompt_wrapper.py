@@ -92,10 +92,20 @@ class LLMPromptWrapper:
 
     Standardizes all LLM calls across the pipeline for better extraction
     accuracy and response validation.
+
+    V5.6: Added intelligent summarization for long documents (>15,000 chars)
+    to avoid context loss from truncation.
     """
 
-    def __init__(self):
+    def __init__(self, medgemma_agent: Optional[Any] = None):
+        """
+        Initialize LLM prompt wrapper.
+
+        Args:
+            medgemma_agent: Optional MedGemma agent for summarizing long documents
+        """
         self.prompt_history: List[Dict[str, Any]] = []
+        self.medgemma_agent = medgemma_agent
 
     def wrap_extraction_prompt(
         self,
@@ -133,9 +143,22 @@ class LLMPromptWrapper:
                 context=clinical_context
             )
         """
-        # Truncate document if too long
-        if len(document_text) > max_document_length:
-            document_text = document_text[:max_document_length] + "\n\n[...TRUNCATED...]"
+        # V5.6: Smart handling of long documents
+        # - If ≤15,000 chars: Use full document
+        # - If >15,000 chars AND MedGemma available: Summarize with diagnostic focus
+        # - If >15,000 chars AND no MedGemma: Fall back to truncation
+        if len(document_text) > 15000:
+            if self.medgemma_agent:
+                logger.info(f"      Document is {len(document_text)} chars, summarizing with diagnostic focus...")
+                document_text = self._summarize_long_document(
+                    document_text=document_text,
+                    task_description=task_description,
+                    context=context
+                )
+                logger.info(f"      Summarized to {len(document_text)} chars")
+            else:
+                logger.warning(f"      Document is {len(document_text)} chars but MedGemma unavailable, truncating to {max_document_length}")
+                document_text = document_text[:max_document_length] + "\n\n[...TRUNCATED - MedGemma unavailable for summarization...]"
 
         # Build prompt
         prompt_parts = [
@@ -182,6 +205,81 @@ class LLMPromptWrapper:
         })
 
         return full_prompt
+
+    def _summarize_long_document(
+        self,
+        document_text: str,
+        task_description: str,
+        context: ClinicalContext
+    ) -> str:
+        """
+        V5.6: Summarize long documents (>15,000 chars) with focus on diagnostic/classification features.
+
+        Uses MedGemma to intelligently compress the document while preserving:
+        - Primary diagnosis statements
+        - Molecular markers and test results
+        - Histological findings
+        - WHO classification information
+        - Clinical significance statements
+
+        Args:
+            document_text: Full document text (>15,000 chars)
+            task_description: What we're extracting (helps focus summarization)
+            context: Clinical context
+
+        Returns:
+            Summarized document text (typically 3000-8000 chars)
+        """
+        summarization_prompt = f"""You are a medical document summarization expert specializing in CNS tumor pathology.
+
+{context.to_prompt_string()}
+
+=== TASK ===
+Summarize the following clinical document for the purpose of: {task_description}
+
+CRITICAL: Preserve ALL diagnostic and classification information, including:
+1. Primary diagnosis statements (exact wording)
+2. ALL molecular markers, genetic tests, and results (IDH, BRAF, H3, 1p/19q, MGMT, etc.)
+3. Histological findings and grade
+4. WHO classification mentions
+5. Clinical significance or prognosis statements
+6. Dates and temporal information
+
+DISCARD:
+- Administrative text
+- Non-diagnostic sections
+- Repetitive/boilerplate content
+
+Return a focused summary that captures the diagnostic essence while reducing length.
+
+=== DOCUMENT TO SUMMARIZE ===
+{document_text}
+
+=== SUMMARY ===
+"""
+
+        try:
+            summary = self.medgemma_agent.query(summarization_prompt, temperature=0.1)
+
+            # Remove any markdown formatting MedGemma might add
+            if summary.startswith("```"):
+                lines = summary.split("\n")
+                summary = "\n".join([l for l in lines if not l.startswith("```")])
+
+            summary = summary.strip()
+
+            # Safety: If summarization failed or returned too little, use smart truncation
+            if len(summary) < 1000:
+                logger.warning(f"      Summarization returned only {len(summary)} chars, using smart truncation instead")
+                # Take first 7500 + last 7500 chars (captures intro AND conclusion)
+                summary = document_text[:7500] + "\n\n[...MIDDLE SECTION TRUNCATED...]\n\n" + document_text[-7500:]
+
+            return summary
+
+        except Exception as e:
+            logger.error(f"      Summarization failed: {e}, using smart truncation")
+            # Fallback: Take first 7500 + last 7500 chars
+            return document_text[:7500] + "\n\n[...MIDDLE SECTION TRUNCATED...]\n\n" + document_text[-7500:]
 
     def wrap_reconciliation_prompt(
         self,
