@@ -2695,11 +2695,7 @@ Return ONLY the JSON object, no additional text.
                     classification_confidence
                 FROM fhir_prd_db.v_procedures_tumor
                 WHERE patient_fhir_id = '{self.athena_patient_id}'
-                    AND (
-                        is_tumor_surgery = true
-                        OR has_tumor_reason = true
-                        OR has_tumor_body_site = true
-                    )
+                    AND is_tumor_surgery = true
                 ORDER BY COALESCE(proc_performed_date_time, proc_performed_period_start)
             """,
             'chemotherapy': f"""
