@@ -3216,6 +3216,12 @@ Return ONLY the JSON object, no additional text.
             surgery_count += 1
         print(f"    ✅ Added {surgery_count} surgical procedures")
 
+        # V5.7: Enrich procedures with institution from encounters
+        if surgery_count > 0:
+            enriched_count = self._enrich_procedures_with_encounter_institution(events)
+            if enriched_count > 0:
+                print(f"    ✅ Enriched {enriched_count}/{surgery_count} procedures with encounter-based institution")
+
         # Track procedures success
         if self.completeness_tracker:
             self.completeness_tracker.mark_success('phase2_procedures_extraction', record_count=surgery_count)
@@ -8781,6 +8787,109 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         except Exception as e:
             logger.debug(f"        Tier 2 post-op imaging query failed: {e}")
             return None
+
+    def _enrich_procedures_with_encounter_institution(self, events: List[Dict[str, Any]]) -> int:
+        """
+        V5.7: Enrich procedure events with institution from v_encounters
+
+        Uses FHIR crosswalk: Procedure → encounter_reference → Encounter → service_provider_display
+
+        This fills the institution gap when v_procedures_tumor only provides Practitioner
+        references instead of Organization references.
+
+        Args:
+            events: List of timeline events (will be modified in-place)
+
+        Returns:
+            Number of procedures enriched with institution
+        """
+        # Find surgery events that need institution enrichment
+        surgery_events = [e for e in events if e.get('event_type') == 'surgery']
+        if not surgery_events:
+            return 0
+
+        # Collect unique encounter IDs
+        encounter_ids = set()
+        for event in surgery_events:
+            encounter_id = event.get('v2_annotation', {}).get('encounter_id')
+            if encounter_id:
+                encounter_ids.add(encounter_id)
+
+        if not encounter_ids:
+            logger.debug("    No encounter IDs found for institution enrichment")
+            return 0
+
+        # Query v_encounters for service_provider_display
+        encounter_ids_list = list(encounter_ids)
+        encounter_ids_str = "', '".join([eid.replace("'", "''") for eid in encounter_ids_list])
+
+        query = f"""
+            SELECT
+                id,
+                service_provider_display,
+                service_provider_reference
+            FROM fhir_prd_db.v_encounters
+            WHERE id IN ('{encounter_ids_str}')
+        """
+
+        try:
+            result_df = self.athena_client.execute_query(query)
+
+            if result_df.empty:
+                logger.debug(f"    No encounter data found for {len(encounter_ids)} encounter IDs")
+                return 0
+
+            # Create encounter_id → institution mapping
+            encounter_to_institution = {}
+            for _, row in result_df.iterrows():
+                encounter_id = row['id']
+                institution_name = row.get('service_provider_display', '').strip()
+                if institution_name:
+                    encounter_to_institution[encounter_id] = institution_name
+
+            # Enrich surgery events
+            enriched_count = 0
+            for event in surgery_events:
+                encounter_id = event.get('v2_annotation', {}).get('encounter_id')
+                if not encounter_id:
+                    continue
+
+                institution_name = encounter_to_institution.get(encounter_id)
+                if not institution_name:
+                    continue
+
+                # Check if institution already exists and is populated
+                existing_institution = event.get('clinical_features', {}).get('institution', {})
+                existing_value = existing_institution.get('value', '').strip() if existing_institution else ''
+
+                # Only enrich if empty or missing
+                if not existing_value:
+                    # Create or update clinical_features
+                    if 'clinical_features' not in event:
+                        event['clinical_features'] = {}
+
+                    # Add institution with V4.1 FeatureObject pattern
+                    event['clinical_features']['institution'] = {
+                        'value': institution_name,
+                        'sources': [{
+                            'source_type': 'encounter_service_provider',
+                            'extracted_value': institution_name,
+                            'extraction_method': 'v_encounters_crosswalk',
+                            'confidence': 'HIGH',
+                            'source_id': encounter_id,
+                            'extracted_at': datetime.now().isoformat() + 'Z'
+                        }]
+                    }
+
+                    enriched_count += 1
+                    logger.debug(f"      Enriched procedure {event.get('description', 'Unknown')} "
+                               f"on {event.get('event_date')} with institution: {institution_name}")
+
+            return enriched_count
+
+        except Exception as e:
+            logger.warning(f"    Failed to enrich institutions from encounters: {e}")
+            return 0
 
     def _enrich_eor_from_v_imaging(self) -> int:
         """
