@@ -8817,17 +8817,55 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
             except (ValueError, AttributeError):
                 continue
 
-            # Query v_imaging for post-op MRI/CT (1-5 days post-surgery)
-            eor_from_imaging = self._search_postop_imaging_for_eor(surgery_date)
+            # V5.7: Query v_imaging for post-op MRI/CT (0-5 days post-surgery)
+            # Use MedGemma reasoning instead of keywords
+            window_start = surgery_date.isoformat()
+            window_end = (surgery_date + timedelta(days=5)).isoformat()
 
-            if eor_from_imaging:
-                # Store in event as imaging-derived EOR
-                # Phase 4 EOROrchestrator will adjudicate operative note vs imaging
-                if 'v_imaging_eor' not in surg_event:
-                    surg_event['v_imaging_eor'] = eor_from_imaging
-                    surg_event['v_imaging_eor_date'] = event_date_str
-                    enriched_count += 1
-                    logger.info(f"      ✅ Enriched v_imaging EOR={eor_from_imaging} for surgery on {event_date_str[:10]}")
+            query = f"""
+            SELECT
+                imaging_date,
+                report_conclusion,
+                result_information
+            FROM fhir_prd_db.v_imaging
+            WHERE patient_fhir_id = '{self.athena_patient_id}'
+                AND imaging_date >= DATE '{window_start}'
+                AND imaging_date <= DATE '{window_end}'
+                AND (LOWER(imaging_modality) LIKE '%mri%' OR LOWER(imaging_modality) LIKE '%ct%')
+                AND (report_conclusion IS NOT NULL OR result_information IS NOT NULL)
+            ORDER BY imaging_date ASC
+            LIMIT 3
+            """
+
+            try:
+                from lib.query_helpers import query_athena
+                results = query_athena(query, "Phase 3.5: Query post-op imaging", suppress_output=True)
+
+                if results:
+                    for img in results:
+                        img_date = img.get('imaging_date')
+                        # Try report_conclusion first, fall back to result_information
+                        imaging_text = img.get('report_conclusion') or img.get('result_information')
+
+                        if imaging_text and len(imaging_text) >= 30:
+                            # V5.7: Extract with MedGemma reasoning
+                            eor_extraction = self._extract_eor_from_imaging_text_with_medgemma(
+                                text=imaging_text,
+                                imaging_date=img_date,
+                                surgery_date=event_date_str
+                            )
+
+                            if eor_extraction:
+                                # Store in event as imaging-derived EOR
+                                # Phase 4.5 will adjudicate operative note vs imaging if both exist
+                                if 'v_imaging_eor' not in surg_event:
+                                    surg_event['v_imaging_eor'] = eor_extraction
+                                    enriched_count += 1
+                                    logger.info(f"      ✅ Enriched v_imaging EOR={eor_extraction.get('extent_of_resection')} "
+                                              f"for surgery on {event_date_str[:10]} (confidence: {eor_extraction.get('confidence')})")
+                                    break  # Found EOR, move to next surgery
+            except Exception as e:
+                logger.debug(f"      Phase 3.5: Error querying v_imaging for surgery {event_date_str}: {e}")
 
         logger.info(f"    📊 V_imaging EOR enrichment: {enriched_count}/{len(surgery_events)} surgeries enriched")
         return enriched_count
@@ -9458,6 +9496,136 @@ RADIOLOGY REPORT:
                         'response_description': extraction.get('response_description'),
                         'confidence': confidence,
                         'extraction_tier': 'tier1_v_imaging',
+    def _extract_from_operative_note_with_medgemma(
+        self,
+        note_text: str,
+        surgery_date: str,
+        binary_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        V5.7 Tier 2: Extract BOTH tumor location AND EOR from operative note with MedGemma
+        
+        This is the HIGHEST AUTHORITY source - surgeon's direct intraoperative assessment.
+        
+        Args:
+            note_text: Full operative note text
+            surgery_date: Date of surgery
+            binary_id: Binary document ID for provenance
+            
+        Returns:
+            Dict with location, EOR, confidence, or None if extraction failed
+        """
+        if not self.medgemma_agent:
+            return None
+        
+        if not note_text or len(note_text) < 100:
+            return None
+        
+        prompt = f"""You are a medical AI extracting tumor information from a neurosurgical operative note.
+
+SURGICAL CONTEXT:
+- Surgery date: {surgery_date}
+- Document type: Operative Note (HIGHEST AUTHORITY for tumor location and resection extent)
+
+TASK:
+Extract TWO critical pieces of information from this operative note:
+
+1. TUMOR LOCATION - The anatomical location where the surgeon found the tumor
+2. EXTENT OF RESECTION (EOR) - How much tumor the surgeon was able to remove
+
+TUMOR LOCATION EXTRACTION:
+Look for:
+- Anatomical descriptions in operative findings (e.g., "tumor in right frontal lobe")
+- Laterality (left, right, bilateral, midline)
+- Specific structures (e.g., "arising from fourth ventricle", "involving corpus callosum")
+- Surgeon's direct visualization and description
+
+EXTENT OF RESECTION EXTRACTION:
+Look for:
+- Surgeon's assessment of resection completeness
+- Phrases like "gross total resection", "complete resection", "subtotal resection"
+- Descriptions of residual tumor
+- Percentage estimates (e.g., "approximately 95% resected")
+- Reasons for incomplete resection (eloquent cortex, bleeding, etc.)
+
+STANDARD EOR CATEGORIES:
+- GTR (Gross Total Resection): Complete removal, no visible residual
+- Near-total: >95% resected, minimal residual
+- STR (Subtotal Resection): Significant resection but visible residual (90-95%)
+- Partial: 50-90% resected
+- Biopsy: Only biopsy performed, >90% tumor remains
+
+CRITICAL:
+- Use surgeon's EXACT terminology when possible
+- If surgeon explicitly states EOR, use that assessment
+- Distinguish planned partial resection from technical limitations
+- Extract intraoperative challenges if mentioned (eloquent area, bleeding, etc.)
+
+OUTPUT SCHEMA (JSON):
+{{
+  "tumor_location": {{
+    "location_description": "anatomical location as described by surgeon",
+    "laterality": "left" | "right" | "bilateral" | "midline" | "unknown",
+    "confidence": "high" | "moderate" | "low"
+  }},
+  "extent_of_resection": {{
+    "eor_category": "GTR" | "Near-total" | "STR" | "Partial" | "Biopsy" | "Unknown",
+    "percent_resection": number or null,
+    "surgeon_assessment": "verbatim text from operative note",
+    "intraoperative_challenges": "any mentioned challenges or limitations",
+    "confidence": "high" | "moderate" | "low"
+  }},
+  "reasoning": "Brief explanation of how you determined location and EOR from the note"
+}}
+
+OPERATIVE NOTE:
+{note_text[:6000]}
+"""
+        
+        try:
+            logger.info(f"        [Tier 2 - Operative Note] Extracting location + EOR with MedGemma...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.1)
+            
+            if result and result.raw_response:
+                import json
+                extraction = json.loads(result.raw_response)
+                
+                location_data = extraction.get('tumor_location', {})
+                eor_data = extraction.get('extent_of_resection', {})
+                
+                # Validate at least one extraction succeeded with moderate+ confidence
+                location_valid = (location_data.get('confidence') in ['high', 'moderate'] and 
+                                location_data.get('location_description'))
+                eor_valid = (eor_data.get('confidence') in ['high', 'moderate'] and 
+                           eor_data.get('eor_category') not in ['Unknown', None])
+                
+                if location_valid or eor_valid:
+                    result_dict = {
+                        'binary_id': binary_id,
+                        'surgery_date': surgery_date,
+                        'extraction_source': 'operative_note_tier2',
+                        'medgemma_reasoning': extraction.get('reasoning')
+                    }
+                    
+                    if location_valid:
+                        result_dict['tumor_location'] = location_data
+                        logger.info(f"          ✅ Extracted location: {location_data.get('location_description')} "
+                                  f"(confidence: {location_data.get('confidence')})")
+                    
+                    if eor_valid:
+                        result_dict['extent_of_resection'] = eor_data
+                        logger.info(f"          ✅ Extracted EOR: {eor_data.get('eor_category')} "
+                                  f"(confidence: {eor_data.get('confidence')})")
+                    
+                    return result_dict
+                else:
+                    logger.info(f"          Tier 2: Operative note extraction confidence too low")
+                    return None
+        
+        except Exception as e:
+            logger.warning(f"          Tier 2: Operative note extraction error: {e}")
+            return None
+
                         'medgemma_reasoning': extraction.get('reasoning')
                     }
                 else:
