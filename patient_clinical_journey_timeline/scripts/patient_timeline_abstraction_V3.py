@@ -3408,6 +3408,52 @@ Return ONLY the JSON object, no additional text.
             if v2_annotation:
                 event['v2_annotation'] = v2_annotation
 
+            # ========================================================================
+            # V5.7 TIER 1: Extract from v_imaging structured text with MedGemma
+            # ========================================================================
+            # Try report_conclusion first, fall back to result_information
+            imaging_text = record.get('report_conclusion')
+            if not imaging_text or len(imaging_text) < 50:
+                # Try alternative field
+                imaging_text = self.structured_data.get('imaging', [{}])[imaging_count].get('result_information') if imaging_count < len(self.structured_data.get('imaging', [])) else None
+
+            if imaging_text and len(imaging_text) >= 50:
+                imaging_date = record.get('imaging_date')
+                imaging_modality = record.get('imaging_modality', 'Unknown')
+
+                # Extract tumor location (Tier 1)
+                if self.medgemma_agent and self.location_extractor:
+                    location_result = self._extract_location_from_imaging_text_with_medgemma(
+                        text=imaging_text,
+                        imaging_date=imaging_date,
+                        imaging_modality=imaging_modality
+                    )
+                    if location_result and location_result.get('confidence') in ['high', 'moderate']:
+                        event['v41_tumor_location'] = location_result.get('location_feature')
+                        event['v41_tumor_location_tier'] = 'tier1_v_imaging'
+                        event['v41_tumor_location_confidence'] = location_result.get('confidence')
+
+                # Extract treatment response (Tier 1)
+                if self.medgemma_agent and self.response_extractor:
+                    response_result = self._extract_response_from_imaging_text_with_medgemma(
+                        text=imaging_text,
+                        imaging_date=imaging_date,
+                        imaging_modality=imaging_modality
+                    )
+                    if response_result and response_result.get('confidence') in ['high', 'moderate']:
+                        event['treatment_response'] = response_result
+                        event['treatment_response_tier'] = 'tier1_v_imaging'
+
+                # Flag for Phase 4 binary extraction if Tier 1 had low confidence
+                if (not location_result or location_result.get('confidence') == 'low' or
+                    not response_result or response_result.get('confidence') == 'low'):
+                    event['needs_binary_extraction'] = True
+                    event['binary_extraction_reason'] = 'tier1_low_confidence'
+            else:
+                # No structured text available - flag for Phase 4 binary extraction
+                event['needs_binary_extraction'] = True
+                event['binary_extraction_reason'] = 'no_structured_text'
+
             events.append(event)
             imaging_count += 1
         print(f"    ✅ Added {imaging_count} imaging studies")
@@ -9239,6 +9285,281 @@ CLINICAL NOTE:
 
         except Exception as e:
             logger.error(f"        {tier_name} (MedGemma): Error during extraction: {e}")
+            return None
+
+    # ============================================================================
+    # V5.7: TIER 1 STRUCTURED TEXT EXTRACTION HELPER METHODS
+    # ============================================================================
+
+    def _extract_location_from_imaging_text_with_medgemma(
+        self,
+        text: str,
+        imaging_date: str,
+        imaging_modality: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        V5.7 Tier 1: Extract tumor location from v_imaging structured text with MedGemma reasoning
+        
+        Args:
+            text: report_conclusion or result_information from v_imaging
+            imaging_date: Date of imaging study
+            imaging_modality: MRI, CT, etc.
+            
+        Returns:
+            Dict with location, confidence, or None if extraction failed
+        """
+        if not self.medgemma_agent or not self.location_extractor:
+            return None
+        
+        if not text or len(text) < 30:
+            return None
+        
+        prompt = f"""You are a medical AI extracting tumor location from a radiology report.
+
+IMAGING CONTEXT:
+- Modality: {imaging_modality}
+- Date: {imaging_date}
+
+TASK:
+Extract the PRIMARY TUMOR LOCATION from the radiology report below.
+
+Look for:
+1. Anatomical location descriptions (e.g., "right frontal lobe", "cerebellar vermis", "fourth ventricle")
+2. Laterality (left, right, bilateral, midline)
+3. Specific brain regions or structures
+
+IMPORTANT:
+- Extract the PRIMARY tumor location (not metastases unless specifically noted as primary)
+- Include laterality if mentioned
+- Use anatomical terms as stated in the report
+- If multiple locations, list all (e.g., for butterfly glioma)
+
+OUTPUT SCHEMA (JSON):
+{{
+  "location_description": "anatomical location as described in report",
+  "laterality": "left" | "right" | "bilateral" | "midline" | "unknown",
+  "confidence": "high" | "moderate" | "low",
+  "reasoning": "Brief explanation of how you determined the location"
+}}
+
+RADIOLOGY REPORT:
+{text[:3000]}
+"""
+        
+        try:
+            logger.info(f"      [Tier 1] Extracting location from imaging text with MedGemma...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.1)
+            
+            if result and result.raw_response:
+                import json
+                extraction = json.loads(result.raw_response)
+                
+                location_desc = extraction.get('location_description')
+                confidence = extraction.get('confidence', 'low')
+                
+                if location_desc and confidence in ['high', 'moderate']:
+                    # Use TumorLocationExtractor to map to CBTN ontology
+                    location_feature = self.location_extractor.extract_location_from_text(
+                        text=location_desc,
+                        source_type="imaging",
+                        source_id=f"v_imaging_{imaging_date}",
+                        min_confidence=0.55
+                    )
+                    
+                    if location_feature:
+                        logger.info(f"        ✅ Extracted location: {location_feature.locations} (confidence: {confidence})")
+                        return {
+                            'location_feature': location_feature.to_dict(),
+                            'confidence': confidence,
+                            'extraction_tier': 'tier1_v_imaging',
+                            'medgemma_reasoning': extraction.get('reasoning')
+                        }
+                else:
+                    logger.info(f"        Tier 1: Location extraction confidence too low or no location found")
+                    return None
+        
+        except Exception as e:
+            logger.warning(f"        Tier 1: Location extraction error: {e}")
+            return None
+    
+    def _extract_response_from_imaging_text_with_medgemma(
+        self,
+        text: str,
+        imaging_date: str,
+        imaging_modality: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        V5.7 Tier 1: Extract treatment response from v_imaging structured text with MedGemma reasoning
+        
+        Args:
+            text: report_conclusion or result_information from v_imaging
+            imaging_date: Date of imaging study
+            imaging_modality: MRI, CT, etc.
+            
+        Returns:
+            Dict with response assessment, confidence, or None if extraction failed
+        """
+        if not self.medgemma_agent or not self.response_extractor:
+            return None
+        
+        if not text or len(text) < 30:
+            return None
+        
+        prompt = f"""You are a medical AI extracting treatment response assessment from a radiology report.
+
+IMAGING CONTEXT:
+- Modality: {imaging_modality}
+- Date: {imaging_date}
+
+TASK:
+Extract the TREATMENT RESPONSE ASSESSMENT from the radiology report below.
+
+Look for:
+1. RANO response categories (CR, PR, SD, PD)
+2. Descriptive terms:
+   - Progression: "increased", "enlarged", "new lesion", "worsening", "expansion"
+   - Response: "decreased", "reduced", "smaller", "improved", "resolved"
+   - Stable: "unchanged", "stable", "no significant change"
+3. Comparisons to prior studies
+
+OUTPUT SCHEMA (JSON):
+{{
+  "rano_category": "CR" | "PR" | "SD" | "PD" | "unknown",
+  "response_description": "description from report",
+  "confidence": "high" | "moderate" | "low",
+  "reasoning": "Brief explanation including specific text from report"
+}}
+
+RANO CRITERIA:
+- CR (Complete Response): No evidence of tumor
+- PR (Partial Response): ≥50% decrease in tumor size
+- SD (Stable Disease): <50% decrease and <25% increase
+- PD (Progressive Disease): ≥25% increase or new lesions
+
+RADIOLOGY REPORT:
+{text[:3000]}
+"""
+        
+        try:
+            logger.info(f"      [Tier 1] Extracting treatment response from imaging text with MedGemma...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.1)
+            
+            if result and result.raw_response:
+                import json
+                extraction = json.loads(result.raw_response)
+                
+                rano_category = extraction.get('rano_category')
+                confidence = extraction.get('confidence', 'low')
+                
+                if rano_category and rano_category != 'unknown' and confidence in ['high', 'moderate']:
+                    logger.info(f"        ✅ Extracted response: {rano_category} (confidence: {confidence})")
+                    return {
+                        'rano_category': rano_category,
+                        'response_description': extraction.get('response_description'),
+                        'confidence': confidence,
+                        'extraction_tier': 'tier1_v_imaging',
+                        'medgemma_reasoning': extraction.get('reasoning')
+                    }
+                else:
+                    logger.info(f"        Tier 1: Response extraction confidence too low or unknown")
+                    return None
+        
+        except Exception as e:
+            logger.warning(f"        Tier 1: Response extraction error: {e}")
+            return None
+
+    def _extract_eor_from_imaging_text_with_medgemma(
+        self,
+        text: str,
+        imaging_date: str,
+        surgery_date: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        V5.7 Tier 1 (Phase 3.5): Extract EOR from v_imaging post-op imaging with MedGemma reasoning
+        
+        Replaces keyword-based search with clinical reasoning.
+        
+        Args:
+            text: report_conclusion or result_information from v_imaging
+            imaging_date: Date of post-op imaging
+            surgery_date: Date of surgery
+            
+        Returns:
+            Dict with EOR, confidence, or None if extraction failed
+        """
+        if not self.medgemma_agent:
+            return None
+        
+        if not text or len(text) < 30:
+            return None
+        
+        prompt = f"""You are a medical AI extracting extent of resection (EOR) from a post-operative imaging report.
+
+CLINICAL CONTEXT:
+- Surgery date: {surgery_date}
+- Post-op imaging date: {imaging_date}
+
+TASK:
+Extract the EXTENT OF RESECTION (EOR) from the radiology report below.
+
+Look for:
+1. Radiologist's assessment of resection completeness
+2. Residual tumor mentions (size, location)
+3. Post-operative changes vs residual tumor
+
+STANDARD EOR CATEGORIES:
+- GTR (Gross Total Resection): No visible residual tumor, complete resection
+- STR (Subtotal Resection): Residual tumor present, >90% resected
+- Partial: Significant residual tumor, 50-90% resected
+- Biopsy: Only biopsy performed, >90% tumor remains
+- Unknown: Insufficient information
+
+CRITICAL:
+- Distinguish post-operative changes (blood, edema) from residual tumor
+- Look for phrases like "no residual enhancement", "complete resection", "residual tumor measuring..."
+- If report mentions quantified residual tumor, use STR or Partial
+
+OUTPUT SCHEMA (JSON):
+{{
+  "extent_of_resection": "GTR" | "STR" | "Partial" | "Biopsy" | "Unknown",
+  "residual_tumor_noted": true | false,
+  "radiologist_assessment": "verbatim text from report about resection",
+  "confidence": "high" | "moderate" | "low",
+  "reasoning": "Brief explanation with specific text from report"
+}}
+
+POST-OPERATIVE IMAGING REPORT:
+{text[:3000]}
+"""
+        
+        try:
+            logger.info(f"        [Tier 1] Extracting EOR from imaging text with MedGemma...")
+            result = self.medgemma_agent.extract(prompt, temperature=0.1)
+            
+            if result and result.raw_response:
+                import json
+                extraction = json.loads(result.raw_response)
+                
+                eor = extraction.get('extent_of_resection')
+                confidence = extraction.get('confidence', 'low')
+                
+                if eor and eor != 'Unknown' and confidence in ['high', 'moderate']:
+                    logger.info(f"          ✅ Extracted EOR: {eor} (confidence: {confidence})")
+                    return {
+                        'extent_of_resection': eor,
+                        'residual_tumor_noted': extraction.get('residual_tumor_noted', False),
+                        'radiologist_assessment': extraction.get('radiologist_assessment'),
+                        'confidence': confidence,
+                        'source': 'v_imaging_tier1_medgemma',
+                        'imaging_date': imaging_date,
+                        'medgemma_reasoning': extraction.get('reasoning')
+                    }
+                else:
+                    logger.info(f"          Tier 1: EOR extraction confidence too low or unknown")
+                    return None
+        
+        except Exception as e:
+            logger.warning(f"          Tier 1: EOR extraction error: {e}")
             return None
 
     def _search_radiation_documents_for_end_date(self, start_date) -> Optional[str]:
