@@ -54,14 +54,15 @@ class DiagnosisExtractor:
     def extract_primary_diagnosis(
         self,
         diagnostic_evidence: List[Any],
-        pathology_data: List[Dict[str, str]]
+        pathology_data: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         Extract the most authoritative diagnosis from all available evidence.
 
         Args:
             diagnostic_evidence: List of DiagnosisEvidence objects from Phase 0.1
-            pathology_data: Raw pathology records from v_pathology_diagnostics / molecular_test_results
+            pathology_data: Optional raw pathology records from v_pathology_diagnostics / molecular_test_results
+                          (V5.6+: Phase 0.1 already provides comprehensive pathology evidence, so this is optional)
 
         Returns:
             Dict with:
@@ -79,7 +80,8 @@ class DiagnosisExtractor:
         evidence_summary = self._format_diagnostic_evidence(diagnostic_evidence)
 
         # Format pathology data (priority records only to avoid document too large)
-        pathology_summary = self._format_pathology_data(pathology_data)
+        # V5.6+: This is optional since Phase 0.1 already provides comprehensive evidence
+        pathology_summary = self._format_pathology_data(pathology_data) if pathology_data else "All pathology evidence already included in diagnostic_evidence from Phase 0.1"
 
         # Build extraction prompt
         extraction_prompt = f"""You are a medical data extraction specialist. Your task is to identify the PRIMARY INITIAL diagnosis AND detect any temporal diagnostic changes (recurrence, progression, second primary).

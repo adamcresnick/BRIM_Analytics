@@ -1084,10 +1084,9 @@ class PatientTimelineAbstractor:
                 self.completeness_tracker.mark_attempted('phase0_2_primary_diagnosis_extraction')
 
             # V5.6: Pass all_diagnostic_evidence (Phase 0.1 already collected all data)
-            # pathology_data parameter maintained for backwards compatibility but is empty
+            # pathology_data parameter is now optional - Phase 0.1 provides comprehensive evidence
             primary_diagnosis = diagnosis_extractor.extract_primary_diagnosis(
-                diagnostic_evidence=all_diagnostic_evidence,
-                pathology_data=[]  # Phase 0.1 already collected all pathology data
+                diagnostic_evidence=all_diagnostic_evidence
             )
 
             # Track Phase 0.2 success
