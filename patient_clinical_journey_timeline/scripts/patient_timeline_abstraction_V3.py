@@ -9653,11 +9653,17 @@ Analyze both sources and determine the most accurate tumor location representati
 }}"""
 
         try:
-            response = self.medgemma_agent.query(prompt, temperature=0.1)
+            extraction_result = self.medgemma_agent.extract(prompt, temperature=0.1)
+
+            # Check if extraction succeeded
+            if not extraction_result or not extraction_result.success:
+                logger.debug(f"Orchestrator location adjudication failed: {extraction_result.error if extraction_result else 'No result'}")
+                return None
 
             # Parse JSON response
             import json
             import re
+            response = extraction_result.raw_response
             json_match = re.search(r'\{[^{}]*"final_locations"[^{}]*\}', response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
