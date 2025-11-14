@@ -8984,7 +8984,8 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                             filled_count += 1
                             logger.info(f"        ✅ Extracted EOR={eor_data.get('eor_category')} from operative note (confidence: {eor_data.get('confidence')})")
 
-                        # Store location from operative note (HIGHEST AUTHORITY)
+                        # V5.7 FIX: Store location from operative note as separate field for adjudication
+                        # Imaging has priority - operative notes provide supplemental data
                         location_data = extraction.get('tumor_location', {})
                         if location_data and location_data.get('location_description'):
                             # Use TumorLocationExtractor to map to CBTN ontology
@@ -8996,9 +8997,9 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                                     min_confidence=0.55
                                 )
                                 if location_feature:
-                                    surg_event['v41_tumor_location'] = location_feature.to_dict()
-                                    surg_event['v41_tumor_location_source'] = 'operative_note_tier2_highest_authority'
-                                    logger.info(f"        ✅ Extracted location={location_feature.locations} from operative note")
+                                    # Store as separate field - do NOT overwrite imaging location
+                                    surg_event['operative_note_location'] = location_feature.to_dict()
+                                    logger.info(f"        ✅ Extracted location={location_feature.locations} from operative note (stored for adjudication)")
 
                         break  # Found operative note, move to next surgery
 
@@ -9011,7 +9012,7 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
         logger.info(f"      Total surgeries: {total_surgeries}")
         logger.info(f"      EOR extracted: {filled_count} ({100*filled_count/total_surgeries if total_surgeries > 0 else 0:.1f}%)")
         if filled_count > 0:
-            logger.info(f"     ✅ Extracted {filled_count} EOR + location values from operative notes (Tier 2 - Highest Authority)")
+            logger.info(f"     ✅ Extracted {filled_count} EOR + location values from operative notes (Tier 2 - awaiting adjudication)")
 
         return filled_count
         def _adjudicate_eor_conflicts(self, surgery_event: Dict[str, Any]) -> Dict[str, Any]:
