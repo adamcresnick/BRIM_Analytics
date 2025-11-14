@@ -973,123 +973,15 @@ class PatientTimelineAbstractor:
                 "confidence": "unavailable"
             }
 
-        # PRIORITY 1: Query molecular_test_results for curated genomics data
-        # This table contains actual genomics interpretation text in test_result_narrative
-        # PRIORITY 2: Fallback to v_pathology_diagnostics for observations
+        # ========================================================================
+        # V5.6 Phase 0: Streamlined flow - let Phase 0.1 handle ALL data collection
+        # REMOVED: Redundant pre-Phase 0 queries for molecular_test_results and v_pathology_diagnostics
+        # Phase 0.1 DiagnosticEvidenceAggregator comprehensively queries all sources:
+        #   - v_pathology_diagnostics (molecular + histological, unfiltered)
+        #   - v_problem_lists (coded diagnoses)
+        #   - v_imaging (radiological impressions)
+        # ========================================================================
         try:
-            # Track molecular query attempt
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_attempted('phase0_molecular_query')
-
-            molecular_query = f"""
-            SELECT
-                patient_id as patient_fhir_id,
-                'molecular_test_results' as diagnostic_source,
-                lab_test_name as diagnostic_name,
-                test_component as component_name,
-                test_result_narrative as result_value,
-                CAST(result_datetime AS VARCHAR) as diagnostic_date,
-                'Genomics_Interpretation' as diagnostic_category,
-                'Genomic Diagnostics Lab' as test_lab,
-                1 as priority_tier
-            FROM molecular_test_results
-            WHERE patient_id = '{self.athena_patient_id}'
-              AND test_result_narrative IS NOT NULL
-              AND test_result_narrative != ''
-              AND LENGTH(test_result_narrative) > 100
-              AND (
-                  LOWER(test_component) LIKE '%genomics interpretation%'
-                  OR LOWER(test_component) LIKE '%genomics results%'
-                  OR LOWER(lab_test_name) LIKE '%solid tumor%'
-                  OR LOWER(lab_test_name) LIKE '%cancer panel%'
-                  OR LOWER(lab_test_name) LIKE '%genomic%'
-              )
-            ORDER BY result_datetime DESC NULLS LAST
-            LIMIT 10
-            """
-
-            molecular_data = query_athena(molecular_query, "Querying molecular_test_results for genomics data", suppress_output=True)
-            logger.info(f"   Found {len(molecular_data) if molecular_data else 0} records from molecular_test_results")
-
-            # Track molecular query success
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_success(
-                    'phase0_molecular_query',
-                    record_count=len(molecular_data) if molecular_data else 0
-                )
-
-            # Track pathology query attempt
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_attempted('phase0_pathology_query')
-
-            # Fallback to v_pathology_diagnostics if no molecular test data
-            pathology_query = f"""
-            SELECT
-                patient_fhir_id,
-                diagnostic_source,
-                diagnostic_name,
-                component_name,
-                result_value,
-                CAST(diagnostic_date AS VARCHAR) as diagnostic_date,
-                diagnostic_category,
-                test_lab,
-                2 as priority_tier
-            FROM v_pathology_diagnostics
-            WHERE patient_fhir_id = '{self.athena_patient_id}'
-              AND result_value IS NOT NULL
-              AND result_value != ''
-              AND result_value NOT LIKE '%| URL: Binary/%'
-              AND LENGTH(result_value) > 50
-              AND (
-                  diagnostic_category IN ('Genomics_Method', 'Genomics_Interpretation', 'Final_Diagnosis')
-                  OR (diagnostic_name LIKE '%IDH%' OR diagnostic_name LIKE '%BRAF%' OR diagnostic_name LIKE '%H3%'
-                      OR diagnostic_name LIKE '%1p/19q%' OR diagnostic_name LIKE '%MGMT%' OR diagnostic_name LIKE '%ATRX%'
-                      OR diagnostic_name LIKE '%TP53%' OR diagnostic_name LIKE '%EGFR%' OR diagnostic_name LIKE '%TERT%'
-                      OR diagnostic_name LIKE '%MSH%' OR diagnostic_name LIKE '%MLH%' OR diagnostic_name LIKE '%PMS%')
-              )
-            ORDER BY diagnostic_date DESC NULLS LAST
-            LIMIT 50
-            """
-
-            pathology_data = query_athena(pathology_query, "Querying v_pathology_diagnostics for fallback data", suppress_output=True)
-            logger.info(f"   Found {len(pathology_data) if pathology_data else 0} records from v_pathology_diagnostics")
-
-            # Track pathology query success
-            if self.completeness_tracker:
-                self.completeness_tracker.mark_success(
-                    'phase0_pathology_query',
-                    record_count=len(pathology_data) if pathology_data else 0
-                )
-
-            # Combine results: prioritize v_molecular_tests, then add v_pathology_diagnostics
-            combined_data = []
-            if molecular_data:
-                combined_data.extend(molecular_data)
-            if pathology_data:
-                combined_data.extend(pathology_data)
-
-            if not combined_data:
-                logger.warning(f"No molecular or pathology data found for {self.athena_patient_id}")
-                return {
-                    "who_2021_diagnosis": "No molecular or pathology data available",
-                    "molecular_subtype": "Unknown",
-                    "grade": None,
-                    "key_markers": "No data in v_molecular_tests or v_pathology_diagnostics",
-                    "clinical_significance": "Patient not found in molecular/pathology views",
-                    "expected_prognosis": "Cannot determine",
-                    "recommended_protocols": {
-                        "radiation": "Cannot determine",
-                        "chemotherapy": "Cannot determine",
-                        "surveillance": "Cannot determine"
-                    },
-                    "classification_date": datetime.now().strftime('%Y-%m-%d'),
-                    "classification_method": "failed_no_data",
-                    "confidence": "no_data"
-                }
-
-            # Use combined data for extraction
-            pathology_data = combined_data
-            logger.info(f"   Total records for extraction: {len(pathology_data)} ({len(molecular_data) if molecular_data else 0} from molecular tests, {len(combined_data) - (len(molecular_data) if molecular_data else 0)} from pathology)")
 
             # ========================================================================
             # PHASE 0.1: MULTI-SOURCE DIAGNOSTIC EVIDENCE AGGREGATION
@@ -1174,15 +1066,7 @@ class PatientTimelineAbstractor:
 
                     if binary_enhanced_classification:
                         logger.info("   ✅ Tier 2 binary pathology enhancement succeeded")
-                        # Update pathology_data with binary-derived diagnosis for Phase 0.2+
-                        pathology_data.append({
-                            'diagnostic_name': binary_enhanced_classification.get('who_2021_diagnosis', 'Unknown'),
-                            'diagnostic_category': 'Binary_Pathology_Enhancement',
-                            'diagnostic_source': 'v_binary_files',
-                            'result_value': f"Tier 2 enhanced diagnosis: {binary_enhanced_classification.get('reasoning', 'See binary extraction')}",
-                            'diagnostic_date': None,
-                            'tier2_enhanced': True
-                        })
+                        # Binary enhancement was successful - diagnosis already in all_diagnostic_evidence
                     else:
                         logger.warning("   ⚠️  Tier 2 binary pathology enhancement found no additional documents")
                 except Exception as e:
@@ -1199,9 +1083,11 @@ class PatientTimelineAbstractor:
             if self.completeness_tracker:
                 self.completeness_tracker.mark_attempted('phase0_2_primary_diagnosis_extraction')
 
+            # V5.6: Pass all_diagnostic_evidence (Phase 0.1 already collected all data)
+            # pathology_data parameter maintained for backwards compatibility but is empty
             primary_diagnosis = diagnosis_extractor.extract_primary_diagnosis(
                 diagnostic_evidence=all_diagnostic_evidence,
-                pathology_data=pathology_data
+                pathology_data=[]  # Phase 0.1 already collected all pathology data
             )
 
             # Track Phase 0.2 success
