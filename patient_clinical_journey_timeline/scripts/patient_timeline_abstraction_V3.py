@@ -8885,15 +8885,15 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
 
         filled_count = 0
 
-        # Find all surgery events missing extent of resection
+        # V5.7: Find ALL surgery events (not just missing EOR)
+        # Operative notes are HIGHEST AUTHORITY and should always be extracted
         surgery_events = [e for e in self.timeline_events
-                         if e.get('event_type') == 'surgery'
-                         and not e.get('extent_of_resection')]
+                         if e.get('event_type') == 'surgery']
 
         if not surgery_events:
             return 0
 
-        logger.info(f"   → Remediating {len(surgery_events)} missing extent of resection...")
+        logger.info(f"   → V5.7: Extracting EOR + location from operative notes for {len(surgery_events)} surgeries (ALWAYS RUN)...")
 
         for surg_event in surgery_events:
             surgery_date_str = surg_event.get('event_date')
@@ -8973,74 +8973,182 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
                     if not note_text:
                         continue
 
-                    # Extract EOR from note text using keywords
-                    note_lower = note_text.lower()
+                    # V5.7: Extract EOR AND location using MedGemma reasoning
+                    extraction = self._extract_from_operative_note_with_medgemma(
+                        note_text=note_text,
+                        surgery_date=surgery_date_str,
+                        binary_id=binary_id
+                    )
 
-                    # EOR keyword patterns (in priority order - most specific first)
-                    # GTR keywords
-                    if any(kw in note_lower for kw in [
-                        'gross total resection', 'gross-total resection', 'complete resection',
-                        'total resection', 'radical resection', 'en bloc resection',
-                        ' gtr ', 'gtr.', 'gtr,', 'gtr:', 'gtr;',  # GTR with word boundaries
-                        'complete removal', 'total removal', 'complete excision',
-                        'no residual tumor', 'no residual'
-                    ]):
-                        eor_found = 'GTR'
-                    # STR keywords
-                    elif any(kw in note_lower for kw in [
-                        'subtotal resection', 'sub-total resection', 'near total resection',
-                        'near-total resection', 'near complete resection',
-                        ' str ', 'str.', 'str,', 'str:', 'str;',  # STR with word boundaries
-                        'maximum safe resection', 'maximal safe resection',
-                        'residual tumor', 'residual disease', 'incomplete resection'
-                    ]):
-                        eor_found = 'STR'
-                    # Partial resection keywords
-                    elif any(kw in note_lower for kw in [
-                        'partial resection', 'partial removal', 'partial excision',
-                        'debulking', 'de-bulking', 'cytoreduction', 'cyto-reduction',
-                        'significant residual', 'substantial residual'
-                    ]):
-                        eor_found = 'Partial'
-                    # Biopsy keywords
-                    elif any(kw in note_lower for kw in [
-                        'biopsy only', 'stereotactic biopsy', 'needle biopsy',
-                        'open biopsy', 'incisional biopsy', 'diagnostic biopsy',
-                        'tissue sampling only', 'sample obtained'
-                    ]):
-                        eor_found = 'Biopsy'
+                    if extraction:
+                        # Store EOR in separate field for adjudication
+                        eor_data = extraction.get('extent_of_resection', {})
+                        if eor_data and eor_data.get('eor_category') not in ['Unknown', None]:
+                            surg_event['operative_note_eor'] = eor_data
+                            filled_count += 1
+                            logger.info(f"        ✅ Extracted EOR={eor_data.get('eor_category')} from operative note (confidence: {eor_data.get('confidence')})")
 
-                    if eor_found:
-                        logger.info(f"        💡 Tier 1: Operative Notes: Found EOR='{eor_found}' in note dated {note_date}")
-                        surg_event['extent_of_resection'] = eor_found
-                        filled_count += 1
-                        logger.info(f"        ✅ Found extent of resection: {eor_found} for surgery on {surgery_date_str}")
-                        break
+                        # Store location from operative note (HIGHEST AUTHORITY)
+                        location_data = extraction.get('tumor_location', {})
+                        if location_data and location_data.get('location_description'):
+                            # Use TumorLocationExtractor to map to CBTN ontology
+                            if self.location_extractor:
+                                location_feature = self.location_extractor.extract_location_from_text(
+                                    text=location_data.get('location_description'),
+                                    source_type="operative_note",
+                                    source_id=binary_id,
+                                    min_confidence=0.55
+                                )
+                                if location_feature:
+                                    surg_event['v41_tumor_location'] = location_feature.to_dict()
+                                    surg_event['v41_tumor_location_source'] = 'operative_note_tier2_highest_authority'
+                                    logger.info(f"        ✅ Extracted location={location_feature.locations} from operative note")
 
-                if not eor_found:
-                    logger.info(f"        ❌ Could not extract EOR keywords from {len(results)} operative note(s) for surgery on {surgery_date_str}")
+                        break  # Found operative note, move to next surgery
 
             except Exception as e:
-                logger.debug(f"        Tier 1 operative notes query failed: {e}")
-                logger.info(f"        ❌ Could not find extent of resection for surgery on {surgery_date_str} (query failed)")
+                logger.debug(f"        Tier 2 operative notes query failed: {e}")
+                logger.info(f"        ❌ Could not extract from operative notes for surgery on {surgery_date_str} (query failed)")
 
-            # TIER 2: Post-operative imaging (if Tier 1 failed)
-            if not eor_found:
-                eor_found = self._search_postop_imaging_for_eor(surgery_date)
-                if eor_found:
-                    surg_event['extent_of_resection'] = eor_found
-                    filled_count += 1
-                    logger.info(f"        ✅ Found extent of resection: {eor_found} for surgery on {surgery_date_str}")
-
-        total_missing = len(surgery_events)
-        logger.info(f"   📊 Extent of Resection Remediation Summary:")
-        logger.info(f"      Total missing: {total_missing}")
-        logger.info(f"      Successfully filled: {filled_count} ({100*filled_count/total_missing if total_missing > 0 else 0:.1f}%)")
-        logger.info(f"      Still missing: {total_missing - filled_count}")
+        total_surgeries = len(surgery_events)
+        logger.info(f"   📊 V5.7 Operative Note Extraction Summary:")
+        logger.info(f"      Total surgeries: {total_surgeries}")
+        logger.info(f"      EOR extracted: {filled_count} ({100*filled_count/total_surgeries if total_surgeries > 0 else 0:.1f}%)")
         if filled_count > 0:
-            logger.info(f"     ✅ Found {filled_count} extent of resection values")
+            logger.info(f"     ✅ Extracted {filled_count} EOR + location values from operative notes (Tier 2 - Highest Authority)")
 
         return filled_count
+        def _adjudicate_eor_conflicts(self, surgery_event: Dict[str, Any]) -> Dict[str, Any]:
+            """
+            V5.7 Phase 4.5: Adjudicate EOR when both v_imaging and operative note provide values
+            
+            Authority hierarchy:
+            1. Operative note (surgeon's direct assessment) - HIGHEST
+            2. Post-op imaging (radiologist's objective assessment)
+            
+            Args:
+                surgery_event: Surgery event dictionary
+                
+            Returns:
+                Adjudication result with final_eor, conflict_detected, rationale
+            """
+            operative_eor = surgery_event.get('operative_note_eor', {})
+            imaging_eor = surgery_event.get('v_imaging_eor', {})
+            
+            # Extract EOR values
+            operative_eor_value = operative_eor.get('eor_category') if operative_eor else None
+            imaging_eor_value = imaging_eor.get('extent_of_resection') if imaging_eor else None
+            
+            # No conflict - single source
+            if operative_eor_value and not imaging_eor_value:
+                return {
+                    'final_eor': operative_eor_value,
+                    'eor_source': 'operative_note',
+                    'conflict_detected': False,
+                    'confidence': operative_eor.get('confidence', 'unknown'),
+                    'rationale': 'Operative note only - no imaging EOR available'
+                }
+            
+            if imaging_eor_value and not operative_eor_value:
+                return {
+                    'final_eor': imaging_eor_value,
+                    'eor_source': 'postop_imaging',
+                    'conflict_detected': False,
+                    'confidence': imaging_eor.get('confidence', 'unknown'),
+                    'rationale': 'Post-op imaging only - no operative note EOR available'
+                }
+            
+            if not operative_eor_value and not imaging_eor_value:
+                return {
+                    'final_eor': 'Unknown',
+                    'eor_source': 'none',
+                    'conflict_detected': False,
+                    'rationale': 'No EOR available from any source'
+                }
+            
+            # Both exist - check concordance
+            if operative_eor_value == imaging_eor_value:
+                return {
+                    'final_eor': operative_eor_value,
+                    'eor_source': 'concordant_operative_imaging',
+                    'conflict_detected': False,
+                    'concordance': 'full',
+                    'sources_agree': True,
+                    'operative_note_eor': operative_eor_value,
+                    'postop_imaging_eor': imaging_eor_value,
+                    'confidence': 'high',
+                    'rationale': f'Operative note and imaging both report {operative_eor_value} - full concordance'
+                }
+            
+            # CONFLICT DETECTED
+            conflict_severity = self._assess_eor_conflict_severity(operative_eor_value, imaging_eor_value)
+            
+            # Use Investigation Engine for detailed adjudication if available
+            adjudication_rationale = f"Conflict: Operative note reports {operative_eor_value}, imaging shows {imaging_eor_value}. "
+            adjudication_rationale += f"Defaulting to operative note (higher authority). "
+            
+            # Add severity-based rationale
+            if conflict_severity == 'high':
+                adjudication_rationale += "HIGH SEVERITY: Major discrepancy (e.g., GTR vs STR with residual). Recommend clinical review."
+            elif conflict_severity == 'moderate':
+                adjudication_rationale += "MODERATE SEVERITY: Terminology difference but similar intent (e.g., GTR vs near-total)."
+            else:
+                adjudication_rationale += "LOW SEVERITY: Minor discrepancy within measurement uncertainty."
+            
+            return {
+                'final_eor': operative_eor_value,
+                'eor_source': 'operative_note_adjudicated',
+                'conflict_detected': True,
+                'conflict_severity': conflict_severity,
+                'operative_note_eor': operative_eor_value,
+                'operative_note_confidence': operative_eor.get('confidence', 'unknown'),
+                'postop_imaging_eor': imaging_eor_value,
+                'postop_imaging_confidence': imaging_eor.get('confidence', 'unknown'),
+                'adjudication_rationale': adjudication_rationale,
+                'recommendation': 'clinical_review' if conflict_severity == 'high' else 'documented'
+            }
+        
+        def _assess_eor_conflict_severity(self, operative_eor: str, imaging_eor: str) -> str:
+            """
+            Assess severity of EOR conflict between operative note and imaging
+            
+            Args:
+                operative_eor: EOR from operative note
+                imaging_eor: EOR from post-op imaging
+                
+            Returns:
+                'high', 'moderate', or 'low'
+            """
+            # Define EOR hierarchy (most to least complete)
+            eor_hierarchy = {
+                'GTR': 5,
+                'Near-total': 4,
+                'STR': 3,
+                'Partial': 2,
+                'Biopsy': 1,
+                'Unknown': 0
+            }
+            
+            op_rank = eor_hierarchy.get(operative_eor, 0)
+            img_rank = eor_hierarchy.get(imaging_eor, 0)
+            
+            rank_diff = abs(op_rank - img_rank)
+            
+            # High severity: Major discrepancy (3+ levels apart)
+            # e.g., operative=GTR but imaging=STR or Partial (objective residual tumor)
+            if rank_diff >= 3:
+                return 'high'
+            
+            # Moderate severity: 2 levels apart
+            # e.g., operative=GTR but imaging=Near-total
+            elif rank_diff == 2:
+                return 'moderate'
+            
+            # Low severity: 1 level apart or same
+            # e.g., operative=GTR but imaging=Near-total, or GTR vs GTR
+            else:
+                return 'low'
+
 
     def _search_notes_for_treatment_end(self, start_date, treatment_type: str, agent_names: List[str],
                                         note_types: List[str], tier_name: str) -> Optional[str]:
