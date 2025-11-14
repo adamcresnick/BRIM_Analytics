@@ -157,9 +157,7 @@ class DiagnosticEvidenceAggregator:
         WHERE patient_fhir_id = '{patient_fhir_id}'
           AND result_value IS NOT NULL
           AND result_value != ''
-          AND LENGTH(result_value) > 50
         ORDER BY diagnostic_date DESC NULLS LAST
-        LIMIT 50
         """
 
         try:
@@ -336,7 +334,6 @@ class DiagnosticEvidenceAggregator:
           AND condition_display_name IS NOT NULL
           AND condition_display_name != ''
         ORDER BY onset_date DESC NULLS LAST, recorded_date DESC NULLS LAST
-        LIMIT 50
         """
 
         try:
@@ -510,7 +507,6 @@ class DiagnosticEvidenceAggregator:
           AND result_information IS NOT NULL
           AND TRIM(result_information) != ''
         ORDER BY study_date DESC
-        LIMIT 50
         """
 
         try:
