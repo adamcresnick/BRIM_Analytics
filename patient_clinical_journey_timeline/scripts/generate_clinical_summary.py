@@ -158,7 +158,11 @@ def generate_patient_summary(artifact_path: Path) -> str:
             eor = surg.get('extent_of_resection', '**MISSING**')
             # V5.7 FIX: tumor_location is at v41_tumor_location, not nested under clinical_features
             v41_location = surg.get('v41_tumor_location', {})
-            location = v41_location.get('location_description', v41_location.get('anatomical_site', 'Unknown'))
+            # Extract locations from CBTN ontology mapping (returns list)
+            if v41_location and v41_location.get('locations'):
+                location = ', '.join(v41_location.get('locations', []))
+            else:
+                location = 'Unknown'
             # V5.7 FIX: institution uses 'value' not 'name'
             institution = surg.get('clinical_features', {}).get('institution', {}).get('value', 'Unknown') or 'Unknown'
 
