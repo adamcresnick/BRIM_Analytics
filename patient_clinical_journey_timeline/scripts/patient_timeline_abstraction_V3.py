@@ -7279,6 +7279,14 @@ INSTRUCTIONS:
             logger.warning("⚠️  V4.6: Gap-filling unavailable (MedGemma or WHO KB not initialized)")
             self.completeness_assessment = assessment
 
+        # V5.7 Phase 4.5c: Adjudicate EOR and location conflicts for surgery events
+        logger.info("\n🔀 V5.7: Adjudicating surgery data conflicts (EOR + location)")
+        adjudicated_count = self._adjudicate_surgery_conflicts()
+        if adjudicated_count > 0:
+            logger.info(f"  ✅ Adjudicated {adjudicated_count} surgery events with multiple data sources")
+        else:
+            logger.info("  ℹ️  No conflicts to adjudicate")
+
         # Report final assessment
         print("  DATA COMPLETENESS ASSESSMENT:")
         print()
@@ -9145,6 +9153,446 @@ CRITICAL: Always populate "alternative_data_sources" if EOR not found - leave no
             # e.g., operative=GTR but imaging=Near-total, or GTR vs GTR
             else:
                 return 'low'
+
+    def _adjudicate_surgery_conflicts(self) -> int:
+        """
+        V5.7 Phase 4.5c: Adjudicate conflicts for all surgery events
+
+        Applies adjudication for:
+        1. EOR (extent of resection) - when both imaging and operative note provide values
+        2. Tumor location - when both imaging and operative note provide locations
+
+        Updates surgery events in-place with adjudication results
+
+        Returns:
+            Number of surgery events adjudicated
+        """
+        surgery_events = [e for e in self.timeline_events if e.get('event_type') == 'surgery']
+        adjudicated_count = 0
+
+        for surg_event in surgery_events:
+            adjudicated_this_event = False
+
+            # Adjudicate EOR if both sources exist
+            if surg_event.get('operative_note_eor') or surg_event.get('v_imaging_eor'):
+                eor_adjudication = self._adjudicate_eor_conflicts(surg_event)
+                surg_event['eor_adjudication'] = eor_adjudication
+
+                # Update extent_of_resection with adjudicated value
+                if eor_adjudication.get('final_eor'):
+                    surg_event['extent_of_resection'] = eor_adjudication['final_eor']
+
+                adjudicated_this_event = True
+
+                # Log conflicts
+                if eor_adjudication.get('conflict_detected'):
+                    logger.info(f"    🔀 EOR conflict for surgery on {surg_event.get('event_date')}: "
+                              f"{eor_adjudication.get('operative_note_eor')} (operative) vs "
+                              f"{eor_adjudication.get('postop_imaging_eor')} (imaging) → "
+                              f"Final: {eor_adjudication.get('final_eor')}")
+
+            # Adjudicate location if both sources exist
+            if surg_event.get('operative_note_location') or surg_event.get('v41_tumor_location'):
+                location_adjudication = self._adjudicate_location_conflicts(surg_event)
+                surg_event['location_adjudication'] = location_adjudication
+
+                # Update v41_tumor_location with adjudicated value
+                if location_adjudication.get('final_location'):
+                    surg_event['v41_tumor_location'] = location_adjudication['final_location']
+
+                adjudicated_this_event = True
+
+                # Log conflicts
+                if location_adjudication.get('conflict_detected'):
+                    imaging_locs = location_adjudication.get('imaging_locations', [])
+                    operative_locs = location_adjudication.get('operative_locations', [])
+                    final_loc = location_adjudication.get('final_location', {}).get('locations', [])
+
+                    logger.info(f"    🔀 Location conflict for surgery on {surg_event.get('event_date')}: "
+                              f"{', '.join(imaging_locs)} (imaging) vs "
+                              f"{', '.join(operative_locs)} (operative) → "
+                              f"Final: {', '.join(final_loc)}")
+
+            if adjudicated_this_event:
+                adjudicated_count += 1
+
+        return adjudicated_count
+
+    def _adjudicate_location_conflicts(self, surgery_event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        V5.7 Phase 4.5: Adjudicate tumor location when multiple sources provide data
+
+        Authority hierarchy:
+        1. Imaging (radiologist's objective high-resolution assessment) - PRIMARY
+        2. Operative note (surgeon's intra-operative subjective observation) - SUPPLEMENTAL
+
+        Uses MedGemma reasoning to:
+        - Reconcile conflicts between sources
+        - Identify tumors spanning multiple regions (butterfly gliomas)
+        - Map to standardized CBTN ontology
+        - Determine most complete/accurate representation
+
+        Args:
+            surgery_event: Surgery event dictionary
+
+        Returns:
+            Adjudication result with final_location, conflict_detected, rationale
+        """
+        imaging_location = surgery_event.get('v41_tumor_location', {})
+        operative_location = surgery_event.get('operative_note_location', {})
+
+        # Extract location values
+        imaging_locs = imaging_location.get('locations', []) if imaging_location else []
+        operative_locs = operative_location.get('locations', []) if operative_location else []
+
+        # No conflict - single source
+        if imaging_locs and not operative_locs:
+            return {
+                'final_location': imaging_location,
+                'location_source': 'imaging_only',
+                'conflict_detected': False,
+                'confidence': imaging_location.get('confidence', 'unknown'),
+                'rationale': f'Imaging only: {", ".join(imaging_locs)}'
+            }
+
+        if operative_locs and not imaging_locs:
+            return {
+                'final_location': operative_location,
+                'location_source': 'operative_note_only',
+                'conflict_detected': False,
+                'confidence': operative_location.get('confidence', 'unknown'),
+                'rationale': f'Operative note only: {", ".join(operative_locs)}'
+            }
+
+        if not imaging_locs and not operative_locs:
+            return {
+                'final_location': {},
+                'location_source': 'none',
+                'conflict_detected': False,
+                'rationale': 'No location available from any source'
+            }
+
+        # Both exist - check concordance
+        imaging_set = set(imaging_locs)
+        operative_set = set(operative_locs)
+
+        # Full concordance - all locations match
+        if imaging_set == operative_set:
+            return {
+                'final_location': imaging_location,  # Use imaging (higher resolution)
+                'location_source': 'concordant_imaging_operative',
+                'conflict_detected': False,
+                'concordance': 'full',
+                'sources_agree': True,
+                'imaging_locations': imaging_locs,
+                'operative_locations': operative_locs,
+                'confidence': 'high',
+                'rationale': f'Full concordance: Both sources report {", ".join(imaging_locs)}'
+            }
+
+        # Partial concordance - some overlap
+        overlap = imaging_set.intersection(operative_set)
+        if overlap:
+            # Use MedGemma reasoning for partial overlap
+            return self._adjudicate_partial_location_overlap(
+                imaging_location,
+                operative_location,
+                imaging_locs,
+                operative_locs,
+                overlap
+            )
+
+        # No overlap - complete conflict
+        return self._adjudicate_location_complete_conflict(
+            imaging_location,
+            operative_location,
+            imaging_locs,
+            operative_locs
+        )
+
+    def _adjudicate_partial_location_overlap(
+        self,
+        imaging_location: Dict[str, Any],
+        operative_location: Dict[str, Any],
+        imaging_locs: List[str],
+        operative_locs: List[str],
+        overlap: set
+    ) -> Dict[str, Any]:
+        """
+        Adjudicate when imaging and operative note have partial overlap
+
+        This suggests tumor spanning multiple regions:
+        - Imaging may capture full extent (high resolution)
+        - Operative note may focus on resection site (field of view limited)
+
+        Strategy: Merge locations, prioritizing imaging for primary site
+        """
+        imaging_only = set(imaging_locs) - overlap
+        operative_only = set(operative_locs) - overlap
+
+        # Merge all unique locations (tumor may span multiple regions)
+        all_locations = sorted(list(set(imaging_locs + operative_locs)))
+
+        # Create merged location feature with imaging as base
+        merged_location = imaging_location.copy()
+        merged_location['locations'] = all_locations
+        merged_location['source_type'] = 'merged_imaging_operative'
+
+        # Merge CBTN codes if available
+        imaging_codes = set(imaging_location.get('cbtn_codes', []))
+        operative_codes = set(operative_location.get('cbtn_codes', []))
+        merged_location['cbtn_codes'] = sorted(list(imaging_codes.union(operative_codes)))
+
+        rationale = f"Partial overlap detected. "
+        rationale += f"Common: {', '.join(sorted(overlap))}. "
+        if imaging_only:
+            rationale += f"Imaging additional: {', '.join(sorted(imaging_only))}. "
+        if operative_only:
+            rationale += f"Operative additional: {', '.join(sorted(operative_only))}. "
+        rationale += "Merged all locations (tumor may span multiple regions)."
+
+        return {
+            'final_location': merged_location,
+            'location_source': 'merged_partial_overlap',
+            'conflict_detected': True,
+            'conflict_type': 'partial_overlap',
+            'imaging_locations': imaging_locs,
+            'operative_locations': operative_locs,
+            'overlap_locations': sorted(list(overlap)),
+            'imaging_only_locations': sorted(list(imaging_only)) if imaging_only else [],
+            'operative_only_locations': sorted(list(operative_only)) if operative_only else [],
+            'merged_locations': all_locations,
+            'adjudication_rationale': rationale,
+            'confidence': 'moderate',
+            'recommendation': 'merged_representation_tumor_spanning_regions'
+        }
+
+    def _adjudicate_location_complete_conflict(
+        self,
+        imaging_location: Dict[str, Any],
+        operative_location: Dict[str, Any],
+        imaging_locs: List[str],
+        operative_locs: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Adjudicate when imaging and operative note have NO overlap
+
+        Complete conflict suggests:
+        - Misinterpretation of anatomy
+        - Different terminology for same region
+        - Actual discordance requiring clinical review
+
+        Strategy: Use MedGemma orchestrator reasoning if available,
+                  otherwise default to imaging (objective, high-resolution)
+        """
+        # Check if locations are anatomically adjacent (may be different granularity)
+        # e.g., "Frontal Lobe" (imaging) vs "Prefrontal Cortex" (operative)
+        adjacency_detected = self._check_anatomical_adjacency(imaging_locs, operative_locs)
+
+        if adjacency_detected:
+            # Likely different granularity - use imaging (more precise)
+            rationale = f"Complete conflict: Imaging reports {', '.join(imaging_locs)}, "
+            rationale += f"operative note reports {', '.join(operative_locs)}. "
+            rationale += "Locations are anatomically adjacent (different granularity). "
+            rationale += "Using imaging (higher resolution, objective assessment)."
+
+            return {
+                'final_location': imaging_location,
+                'location_source': 'imaging_adjudicated_adjacent',
+                'conflict_detected': True,
+                'conflict_type': 'complete_different_granularity',
+                'imaging_locations': imaging_locs,
+                'operative_locations': operative_locs,
+                'adjudication_rationale': rationale,
+                'confidence': 'moderate',
+                'recommendation': 'imaging_preferred_adjacent_regions'
+            }
+
+        # True discordance - use orchestrator if available
+        if self.medgemma_agent:
+            orchestrator_result = self._orchestrator_location_adjudication(
+                imaging_location,
+                operative_location,
+                imaging_locs,
+                operative_locs
+            )
+            if orchestrator_result:
+                return orchestrator_result
+
+        # Fallback: Use imaging (objective, high-resolution)
+        rationale = f"Complete conflict: Imaging reports {', '.join(imaging_locs)}, "
+        rationale += f"operative note reports {', '.join(operative_locs)}. "
+        rationale += "No anatomical adjacency detected. "
+        rationale += "Defaulting to imaging (objective, high-resolution assessment). "
+        rationale += "RECOMMEND CLINICAL REVIEW."
+
+        return {
+            'final_location': imaging_location,
+            'location_source': 'imaging_adjudicated_conflict',
+            'conflict_detected': True,
+            'conflict_type': 'complete_true_discordance',
+            'conflict_severity': 'high',
+            'imaging_locations': imaging_locs,
+            'operative_locations': operative_locs,
+            'adjudication_rationale': rationale,
+            'confidence': 'low',
+            'recommendation': 'clinical_review_required'
+        }
+
+    def _check_anatomical_adjacency(self, loc1_list: List[str], loc2_list: List[str]) -> bool:
+        """
+        Check if two sets of locations are anatomically adjacent
+
+        Uses hierarchical anatomical knowledge to detect if locations are:
+        - Parent/child relationships (e.g., "Frontal Lobe" contains "Prefrontal Cortex")
+        - Adjacent regions (e.g., "Frontal Lobe" adjacent to "Parietal Lobe")
+
+        Returns:
+            True if locations are adjacent/related, False otherwise
+        """
+        # Define anatomical adjacency/hierarchy rules
+        # Parent -> children mapping
+        hierarchical_regions = {
+            'Frontal Lobe': ['Prefrontal Cortex', 'Motor Cortex', 'Premotor Cortex'],
+            'Temporal Lobe': ['Superior Temporal Gyrus', 'Middle Temporal Gyrus', 'Hippocampus'],
+            'Parietal Lobe': ['Postcentral Gyrus', 'Superior Parietal Lobule'],
+            'Occipital Lobe': ['Visual Cortex', 'Cuneus'],
+            'Cerebellum': ['Cerebellar Hemisphere', 'Cerebellar Vermis'],
+            'Brain Stem': ['Pons', 'Medulla', 'Midbrain']
+        }
+
+        # Adjacent regions mapping
+        adjacent_regions = {
+            'Frontal Lobe': ['Parietal Lobe', 'Temporal Lobe', 'Corpus Callosum'],
+            'Parietal Lobe': ['Frontal Lobe', 'Occipital Lobe', 'Temporal Lobe'],
+            'Temporal Lobe': ['Frontal Lobe', 'Parietal Lobe', 'Occipital Lobe'],
+            'Occipital Lobe': ['Parietal Lobe', 'Temporal Lobe'],
+            'Corpus Callosum': ['Frontal Lobe', 'Parietal Lobe']
+        }
+
+        for loc1 in loc1_list:
+            for loc2 in loc2_list:
+                # Check hierarchical relationship
+                if loc1 in hierarchical_regions and loc2 in hierarchical_regions[loc1]:
+                    return True
+                if loc2 in hierarchical_regions and loc1 in hierarchical_regions[loc2]:
+                    return True
+
+                # Check adjacency
+                if loc1 in adjacent_regions and loc2 in adjacent_regions[loc1]:
+                    return True
+                if loc2 in adjacent_regions and loc1 in adjacent_regions[loc2]:
+                    return True
+
+        return False
+
+    def _orchestrator_location_adjudication(
+        self,
+        imaging_location: Dict[str, Any],
+        operative_location: Dict[str, Any],
+        imaging_locs: List[str],
+        operative_locs: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use MedGemma orchestrator to adjudicate location conflicts
+
+        Leverages clinical reasoning to:
+        - Map alternative terminology to standard ontology
+        - Resolve conflicts based on clinical context
+        - Identify most accurate representation
+
+        Returns:
+            Adjudication result or None if orchestrator unavailable/fails
+        """
+        if not self.medgemma_agent:
+            return None
+
+        prompt = f"""You are a clinical data adjudication agent resolving tumor location conflicts.
+
+**Context:**
+A brain tumor surgery has location data from two sources with complete discordance (no overlap):
+
+**Imaging (Radiologist Assessment):**
+- Locations: {', '.join(imaging_locs)}
+- Source: {imaging_location.get('source_type', 'unknown')}
+- Confidence: {imaging_location.get('confidence', 'unknown')}
+- CBTN Codes: {imaging_location.get('cbtn_codes', [])}
+
+**Operative Note (Surgeon Assessment):**
+- Locations: {', '.join(operative_locs)}
+- Source: {operative_location.get('source_type', 'unknown')}
+- Confidence: {operative_location.get('confidence', 'unknown')}
+- CBTN Codes: {operative_location.get('cbtn_codes', [])}
+
+**Task:**
+Analyze both sources and determine the most accurate tumor location representation.
+
+**Consider:**
+1. Are these different terms for the same anatomical region?
+2. Could the tumor span both regions (butterfly glioma)?
+3. Which source is more reliable given the clinical context?
+4. Should locations be merged or one source prioritized?
+
+**Return JSON:**
+{{
+    "final_locations": ["Anatomical Region 1", "Region 2"],
+    "decision": "use_imaging" | "use_operative" | "merge_both" | "require_review",
+    "rationale": "2-3 sentence clinical reasoning",
+    "confidence": "high" | "moderate" | "low",
+    "cbtn_codes": [code1, code2],
+    "recommendation": "clinical_action"
+}}"""
+
+        try:
+            response = self.medgemma_agent.query(prompt, temperature=0.1)
+
+            # Parse JSON response
+            import json
+            import re
+            json_match = re.search(r'\{[^{}]*"final_locations"[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+
+                # Build adjudication result
+                decision = result.get('decision')
+                final_locs = result.get('final_locations', [])
+
+                if decision == 'use_imaging':
+                    final_location = imaging_location
+                    source = 'imaging_orchestrator_adjudicated'
+                elif decision == 'use_operative':
+                    final_location = operative_location
+                    source = 'operative_orchestrator_adjudicated'
+                elif decision == 'merge_both':
+                    # Merge locations
+                    merged = imaging_location.copy()
+                    merged['locations'] = final_locs
+                    merged['cbtn_codes'] = result.get('cbtn_codes', [])
+                    merged['source_type'] = 'merged_orchestrator_adjudicated'
+                    final_location = merged
+                    source = 'merged_orchestrator_adjudicated'
+                else:  # require_review
+                    final_location = imaging_location  # Default to imaging
+                    source = 'imaging_requires_review'
+
+                return {
+                    'final_location': final_location,
+                    'location_source': source,
+                    'conflict_detected': True,
+                    'conflict_type': 'complete_orchestrator_adjudicated',
+                    'imaging_locations': imaging_locs,
+                    'operative_locations': operative_locs,
+                    'orchestrator_decision': decision,
+                    'adjudication_rationale': result.get('rationale', 'Orchestrator adjudication completed'),
+                    'confidence': result.get('confidence', 'moderate'),
+                    'recommendation': result.get('recommendation', 'documented')
+                }
+
+        except Exception as e:
+            logger.debug(f"Orchestrator location adjudication failed: {e}")
+            return None
+
+        return None
 
 
     def _search_notes_for_treatment_end(self, start_date, treatment_type: str, agent_names: List[str],
