@@ -10163,7 +10163,14 @@ RADIOLOGY REPORT:
                         'rano_category': rano_category,
                         'response_description': extraction.get('response_description'),
                         'confidence': confidence,
-                        'extraction_tier': 'tier1_v_imaging',
+                        'extraction_tier': 'tier1_v_imaging'
+                    }
+
+        except Exception as e:
+            logger.debug(f"      ⚠️ MedGemma extraction failed: {e}")
+
+        return None
+
     def _extract_from_operative_note_with_medgemma(
         self,
         note_text: str,
@@ -10289,19 +10296,9 @@ OPERATIVE NOTE:
                 else:
                     logger.info(f"          Tier 2: Operative note extraction confidence too low")
                     return None
-        
+
         except Exception as e:
             logger.warning(f"          Tier 2: Operative note extraction error: {e}")
-            return None
-
-                        'medgemma_reasoning': extraction.get('reasoning')
-                    }
-                else:
-                    logger.info(f"        Tier 1: Response extraction confidence too low or unknown")
-                    return None
-        
-        except Exception as e:
-            logger.warning(f"        Tier 1: Response extraction error: {e}")
             return None
 
     def _extract_eor_from_imaging_text_with_medgemma(
