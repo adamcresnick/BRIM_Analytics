@@ -176,8 +176,8 @@ class DiagnosticEvidenceAggregator:
 
             evidence = []
 
-            # Process each pathology record with MedGemma
-            for idx, record in enumerate(results[:20]):  # Limit to 20 to avoid excessive calls
+            # Process each pathology record with MedGemma (ALL records, no limits)
+            for idx, record in enumerate(results):
                 result_text = record.get('result_value', '').strip()
                 diagnostic_name = record.get('diagnostic_name', '')
                 diagnostic_category = record.get('diagnostic_category', '')
