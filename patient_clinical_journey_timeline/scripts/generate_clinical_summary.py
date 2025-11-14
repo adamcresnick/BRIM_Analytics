@@ -313,7 +313,59 @@ def generate_patient_summary(artifact_path: Path) -> str:
     md.append(f"**Total imaging studies:** {len(imaging_events)}")
     md.append(f"")
 
-    # Most recent imaging
+    # V5.7: Chronological RANO Assessment Timeline
+    # Filter CNS imaging with RANO assessments and sort chronologically
+    cns_imaging_with_rano = [
+        img for img in imaging_events
+        if img.get('rano_assessment') and (
+            'MR' in img.get('imaging_modality', '') or
+            'CT' in img.get('imaging_modality', '')
+        )
+    ]
+
+    if cns_imaging_with_rano:
+        # Sort chronologically (oldest first)
+        cns_imaging_with_rano.sort(key=lambda x: x.get('event_date', ''))
+
+        md.append(f"### Tumor Response Timeline (CNS Imaging with RANO Assessment)")
+        md.append(f"")
+        md.append(f"**Total assessments:** {len(cns_imaging_with_rano)}")
+        md.append(f"")
+
+        # RANO category descriptions
+        rano_descriptions = {
+            'PD': 'Progressive Disease',
+            'SD': 'Stable Disease',
+            'PR': 'Partial Response',
+            'CR': 'Complete Response'
+        }
+
+        for img in cns_imaging_with_rano:
+            img_date = format_date(img.get('event_date'))
+            img_modality = img.get('imaging_modality', 'CNS imaging')
+            rano = img.get('rano_assessment')
+            rano_full = rano_descriptions.get(rano, rano)
+
+            # Add progression or response flags if present
+            progression_flag = img.get('progression_flag')
+            response_flag = img.get('response_flag')
+
+            if progression_flag == 'recurrence_suspected':
+                flag_display = ' - **RECURRENCE SUSPECTED**'
+            elif progression_flag == 'progression_suspected':
+                flag_display = ' - **PROGRESSION SUSPECTED**'
+            elif response_flag == 'complete_response_suspected':
+                flag_display = ' - **COMPLETE RESPONSE**'
+            elif response_flag == 'response_suspected':
+                flag_display = ' - **RESPONSE DETECTED**'
+            else:
+                flag_display = ''
+
+            md.append(f"- **{img_date}:** {img_modality} - **{rano_full} ({rano})**{flag_display}")
+
+        md.append(f"")
+
+    # Most recent imaging (all modalities)
     if imaging_events:
         recent_imaging = sorted(imaging_events,
                               key=lambda x: x.get('event_date', ''),
@@ -322,9 +374,22 @@ def generate_patient_summary(artifact_path: Path) -> str:
         md.append(f"")
         for img in recent_imaging:
             img_date = format_date(img.get('event_date'))
-            img_type = img.get('imaging_type', 'Unknown')
-            rano = img.get('rano_assessment', 'Not assessed')
-            md.append(f"- **{img_date}:** {img_type} - RANO: {rano}")
+            # V5.7 FIX: Use correct field name 'imaging_modality' not 'imaging_type'
+            img_modality = img.get('imaging_modality', img.get('description', 'Unknown'))
+
+            # V5.7 FIX: Distinguish CNS imaging (MRI/CT) from other modalities for RANO relevance
+            rano = img.get('rano_assessment')
+            if rano:
+                # RANO assessment was performed
+                rano_display = rano
+            elif img_modality and ('MR' in img_modality or 'CT' in img_modality):
+                # CNS imaging but no RANO assessment - indicates extraction gap
+                rano_display = 'Not assessed'
+            else:
+                # Non-CNS imaging (X-ray, ultrasound, etc.) - RANO not applicable
+                rano_display = 'N/A'
+
+            md.append(f"- **{img_date}:** {img_modality} - RANO: {rano_display}")
         md.append(f"")
 
     # V5.0: THERAPEUTIC APPROACH SUMMARY
