@@ -153,10 +153,14 @@ def generate_patient_summary(artifact_path: Path) -> str:
     if surgeries:
         for i, surg in enumerate(surgeries, 1):
             surg_date = format_date(surg.get('event_date'))
-            procedure = surg.get('procedure_display', surg.get('procedure_type', 'Unknown procedure'))
+            # V5.7 FIX: Use correct field names from timeline artifact
+            procedure = surg.get('description', surg.get('procedure_display', surg.get('procedure_type', 'Unknown procedure')))
             eor = surg.get('extent_of_resection', '**MISSING**')
-            location = surg.get('clinical_features', {}).get('tumor_location', {}).get('anatomical_site', 'Unknown')
-            institution = surg.get('clinical_features', {}).get('institution', {}).get('name', 'Unknown')
+            # V5.7 FIX: tumor_location is at v41_tumor_location, not nested under clinical_features
+            v41_location = surg.get('v41_tumor_location', {})
+            location = v41_location.get('location_description', v41_location.get('anatomical_site', 'Unknown'))
+            # V5.7 FIX: institution uses 'value' not 'name'
+            institution = surg.get('clinical_features', {}).get('institution', {}).get('value', 'Unknown') or 'Unknown'
 
             md.append(f"### Surgery #{i}: {surg_date}")
             md.append(f"- **Procedure:** {procedure}")
